@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import json
+import requests
 
 logger = logging.getLogger('captain_america')
 logging.basicConfig(
@@ -155,6 +156,142 @@ class CaptainAmerica:
         logger.info("Captain America reporting for duty. Analyzing the fundamentals.")
         self.today = datetime.now().date()
         self.analysis_cache = {}
+        self._live_calendar_cache = None
+        self._live_calendar_cache_time = None
+
+    def fetch_live_calendar(self) -> Optional[List[Dict]]:
+        """
+        Fetch live economic calendar from Forex Factory JSON feed.
+        Caches results for 6 hours. Falls back to static 2026 calendar on failure.
+
+        Returns:
+            List of event dicts from the live feed, or None if unavailable
+            (caller should fall back to static calendar).
+        """
+        # Check cache (valid for 6 hours)
+        if self._live_calendar_cache and self._live_calendar_cache_time:
+            elapsed = (datetime.now() - self._live_calendar_cache_time).total_seconds()
+            if elapsed < 6 * 3600:
+                logger.info("Using cached live calendar data")
+                return self._live_calendar_cache
+
+        try:
+            url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+
+            if not isinstance(data, list) or len(data) == 0:
+                logger.warning("Live calendar returned empty or unexpected format")
+                return None
+
+            # Normalize the feed into our event format
+            events = []
+            for item in data:
+                event = {
+                    "name": item.get("title", "Unknown"),
+                    "date": item.get("date", ""),
+                    "time": item.get("time", ""),
+                    "impact": self._ff_impact_to_score(item.get("impact", "")),
+                    "currency": item.get("country", ""),
+                    "forecast": item.get("forecast", ""),
+                    "previous": item.get("previous", ""),
+                    "source": "live_feed",
+                }
+                events.append(event)
+
+            self._live_calendar_cache = events
+            self._live_calendar_cache_time = datetime.now()
+            logger.info(f"Fetched {len(events)} events from live calendar feed")
+            return events
+
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to fetch live calendar (network): {e}")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to parse live calendar JSON: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching live calendar: {e}")
+
+        return None
+
+    @staticmethod
+    def _ff_impact_to_score(impact_str: str) -> int:
+        """Convert Forex Factory impact string to numeric score (1-5)."""
+        mapping = {
+            "High": 5,
+            "Medium": 3,
+            "Low": 1,
+            "Holiday": 0,
+            "Non-Economic": 0,
+        }
+        return mapping.get(impact_str, 2)
+
+    def is_calendar_stale(self) -> bool:
+        """
+        Check if the static 2026 calendar is stale.
+
+        Returns True if the last event date across all event types
+        is in the past, meaning the hardcoded calendar has expired.
+        """
+        latest_date = None
+        for event_name, event_data in self.ECONOMIC_CALENDAR_2026.items():
+            dates = event_data.get("dates", [])
+            if dates:
+                last = dates[-1]
+                if latest_date is None or last > latest_date:
+                    latest_date = last
+
+        if latest_date is None:
+            return True
+
+        try:
+            last_event_date = datetime.strptime(latest_date, "%Y-%m-%d").date()
+            return last_event_date < self.today
+        except ValueError:
+            return True
+
+    def get_carry_trade_scores(self) -> Dict[str, Dict]:
+        """
+        Score pairs for carry trade attractiveness based on rate differentials.
+
+        Pairs with large positive differentials get a bullish score boost
+        for the higher-yielding currency (i.e., going long the pair earns carry).
+
+        Returns:
+            Dict keyed by pair with carry_score (-3 to +3) and details.
+        """
+        major_pairs = ["EURUSD", "GBPUSD", "USDJPY", "USDCAD", "AUDUSD", "NZDUSD"]
+        carry_scores = {}
+
+        for pair in major_pairs:
+            diff = self.get_interest_rate_differentials(pair)
+            if not diff:
+                continue
+
+            differential = diff.get("differential", 0)
+
+            # Scale: >2% differential = strong carry, 1-2% = moderate, <1% = weak
+            if abs(differential) >= 2.0:
+                carry_score = 3.0 if differential > 0 else -3.0
+            elif abs(differential) >= 1.0:
+                carry_score = 2.0 if differential > 0 else -2.0
+            elif abs(differential) >= 0.5:
+                carry_score = 1.0 if differential > 0 else -1.0
+            else:
+                carry_score = 0.0
+
+            carry_scores[pair] = {
+                "carry_score": carry_score,
+                "differential": differential,
+                "direction": "long" if differential > 0 else "short" if differential < 0 else "neutral",
+                "base_rate": diff["base_rate"],
+                "quote_rate": diff["quote_rate"],
+                "attractiveness": "strong" if abs(carry_score) >= 3 else
+                                  "moderate" if abs(carry_score) >= 2 else
+                                  "weak" if abs(carry_score) >= 1 else "negligible",
+            }
+
+        return carry_scores
 
     def get_todays_events(self) -> List[Dict]:
         """Get all economic events for today."""
@@ -306,7 +443,18 @@ class CaptainAmerica:
                 if diff:
                     rate_differentials[pair] = diff
 
+            # Carry trade scoring
+            carry_trade_scores = self.get_carry_trade_scores()
+
+            # Check if static calendar is stale and try live feed
+            calendar_stale = self.is_calendar_stale()
+            live_calendar = None
+            if calendar_stale:
+                logger.warning("Static 2026 calendar is stale — attempting live feed")
+                live_calendar = self.fetch_live_calendar()
+
             analysis = {
+                "status": "success",
                 "timestamp": datetime.now().isoformat(),
                 "analysis_date": self.today.isoformat(),
                 "today_events": today_events,
@@ -315,6 +463,9 @@ class CaptainAmerica:
                 "central_bank_bias": self.get_central_bank_bias(),
                 "high_impact_pairs": high_impact_pairs,
                 "rate_differentials": rate_differentials,
+                "carry_trade_scores": carry_trade_scores,
+                "calendar_stale": calendar_stale,
+                "live_calendar": live_calendar,
                 "event_count": {
                     "today": len(today_events),
                     "week": len(week_events),

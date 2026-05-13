@@ -62,6 +62,18 @@ class IronMan:
     def __init__(self):
         self.data_cache = {}
 
+    @classmethod
+    def add_pair(cls, name: str, ticker: str) -> None:
+        """
+        Add a new trading pair to the module-level PAIRS config.
+
+        Args:
+            name: Display name (e.g., 'GBPUSD')
+            ticker: yfinance ticker symbol (e.g., 'GBPUSD=X')
+        """
+        PAIRS[name] = ticker
+        logger.info(f"JARVIS registered new pair: {name} -> {ticker}")
+
     def fetch_data(self, ticker: str, interval: str, period: str = '90d') -> Optional[pd.DataFrame]:
         """
         Fetch OHLCV data from yfinance.
@@ -86,7 +98,10 @@ class IronMan:
                 logger.warning(f"No data fetched for {ticker}")
                 return None
 
-            df.columns = [col.lower() for col in df.columns]
+            # yfinance >=1.3.0 returns MultiIndex columns — flatten them
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [col[0] for col in df.columns]
+            df.columns = [str(col).lower() for col in df.columns]
             self.data_cache[cache_key] = df
             return df
 
@@ -251,17 +266,39 @@ class IronMan:
         else:
             return 'Ranging'
 
+    @staticmethod
+    def _find_peaks(series: pd.Series, order: int = 5) -> List[int]:
+        """Find local maxima indices in a series using a rolling window approach."""
+        peaks = []
+        values = series.values
+        for i in range(order, len(values) - order):
+            if values[i] == max(values[i - order:i + order + 1]):
+                peaks.append(i)
+        return peaks
+
+    @staticmethod
+    def _find_troughs(series: pd.Series, order: int = 5) -> List[int]:
+        """Find local minima indices in a series using a rolling window approach."""
+        troughs = []
+        values = series.values
+        for i in range(order, len(values) - order):
+            if values[i] == min(values[i - order:i + order + 1]):
+                troughs.append(i)
+        return troughs
+
     def detect_patterns(self, df: pd.DataFrame) -> Dict[str, bool]:
         """
         Detect technical patterns.
 
         Returns:
-            Dict with pattern flags
+            Dict with pattern flags including RSI bullish/bearish divergence
         """
         patterns = {
             'golden_cross': False,
             'death_cross': False,
             'rsi_divergence': False,
+            'rsi_bullish_divergence': False,
+            'rsi_bearish_divergence': False,
             'bollinger_squeeze': False,
             'macd_bullish_cross': False,
             'macd_bearish_cross': False,
@@ -271,43 +308,153 @@ class IronMan:
             return patterns
 
         # EMA crosses
-        if (df['ema_9'].iloc[-2] <= df['ema_21'].iloc[-2] and
-                df['ema_9'].iloc[-1] > df['ema_21'].iloc[-1]):
-            patterns['golden_cross'] = True
+        try:
+            if (df['ema_9'].iloc[-2] <= df['ema_21'].iloc[-2] and
+                    df['ema_9'].iloc[-1] > df['ema_21'].iloc[-1]):
+                patterns['golden_cross'] = True
 
-        if (df['ema_9'].iloc[-2] >= df['ema_21'].iloc[-2] and
-                df['ema_9'].iloc[-1] < df['ema_21'].iloc[-1]):
-            patterns['death_cross'] = True
+            if (df['ema_9'].iloc[-2] >= df['ema_21'].iloc[-2] and
+                    df['ema_9'].iloc[-1] < df['ema_21'].iloc[-1]):
+                patterns['death_cross'] = True
+        except Exception as e:
+            logger.warning(f"Error detecting EMA crosses: {e}")
 
         # MACD crosses
-        if (df['macd_hist'].iloc[-2] <= 0 and df['macd_hist'].iloc[-1] > 0):
-            patterns['macd_bullish_cross'] = True
+        try:
+            if (df['macd_hist'].iloc[-2] <= 0 and df['macd_hist'].iloc[-1] > 0):
+                patterns['macd_bullish_cross'] = True
 
-        if (df['macd_hist'].iloc[-2] >= 0 and df['macd_hist'].iloc[-1] < 0):
-            patterns['macd_bearish_cross'] = True
+            if (df['macd_hist'].iloc[-2] >= 0 and df['macd_hist'].iloc[-1] < 0):
+                patterns['macd_bearish_cross'] = True
+        except Exception as e:
+            logger.warning(f"Error detecting MACD crosses: {e}")
 
         # Bollinger Squeeze
-        if 'bb_width' in df.columns:
-            bb_sma = df['bb_width'].rolling(20).mean()
-            current_width = df['bb_width'].iloc[-1]
-            avg_width = bb_sma.iloc[-1]
+        try:
+            if 'bb_width' in df.columns:
+                bb_sma = df['bb_width'].rolling(20).mean()
+                current_width = df['bb_width'].iloc[-1]
+                avg_width = bb_sma.iloc[-1]
 
-            if current_width < avg_width * 0.5:
-                patterns['bollinger_squeeze'] = True
+                if current_width < avg_width * 0.5:
+                    patterns['bollinger_squeeze'] = True
+        except Exception as e:
+            logger.warning(f"Error detecting Bollinger squeeze: {e}")
 
-        # RSI Divergence (simplified: last 20 bars)
-        if len(df) >= 20 and 'rsi' in df.columns:
-            recent = df.tail(20)
-            price_high = recent['close'].max()
-            price_high_idx = recent['close'].idxmax()
-            rsi_at_price_high = recent.loc[price_high_idx, 'rsi']
+        # RSI Divergence — proper peak/trough detection over last 50 bars
+        try:
+            lookback = min(50, len(df))
+            if lookback >= 20 and 'rsi' in df.columns:
+                recent = df.tail(lookback).copy()
+                recent = recent.reset_index(drop=True)
+                price_series = recent['close']
+                rsi_series = recent['rsi']
 
-            if price_high == recent['close'].iloc[-1]:
-                recent_rsi_max = recent['rsi'].max()
-                if recent_rsi_max < rsi_at_price_high:
-                    patterns['rsi_divergence'] = True
+                # Bearish divergence: price makes higher high but RSI makes lower high
+                price_peaks = self._find_peaks(price_series, order=5)
+                if len(price_peaks) >= 2:
+                    last_peak = price_peaks[-1]
+                    prev_peak = price_peaks[-2]
+                    if (price_series.iloc[last_peak] > price_series.iloc[prev_peak] and
+                            rsi_series.iloc[last_peak] < rsi_series.iloc[prev_peak]):
+                        patterns['rsi_bearish_divergence'] = True
+                        patterns['rsi_divergence'] = True
+
+                # Bullish divergence: price makes lower low but RSI makes higher low
+                price_troughs = self._find_troughs(price_series, order=5)
+                if len(price_troughs) >= 2:
+                    last_trough = price_troughs[-1]
+                    prev_trough = price_troughs[-2]
+                    if (price_series.iloc[last_trough] < price_series.iloc[prev_trough] and
+                            rsi_series.iloc[last_trough] > rsi_series.iloc[prev_trough]):
+                        patterns['rsi_bullish_divergence'] = True
+                        patterns['rsi_divergence'] = True
+        except Exception as e:
+            logger.warning(f"Error detecting RSI divergence: {e}")
 
         return patterns
+
+    def calculate_signal_strength(self, tf_data: Dict) -> float:
+        """
+        Calculate a composite signal strength score from -10 to +10.
+
+        Components:
+            - Trend alignment: +/-3
+            - RSI position: +/-2
+            - MACD histogram direction: +/-2
+            - Bollinger position: +/-1.5
+            - Pattern signals: +/-1.5
+
+        Args:
+            tf_data: Single timeframe dict from analyze_pair output
+
+        Returns:
+            Float score from -10 to +10
+        """
+        score = 0.0
+
+        # --- Trend alignment: +/-3 ---
+        trend = tf_data.get('trend', 'Ranging')
+        trend_scores = {
+            'Strong Uptrend': 3.0,
+            'Uptrend': 1.5,
+            'Ranging': 0.0,
+            'Downtrend': -1.5,
+            'Strong Downtrend': -3.0,
+        }
+        score += trend_scores.get(trend, 0.0)
+
+        # --- RSI position: +/-2 ---
+        rsi = tf_data.get('rsi')
+        if rsi is not None:
+            if rsi >= 70:
+                score -= 2.0  # Overbought = bearish pressure
+            elif rsi >= 60:
+                score += 1.0
+            elif rsi >= 40:
+                score += 0.0  # Neutral
+            elif rsi >= 30:
+                score -= 1.0
+            else:
+                score += 2.0  # Oversold = bullish reversal potential
+
+        # --- MACD histogram direction: +/-2 ---
+        macd_hist = tf_data.get('macd_histogram')
+        if macd_hist is not None:
+            if macd_hist > 0:
+                score += min(2.0, macd_hist * 100)  # Scale but cap at 2
+            else:
+                score += max(-2.0, macd_hist * 100)
+
+        # --- Bollinger position: +/-1.5 ---
+        bb = tf_data.get('bollinger_bands', {})
+        bb_position = bb.get('position')
+        if bb_position is not None:
+            # 0 = at lower band (bullish), 1 = at upper band (bearish)
+            # Map to -1.5 to +1.5 (inverted: low position = bullish)
+            score += (0.5 - bb_position) * 3.0  # Range: -1.5 to +1.5
+
+        # --- Pattern signals: +/-1.5 ---
+        patterns = tf_data.get('patterns', {})
+        pattern_score = 0.0
+        if patterns.get('golden_cross'):
+            pattern_score += 0.75
+        if patterns.get('death_cross'):
+            pattern_score -= 0.75
+        if patterns.get('macd_bullish_cross'):
+            pattern_score += 0.75
+        if patterns.get('macd_bearish_cross'):
+            pattern_score -= 0.75
+        if patterns.get('rsi_bullish_divergence'):
+            pattern_score += 0.75
+        if patterns.get('rsi_bearish_divergence'):
+            pattern_score -= 0.75
+        if patterns.get('bollinger_squeeze'):
+            pattern_score += 0.5  # Squeeze is neutral-bullish (breakout expected)
+
+        score += max(-1.5, min(1.5, pattern_score))
+
+        return round(max(-10.0, min(10.0, score)), 1)
 
     def analyze_pair(self, pair_name: str, yf_ticker: str) -> Dict:
         """
@@ -390,7 +537,7 @@ class IronMan:
                 ema_50 = df['ema_50'].iloc[-1]
                 ema_200 = df['ema_200'].iloc[-1]
 
-                analysis['timeframes'][tf_name] = {
+                tf_result = {
                     'price': round(current_price, 2),
                     'trend': trend,
                     'ema': {
@@ -416,6 +563,11 @@ class IronMan:
                     'patterns': patterns,
                     'volume_profile': volume_profile,
                 }
+
+                # Calculate signal strength for this timeframe
+                tf_result['signal_strength'] = self.calculate_signal_strength(tf_result)
+
+                analysis['timeframes'][tf_name] = tf_result
 
         except Exception as e:
             logger.error(f"Error analyzing {pair_name}: {e}")
@@ -465,7 +617,10 @@ def analyze(pairs: Optional[List[str]] = None) -> Dict:
         yf_ticker = PAIRS[pair]
         results[pair] = analyzer.analyze_pair(pair, yf_ticker)
 
-    return results
+    return {
+        'status': 'success',
+        'pairs': results,
+    }
 
 
 def format_report(analysis: Dict) -> str:
@@ -482,11 +637,17 @@ def format_report(analysis: Dict) -> str:
     if not analysis:
         return "No analysis available"
 
+    # Handle both wrapped {'status': ..., 'pairs': {...}} and raw dict formats
+    if 'pairs' in analysis and 'status' in analysis:
+        pairs_data = analysis['pairs']
+    else:
+        pairs_data = analysis
+
     report = "🦾 *JARVIS TACTICAL SCAN*\n"
     report += f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC\n"
     report += f"_{PERSONA}_\n\n"
 
-    for pair, data in analysis.items():
+    for pair, data in pairs_data.items():
         if data.get('error'):
             report += f"❌ *{pair}*: Suit malfunction - {data['error']}\n\n"
             continue
@@ -578,7 +739,7 @@ if __name__ == '__main__':
     # Analyze all pairs
     results = analyze()
 
-    # Format and print report
+    # Format and print report (format_report accepts the wrapped dict)
     report = format_report(results)
     print(report)
 

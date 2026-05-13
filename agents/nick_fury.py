@@ -19,6 +19,10 @@ from captain_america import CaptainAmerica
 from scarlet_witch import ScarletWitch
 from thor import Thor
 from black_widow import BlackWidow
+from vision import Vision
+from spider_man import SpiderMan
+from doctor_strange import DoctorStrange
+from hulk import Hulk
 
 logger = logging.getLogger('nick_fury')
 
@@ -28,17 +32,26 @@ PERSONA = "Avengers, assemble! Time to see what the world looks like today."
 class NickFury:
     """Nick Fury - master orchestrator for the Avengers Market Intelligence Briefing."""
 
-    def __init__(self, pairs: Optional[list[str]] = None):
+    # Crypto pairs that Vision (order flow) supports
+    CRYPTO_PAIRS = {'BTCUSD', 'ETHUSD', 'SOLUSD'}
+
+    def __init__(self, pairs: Optional[list[str]] = None,
+                 run_backtest: bool = False,
+                 account_size: float = 10000.0):
         """
         Initialize Nick Fury with the Avengers team.
 
         Args:
             pairs: List of trading pairs to analyze
+            run_backtest: Whether to run Hulk's backtesting phase
+            account_size: Account size for DoctorStrange risk management
         """
         self.pairs = pairs or [
             'BTCUSD', 'ETHUSD', 'SOLUSD',
             'EURUSD', 'XAUUSD', 'USDCAD'
         ]
+        self.run_backtest = run_backtest
+        self.account_size = account_size
 
         # Assemble the team
         # Iron Man (Tony Stark) uses module-level analyze(); no class instance needed
@@ -46,58 +59,153 @@ class NickFury:
         self.sentiment = ScarletWitch()            # Wanda - sentiment
         self.correlation = Thor()                  # Thor - correlations
         self.trade_ideas_gen = BlackWidow()        # Natasha - trade ideas
+        self.order_flow = Vision()                 # Vision - order flow
+        self.news = SpiderMan()                    # Spider-Man - news
+        self.risk_mgr = DoctorStrange()            # Doctor Strange - risk
+        self.backtester = Hulk()                   # Hulk - backtesting
 
-    def _run_all_agents(self) -> tuple:
+    def _run_all_agents(self) -> dict:
         """
         Assemble the Avengers and run all agents in sequence.
+        Each agent call is wrapped in try/except for graceful degradation.
+
+        Pipeline phases:
+          1. Data gathering (IronMan, Cap, Wanda, Thor, Vision, SpiderMan)
+          2. Signal generation (BlackWidow)
+          3. Risk validation (DoctorStrange)
+          4. Optional backtesting (Hulk)
 
         Returns:
-            Tuple of (technical, fundamental, sentiment, correlation, trade_ideas)
+            Dictionary with all agent results keyed by role name.
         """
         logger.info("Avengers, assemble! Running all agents...")
 
+        # ── Phase 1: Data Gathering ──────────────────────────────────────
+
         # Iron Man - Technical analysis (module-level function, takes pair name list)
         logger.info("Stark, fire up the suit. Running tactical scan...")
-        tech_result = tech_analyze(self.pairs)
+        try:
+            tech_result = tech_analyze(self.pairs)
+        except Exception as e:
+            logger.error(f"Iron Man agent failed: {e}", exc_info=True)
+            tech_result = {'status': 'error', 'error': str(e), 'pairs': {}}
 
         # Captain America - Fundamental analysis (class method, no pairs arg)
         logger.info("Cap, give us the ground truth...")
-        fund_result = self.fundamental.analyze()
+        try:
+            fund_result = self.fundamental.analyze()
+        except Exception as e:
+            logger.error(f"Captain America agent failed: {e}", exc_info=True)
+            fund_result = {'status': 'error', 'error': str(e)}
 
         # Scarlet Witch - Sentiment analysis
         logger.info("Wanda, read their minds...")
-        sent_result = self.sentiment.analyze(self.pairs)
+        try:
+            sent_result = self.sentiment.analyze(self.pairs)
+        except Exception as e:
+            logger.error(f"Scarlet Witch agent failed: {e}", exc_info=True)
+            sent_result = {'status': 'error', 'error': str(e)}
 
         # Thor - Correlation tracking
         logger.info("Thor, open the Bifrost...")
-        corr_result = self.correlation.analyze()
+        try:
+            corr_result = self.correlation.analyze()
+        except Exception as e:
+            logger.error(f"Thor agent failed: {e}", exc_info=True)
+            corr_result = {'status': 'error', 'error': str(e)}
+
+        # Vision - Order flow / liquidity (crypto pairs only)
+        crypto_pairs = [p for p in self.pairs if p in self.CRYPTO_PAIRS]
+        logger.info("Vision, scan the order books...")
+        try:
+            if crypto_pairs:
+                vision_result = self.order_flow.analyze(crypto_pairs)
+            else:
+                vision_result = {
+                    'status': 'skipped',
+                    'reason': 'No crypto pairs in watchlist',
+                }
+        except Exception as e:
+            logger.error(f"Vision agent failed: {e}", exc_info=True)
+            vision_result = {'status': 'error', 'error': str(e)}
+
+        # Spider-Man - News & events
+        logger.info("Parker, check the Daily Bugle...")
+        try:
+            news_result = self.news.analyze(self.pairs)
+        except Exception as e:
+            logger.error(f"Spider-Man agent failed: {e}", exc_info=True)
+            news_result = {'status': 'error', 'error': str(e)}
+
+        # ── Phase 2: Signal Generation ───────────────────────────────────
 
         # Black Widow - Trade ideas generation
         logger.info("Romanoff, compile the intel...")
-        ideas_result = self.trade_ideas_gen.generate(
-            tech_result, fund_result, sent_result, corr_result
-        )
+        try:
+            ideas_result = self.trade_ideas_gen.generate(
+                tech_result, fund_result, sent_result, corr_result
+            )
+        except Exception as e:
+            logger.error(f"Black Widow agent failed: {e}", exc_info=True)
+            ideas_result = {'status': 'error', 'error': str(e), 'trade_ideas': []}
+
+        # ── Phase 3: Risk Validation ─────────────────────────────────────
+
+        # Doctor Strange - Risk management check on trade ideas
+        logger.info("Strange, consult the timelines...")
+        try:
+            risk_result = self.risk_mgr.analyze(
+                trade_ideas=ideas_result,
+                account_size=self.account_size,
+                open_positions=[],          # TODO: feed live positions
+                correlation_data=corr_result,
+            )
+        except Exception as e:
+            logger.error(f"Doctor Strange agent failed: {e}", exc_info=True)
+            risk_result = {'status': 'error', 'error': str(e)}
+
+        # ── Phase 4: Optional Backtesting ────────────────────────────────
+
+        backtest_result = None
+        if self.run_backtest:
+            logger.info("HULK SMASH... historical data...")
+            try:
+                backtest_result = self.backtester.analyze(
+                    self.pairs, strategies=None
+                )
+            except Exception as e:
+                logger.error(f"Hulk agent failed: {e}", exc_info=True)
+                backtest_result = {'status': 'error', 'error': str(e)}
 
         logger.info("All Avengers reported in. Briefing ready.")
-        return tech_result, fund_result, sent_result, corr_result, ideas_result
+        return {
+            'technical': tech_result,
+            'fundamental': fund_result,
+            'sentiment': sent_result,
+            'correlation': corr_result,
+            'order_flow': vision_result,
+            'news': news_result,
+            'trade_ideas': ideas_result,
+            'risk': risk_result,
+            'backtest': backtest_result,
+        }
 
-    def _compile_briefing(self, technical: dict, fundamental: dict,
-                         sentiment: dict, correlation: dict,
-                         trade_ideas: dict) -> dict:
+    def _compile_briefing(self, results: dict) -> dict:
         """
         Compile all Avenger reports into the unified intelligence briefing.
 
         Args:
-            technical: Iron Man's tactical scan output
-            fundamental: Captain America's ground truth output
-            sentiment: Scarlet Witch's mind read output
-            correlation: Thor's Bifrost scan output
-            trade_ideas: Black Widow's mission briefing output
+            results: Dictionary of all agent outputs (keyed by role name).
 
         Returns:
             Dictionary with complete briefing structure
         """
         logger.info("Fury compiling the Avengers Market Intelligence Briefing...")
+
+        technical = results['technical']
+        fundamental = results['fundamental']
+        sentiment = results['sentiment']
+        correlation = results['correlation']
 
         briefing = {
             'timestamp': datetime.utcnow().isoformat(),
@@ -108,15 +216,28 @@ class NickFury:
             'fundamental_outlook': fundamental,
             'sentiment_check': sentiment,
             'correlations': correlation,
-            'trade_ideas': trade_ideas,
-            'risk_calendar': self._compile_risk_calendar(fundamental)
+            'order_flow': results['order_flow'],
+            'news': results['news'],
+            'trade_ideas': results['trade_ideas'],
+            'risk': results['risk'],
+            'backtest': results.get('backtest'),
+            'risk_calendar': self._compile_risk_calendar(fundamental),
         }
 
         return briefing
 
     def _generate_market_overview(self, technical: dict, sentiment: dict,
                                  correlation: dict) -> dict:
-        """Generate market regime and key moves summary."""
+        """Generate market regime and key moves summary.
+
+        ScarletWitch returns per-pair momentum in:
+          sentiment['pairs'][ticker]['momentum']['momentum_score'] (1-10 scale)
+        and market_regime in:
+          sentiment['market_regime']['regime'] ('Risk-On'/'Risk-Off'/'Mixed')
+
+        IronMan returns pairs keyed by friendly name in:
+          technical['pairs'][pair_name]['timeframes']['1d'] etc.
+        """
         overview = {
             'regime': 'UNKNOWN',
             'key_moves': [],
@@ -125,22 +246,53 @@ class NickFury:
 
         # Determine regime from sentiment
         if sentiment.get('status') == 'success':
-            overall_momentum = sentiment.get('overall_momentum_score', 50)
-            if overall_momentum > 60:
-                overview['regime'] = 'RISK-ON'
-            elif overall_momentum < 40:
-                overview['regime'] = 'RISK-OFF'
+            # Use market_regime if available (from ScarletWitch)
+            market_regime = sentiment.get('market_regime', {})
+            if market_regime and 'regime' in market_regime:
+                regime_str = market_regime['regime']
+                if regime_str == 'Risk-On':
+                    overview['regime'] = 'RISK-ON'
+                elif regime_str == 'Risk-Off':
+                    overview['regime'] = 'RISK-OFF'
+                else:
+                    overview['regime'] = 'NEUTRAL'
             else:
-                overview['regime'] = 'NEUTRAL'
+                # Fallback: calculate overall momentum from per-pair scores
+                pairs_sent = sentiment.get('pairs', {})
+                momentum_scores = []
+                for pair_key, pair_data in pairs_sent.items():
+                    mom = pair_data.get('momentum')
+                    if mom and 'momentum_score' in mom:
+                        momentum_scores.append(mom['momentum_score'])
 
-        # Key moves from technical
+                if momentum_scores:
+                    avg_momentum = sum(momentum_scores) / len(momentum_scores)
+                    # ScarletWitch uses 1-10 scale; > 6 = bullish, < 4 = bearish
+                    if avg_momentum > 6:
+                        overview['regime'] = 'RISK-ON'
+                    elif avg_momentum < 4:
+                        overview['regime'] = 'RISK-OFF'
+                    else:
+                        overview['regime'] = 'NEUTRAL'
+
+        # Key moves from technical (IronMan)
+        # IronMan returns {'status': 'success', 'pairs': {'BTCUSD': {'timeframes': {'1d': {'price': ...}}}}}
         if technical.get('status') == 'success':
             pairs_tech = technical.get('pairs', {})
             for pair, data in pairs_tech.items():
-                change = data.get('daily_change_pct', 0)
-                if abs(change) > 1.0:
-                    direction = 'UP' if change > 0 else 'DOWN'
-                    overview['key_moves'].append(f"{pair} {direction} {abs(change):.2f}%")
+                # Calculate daily change from the 1d timeframe data
+                tf_1d = data.get('timeframes', {}).get('1d', {})
+                price = tf_1d.get('price')
+                ema_9 = tf_1d.get('ema', {}).get('9')
+
+                if price and ema_9:
+                    # Approximate daily change from price vs EMA9
+                    change_pct = ((price - ema_9) / ema_9) * 100
+                    if abs(change_pct) > 1.0:
+                        direction = 'UP' if change_pct > 0 else 'DOWN'
+                        overview['key_moves'].append(
+                            f"{pair} {direction} {abs(change_pct):.2f}%"
+                        )
 
         # Build summary
         signals = [overview['regime']]
@@ -152,7 +304,13 @@ class NickFury:
         return overview
 
     def _compile_risk_calendar(self, fundamental: dict) -> dict:
-        """Compile upcoming high-impact events."""
+        """Compile upcoming high-impact events.
+
+        CaptainAmerica returns:
+          fundamental['today_events'] = [{'name': 'NFP', 'impact': 5, 'currency': 'USD', 'time': '13:30 UTC'}]
+          fundamental['week_events'] = [{'name': ..., 'impact': ..., 'days_away': ...}]
+          fundamental['high_impact_pairs'] = {'BTCUSD': [{'event': ..., 'impact': 4}]}
+        """
         risk_calendar = {
             'high_impact_24h': [],
             'medium_impact_24h': [],
@@ -162,13 +320,31 @@ class NickFury:
         if fundamental.get('status') != 'success':
             return risk_calendar
 
-        events_24h = fundamental.get('high_impact_events_24h', [])
-        for event in events_24h:
-            if event.get('impact') == 'HIGH':
+        # Use today_events for immediate risk
+        today_events = fundamental.get('today_events', [])
+        for event in today_events:
+            impact = event.get('impact', 0)
+            if impact >= 4:
                 risk_calendar['high_impact_24h'].append({
-                    'event': event.get('event'),
+                    'event': event.get('name'),
                     'time': event.get('time'),
-                    'pairs': event.get('affected_pairs', [])
+                    'currency': event.get('currency', 'N/A'),
+                })
+            elif impact >= 3:
+                risk_calendar['medium_impact_24h'].append({
+                    'event': event.get('name'),
+                    'time': event.get('time'),
+                    'currency': event.get('currency', 'N/A'),
+                })
+
+        # Also include tomorrow's events from week_events (days_away == 1)
+        week_events = fundamental.get('week_events', [])
+        for event in week_events:
+            if event.get('days_away', 99) == 1 and event.get('impact', 0) >= 4:
+                risk_calendar['high_impact_24h'].append({
+                    'event': event.get('name'),
+                    'time': event.get('time'),
+                    'currency': event.get('currency', 'N/A'),
                 })
 
         if risk_calendar['high_impact_24h']:
@@ -217,8 +393,10 @@ class NickFury:
             pairs_tech = tech.get('pairs', {})
             for pair, data in list(pairs_tech.items())[:3]:
                 pair_clean = pair.replace('-', '\\-').replace('=', '\\=')
-                trend = data.get('trend', 'NEUTRAL')
-                price = data.get('current_price', 'N/A')
+                # IronMan stores trend/price inside timeframes
+                tf_1d = data.get('timeframes', {}).get('1d', {})
+                trend = tf_1d.get('trend', 'N/A')
+                price = tf_1d.get('price', 'N/A')
                 sections.append(f"{pair_clean}: {trend} @ {price}")
             sections.append("")
 
@@ -226,11 +404,14 @@ class NickFury:
         fund = briefing.get('fundamental_outlook', {})
         if fund.get('status') == 'success':
             sections.append("*🛡️ CAP'S GROUND TRUTH*")
-            events = fund.get('high_impact_events_24h', [])
-            if events:
-                for event in events[:2]:
-                    event_name = event.get('event', 'Unknown')
-                    sections.append(f"  • {event_name}")
+            # CaptainAmerica uses 'today_events'
+            today_events = fund.get('today_events', [])
+            high_events = [e for e in today_events if e.get('impact', 0) >= 4]
+            if high_events:
+                for event in high_events[:2]:
+                    event_name = event.get('name', 'Unknown')
+                    event_time = event.get('time', '')
+                    sections.append(f"  • {event_name} @ {event_time}")
             else:
                 sections.append("No major events scheduled")
             sections.append("")
@@ -239,10 +420,22 @@ class NickFury:
         sent = briefing.get('sentiment_check', {})
         if sent.get('status') == 'success':
             sections.append("*🔮 WANDA'S MIND READ*")
-            momentum = sent.get('overall_momentum_score', 50)
-            sections.append(f"Momentum: {momentum}/100")
-            if sent.get('fear_greed_index'):
-                sections.append(f"Fear/Greed: {sent['fear_greed_index']}")
+            # Calculate overall momentum from per-pair scores
+            pairs_sent = sent.get('pairs', {})
+            momentum_scores = []
+            for pair_key, pair_data in pairs_sent.items():
+                mom = pair_data.get('momentum')
+                if mom and 'momentum_score' in mom:
+                    momentum_scores.append(mom['momentum_score'])
+            if momentum_scores:
+                avg_momentum = sum(momentum_scores) / len(momentum_scores)
+                sections.append(f"Momentum: {avg_momentum:.1f}/10")
+            # Fear & Greed from top-level
+            fng = sent.get('fear_and_greed')
+            if fng:
+                fng_val = fng.get('current_value', 'N/A')
+                fng_class = fng.get('current_classification', '')
+                sections.append(f"Fear/Greed: {fng_val} ({fng_class})")
             sections.append("")
 
         # Thor - Correlations
@@ -255,10 +448,53 @@ class NickFury:
                 sections.append(f"{len(divergences)} realm fractures detected")
             sections.append("")
 
+        # Vision - Order Flow (crypto only)
+        order_flow = briefing.get('order_flow', {})
+        if order_flow.get('status') == 'success':
+            sections.append("*👁️ VISION'S ORDER FLOW*")
+            of_pairs = order_flow.get('pairs', order_flow)
+            if isinstance(of_pairs, dict):
+                for pair, data in list(of_pairs.items())[:3]:
+                    if isinstance(data, dict):
+                        bid_pressure = data.get('bid_pressure', 'N/A')
+                        ask_pressure = data.get('ask_pressure', 'N/A')
+                        oi_signal = data.get('oi_signal', data.get('open_interest_signal', ''))
+                        pair_clean = pair.replace('-', '\\-').replace('=', '\\=')
+                        sections.append(
+                            f"{pair_clean}: Bid {bid_pressure} / Ask {ask_pressure}"
+                        )
+                        if oi_signal:
+                            sections.append(f"  OI: {oi_signal}")
+            summary = order_flow.get('summary')
+            if summary:
+                sections.append(summary)
+            sections.append("")
+        elif order_flow.get('status') == 'skipped':
+            sections.append("*👁️ VISION'S ORDER FLOW*")
+            sections.append(f"Skipped: {order_flow.get('reason', 'N/A')}")
+            sections.append("")
+
+        # Spider-Man - News & Events
+        news = briefing.get('news', {})
+        if news.get('status') == 'success':
+            sections.append("*🕷️ SPIDER\\-MAN'S INTEL*")
+            headlines = news.get('headlines', news.get('alerts', []))
+            if headlines:
+                for headline in headlines[:3]:
+                    if isinstance(headline, dict):
+                        title = headline.get('title', headline.get('headline', ''))
+                        sections.append(f"  • {title}")
+                    else:
+                        sections.append(f"  • {headline}")
+            overall_sentiment = news.get('overall_sentiment', news.get('sentiment'))
+            if overall_sentiment:
+                sections.append(f"News Sentiment: {overall_sentiment}")
+            sections.append("")
+
         # Black Widow - Trade Ideas (main section)
         ideas = briefing.get('trade_ideas', {})
         if ideas.get('status') == 'success':
-            sections.append("*🕷️ WIDOW'S MISSION BRIEF*")
+            sections.append("*🕸️ WIDOW'S MISSION BRIEF*")
             trade_list = ideas.get('trade_ideas', [])
             if trade_list:
                 sections.append(f"Found {len(trade_list)} targets")
@@ -271,6 +507,49 @@ class NickFury:
                     )
             else:
                 sections.append("No high-confluence targets at this time")
+            sections.append("")
+
+        # Doctor Strange - Risk Assessment
+        risk = briefing.get('risk', {})
+        if risk.get('status') == 'success':
+            sections.append("*🔮 STRANGE'S RISK CHECK*")
+            approved = risk.get('approved_trades', risk.get('approved', []))
+            vetoed = risk.get('vetoed_trades', risk.get('vetoed', []))
+            if isinstance(approved, list):
+                sections.append(f"Approved: {len(approved)} trade(s)")
+            if isinstance(vetoed, list) and vetoed:
+                sections.append(f"Vetoed: {len(vetoed)} trade(s)")
+                for v in vetoed[:2]:
+                    if isinstance(v, dict):
+                        reason = v.get('reason', v.get('veto_reason', 'risk limit'))
+                        pair = v.get('pair', 'Unknown')
+                        sections.append(f"  ✗ {pair}: {reason}")
+            portfolio_risk = risk.get('portfolio_risk', risk.get('total_risk'))
+            if portfolio_risk is not None:
+                sections.append(f"Portfolio Risk: {portfolio_risk}")
+            sections.append("")
+        elif risk.get('status') == 'error':
+            sections.append("*🔮 STRANGE'S RISK CHECK*")
+            sections.append(f"Error: {risk.get('error', 'Unknown')}")
+            sections.append("")
+
+        # Hulk - Backtest Results (only if backtest ran)
+        backtest = briefing.get('backtest')
+        if backtest and backtest.get('status') == 'success':
+            sections.append("*💪 HULK'S BATTLE RECORD*")
+            bt_pairs = backtest.get('pairs', backtest.get('results', {}))
+            if isinstance(bt_pairs, dict):
+                for pair, data in list(bt_pairs.items())[:3]:
+                    if isinstance(data, dict):
+                        win_rate = data.get('win_rate', 'N/A')
+                        sharpe = data.get('sharpe_ratio', data.get('sharpe', 'N/A'))
+                        pair_clean = pair.replace('-', '\\-').replace('=', '\\=')
+                        sections.append(
+                            f"{pair_clean}: WR {win_rate} | Sharpe {sharpe}"
+                        )
+            overall_sharpe = backtest.get('overall_sharpe', backtest.get('sharpe_ratio'))
+            if overall_sharpe is not None:
+                sections.append(f"Overall Sharpe: {overall_sharpe}")
             sections.append("")
 
         # Risk Calendar
@@ -380,11 +659,11 @@ class NickFury:
         logger.info("Nick Fury initiating Avengers Market Intelligence Briefing")
 
         try:
-            # Assemble the Avengers
-            tech, fund, sent, corr, ideas = self._run_all_agents()
+            # Assemble the Avengers — returns a dict keyed by role
+            results = self._run_all_agents()
 
             # Compile briefing
-            briefing = self._compile_briefing(tech, fund, sent, corr, ideas)
+            briefing = self._compile_briefing(results)
 
             # Format for display
             formatted = self.format_briefing_markdown(briefing)
@@ -508,6 +787,19 @@ def main():
     )
 
     parser.add_argument(
+        '--backtest',
+        action='store_true',
+        help='Enable Hulk backtesting phase (slower, more thorough)'
+    )
+
+    parser.add_argument(
+        '--account-size',
+        type=float,
+        default=10000.0,
+        help='Account size in USD for risk management (default: 10000)'
+    )
+
+    parser.add_argument(
         '--log-level',
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
         default='INFO',
@@ -523,7 +815,11 @@ def main():
     )
 
     # Initialize Nick Fury
-    fury = NickFury(pairs=args.pairs)
+    fury = NickFury(
+        pairs=args.pairs,
+        run_backtest=args.backtest,
+        account_size=args.account_size,
+    )
 
     if args.run_now:
         logger.info("Fury activating Avengers protocol...")
@@ -547,7 +843,8 @@ def main():
             )
 
             logger.info("Scheduler running. Press Ctrl+C to stop.")
-            scheduler.start()
+            # Note: scheduler.start() is already called inside schedule_daily()
+            # Do NOT call it again here to avoid duplicate start error
 
             # Keep the scheduler running
             import time

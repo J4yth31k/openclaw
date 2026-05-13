@@ -48,16 +48,15 @@ class Thor:
             )
 
             if isinstance(data, pd.DataFrame):
-                if len(data.columns) == 1:
-                    # Single pair, reformat
+                if isinstance(data.columns, pd.MultiIndex):
+                    # yfinance >=1.3.0: MultiIndex columns (metric, ticker)
+                    if 'Close' in data.columns.get_level_values(0):
+                        data = data['Close']
+                    elif 'Adj Close' in data.columns.get_level_values(0):
+                        data = data['Adj Close']
+                elif len(data.columns) == 1:
                     col_name = data.columns[0]
                     data = data[[col_name]].rename(columns={col_name: pairs[0]})
-                else:
-                    # Multiple pairs, extract Adj Close
-                    if 'Adj Close' in data.columns.get_level_values(0):
-                        data = data['Adj Close']
-                    elif 'Close' in data.columns.get_level_values(0):
-                        data = data['Close']
 
             return data.dropna()
         except Exception as e:
@@ -172,6 +171,68 @@ class Thor:
             logger.error(f"Error detecting unusual moves: {e}")
             return []
 
+    def detect_regime_shift(self, data: pd.DataFrame) -> dict:
+        """
+        Detect potential regime shifts by comparing short-term (10-day) vs
+        long-term (30-day) rolling correlations. If any pair-pair correlation
+        diverges by more than 0.3, flag it as a potential regime shift.
+
+        Args:
+            data: DataFrame of close prices for all tracked assets.
+
+        Returns:
+            Dict with 'regime_shift_detected' bool, 'shifts' list of details,
+            and 'shift_count'.
+        """
+        result = {
+            'regime_shift_detected': False,
+            'shifts': [],
+            'shift_count': 0,
+        }
+
+        try:
+            if data is None or data.empty or len(data) < 30:
+                return result
+
+            returns = data.pct_change().dropna()
+            if len(returns) < 30:
+                return result
+
+            # Calculate short-term and long-term correlation matrices
+            short_term_corr = returns.tail(10).corr()
+            long_term_corr = returns.tail(30).corr()
+
+            shifts = []
+            columns = list(returns.columns)
+
+            for i in range(len(columns)):
+                for j in range(i + 1, len(columns)):
+                    col_a = columns[i]
+                    col_b = columns[j]
+
+                    if col_a in short_term_corr.index and col_b in short_term_corr.columns:
+                        short_corr = short_term_corr.loc[col_a, col_b]
+                        long_corr = long_term_corr.loc[col_a, col_b]
+                        diff = abs(short_corr - long_corr)
+
+                        if diff > 0.3:
+                            shifts.append({
+                                'pair': f"{col_a} / {col_b}",
+                                'short_term_corr': round(float(short_corr), 3),
+                                'long_term_corr': round(float(long_corr), 3),
+                                'divergence': round(float(diff), 3),
+                                'direction': 'strengthening' if short_corr > long_corr else 'weakening',
+                            })
+
+            result['shifts'] = sorted(shifts, key=lambda x: x['divergence'], reverse=True)
+            result['shift_count'] = len(shifts)
+            result['regime_shift_detected'] = len(shifts) > 0
+
+        except Exception as e:
+            logger.error(f"Error detecting regime shifts: {e}")
+
+        return result
+
     def _generate_intermarket_summary(self, analysis: dict) -> str:
         """Generate brief text summary of cross-realm signals."""
         signals = []
@@ -248,6 +309,9 @@ class Thor:
         # Detect unusual moves
         unusual_moves = self._detect_unusual_moves(data)
 
+        # Detect regime shifts (10-day vs 30-day correlation divergence)
+        regime_shift = self.detect_regime_shift(data)
+
         analysis = {
             'timestamp': datetime.utcnow().isoformat(),
             'status': 'success',
@@ -255,6 +319,7 @@ class Thor:
             'divergences': divergences,
             'dxy_impact': dxy_impact,
             'unusual_moves': unusual_moves,
+            'regime_shift': regime_shift,
             'summary': self._generate_intermarket_summary({
                 'divergences': divergences,
                 'unusual_moves': unusual_moves,

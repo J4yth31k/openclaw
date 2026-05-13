@@ -31,9 +31,15 @@ class ScarletWitch:
     # Default pairs to analyze
     DEFAULT_PAIRS = [
         "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCAD=X",
-        "AUDUSD=X", "NZDUSD=X", "XAUUSD=X", "XAGUSD=X",
+        "AUDUSD=X", "NZDUSD=X", "GC=F",
         "BTC-USD", "ETH-USD", "SOL-USD"
     ]
+
+    # Map friendly pair names to yfinance tickers
+    TICKER_MAP = {
+        'BTCUSD': 'BTC-USD', 'ETHUSD': 'ETH-USD', 'SOLUSD': 'SOL-USD',
+        'EURUSD': 'EURUSD=X', 'XAUUSD': 'GC=F', 'USDCAD': 'USDCAD=X',
+    }
 
     # Psychological levels for crypto
     CRYPTO_LEVELS = {
@@ -49,6 +55,17 @@ class ScarletWitch:
         self.fng_cache = None
         self.fng_cache_time = None
 
+    def _resolve_ticker(self, symbol: str) -> str:
+        """Resolve friendly pair name to yfinance ticker."""
+        return self.TICKER_MAP.get(symbol, symbol)
+
+    @staticmethod
+    def _flatten_df(df):
+        """Flatten yfinance MultiIndex columns for v1.3.0+ compat."""
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = [col[0] for col in df.columns]
+        return df
+
     def get_fear_and_greed_index(self, limit: int = 7) -> Optional[Dict]:
         """
         Fetch Fear & Greed Index from alternative.me API.
@@ -63,7 +80,7 @@ class ScarletWitch:
         try:
             # Check cache (valid for 1 hour)
             if self.fng_cache and self.fng_cache_time:
-                if (datetime.now() - self.fng_cache_time).seconds < 3600:
+                if (datetime.now() - self.fng_cache_time).total_seconds() < 3600:
                     return self.fng_cache
 
             url = f"https://api.alternative.me/fng/?limit={limit}"
@@ -109,14 +126,15 @@ class ScarletWitch:
             Dict with volume metrics, or None if failed
         """
         try:
-            data = yf.download(symbol, period=period, progress=False)
+            ticker = self._resolve_ticker(symbol)
+            data = self._flatten_df(yf.download(ticker, period=period, progress=False))
 
             if data.empty or len(data) < 20:
                 logger.warning(f"Insufficient data for {symbol}")
                 return None
 
-            current_volume = data["Volume"].iloc[-1]
-            volume_20ma = data["Volume"].tail(20).mean()
+            current_volume = float(data["Volume"].iloc[-1])
+            volume_20ma = float(data["Volume"].tail(20).mean())
             volume_ratio = current_volume / volume_20ma if volume_20ma > 0 else 0
 
             volume_trend = "high" if volume_ratio > 1.5 else "low" if volume_ratio < 0.67 else "normal"
@@ -147,7 +165,8 @@ class ScarletWitch:
             Dict with momentum metrics and score, or None if failed
         """
         try:
-            data = yf.download(symbol, period=period, progress=False)
+            ticker = self._resolve_ticker(symbol)
+            data = self._flatten_df(yf.download(ticker, period=period, progress=False))
 
             if data.empty or len(data) < 50:
                 logger.warning(f"Insufficient data for momentum analysis: {symbol}")
@@ -157,7 +176,7 @@ class ScarletWitch:
 
             # RSI calculation
             rsi = self._calculate_rsi(close)
-            rsi_current = rsi.iloc[-1]
+            rsi_current = float(rsi.iloc[-1])
             rsi_score = 0
             if rsi_current > 70:
                 rsi_score = 2  # Overbought
@@ -174,9 +193,9 @@ class ScarletWitch:
             ema_20 = close.ewm(span=20).mean()
             ema_50 = close.ewm(span=50).mean()
 
-            current_price = close.iloc[-1]
-            ema_20_current = ema_20.iloc[-1]
-            ema_50_current = ema_50.iloc[-1]
+            current_price = float(close.iloc[-1])
+            ema_20_current = float(ema_20.iloc[-1])
+            ema_50_current = float(ema_50.iloc[-1])
 
             ema_score = 0
             if current_price > ema_20_current > ema_50_current:
@@ -193,19 +212,37 @@ class ScarletWitch:
                 ema_score = 5
 
             # Price change (1-day and 5-day)
-            price_1d_pct = ((close.iloc[-1] / close.iloc[-2]) - 1) * 100
-            price_5d_pct = ((close.iloc[-1] / close.iloc[-5]) - 1) * 100
+            price_1d_pct = ((float(close.iloc[-1]) / float(close.iloc[-2])) - 1) * 100
+            price_5d_pct = ((float(close.iloc[-1]) / float(close.iloc[-5])) - 1) * 100
 
             price_change_score = 5 + (price_5d_pct / 2)  # Max around 10 if 10% 5-day gain
             price_change_score = max(1, min(10, price_change_score))
 
             # Volume trend
-            volume_20ma = data["Volume"].tail(20).mean()
-            current_volume = data["Volume"].iloc[-1]
+            volume_20ma = float(data["Volume"].tail(20).mean())
+            current_volume = float(data["Volume"].iloc[-1])
             volume_trend_score = 5 + (2 if current_volume > volume_20ma else -2)
 
-            # Composite momentum score
-            momentum_score = (rsi_score + ema_score + price_change_score + volume_trend_score) / 4
+            # Composite momentum score with volume-weighted confirmation
+            # When volume confirms the trend direction, weight it higher
+            # Trend is bullish if ema_score >= 7, bearish if ema_score <= 3
+            trend_is_bullish = ema_score >= 7
+            trend_is_bearish = ema_score <= 3
+            volume_confirms_trend = (
+                (trend_is_bullish and current_volume > volume_20ma) or
+                (trend_is_bearish and current_volume > volume_20ma)
+            )
+
+            if volume_confirms_trend:
+                # Volume gets 1.5x weight when it confirms the trend
+                # Weights: rsi=1, ema=1, price_change=1, volume=1.5
+                total_weight = 4.5
+                momentum_score = (
+                    rsi_score + ema_score + price_change_score + volume_trend_score * 1.5
+                ) / total_weight
+            else:
+                # Standard equal weighting
+                momentum_score = (rsi_score + ema_score + price_change_score + volume_trend_score) / 4
             momentum_score = round(momentum_score, 1)
 
             return {
@@ -255,10 +292,10 @@ class ScarletWitch:
 
             # DXY (Dollar Index) - higher = risk-off
             try:
-                dxy_data = yf.download("DX-Y.NYB", period="3mo", progress=False)
+                dxy_data = self._flatten_df(yf.download("DX-Y.NYB", period="3mo", progress=False))
                 if not dxy_data.empty and len(dxy_data) >= 5:
-                    dxy_current = dxy_data["Close"].iloc[-1]
-                    dxy_ma = dxy_data["Close"].tail(20).mean()
+                    dxy_current = float(dxy_data["Close"].iloc[-1])
+                    dxy_ma = float(dxy_data["Close"].tail(20).mean())
                     dxy_trend = "up" if dxy_current > dxy_ma else "down"
                     dxy_score = 3 if dxy_trend == "up" else 7  # DXY up = risk-off
                     indicators["dxy"] = {
@@ -272,10 +309,10 @@ class ScarletWitch:
 
             # VIX (Volatility Index) - higher = risk-off
             try:
-                vix_data = yf.download("^VIX", period="3mo", progress=False)
+                vix_data = self._flatten_df(yf.download("^VIX", period="3mo", progress=False))
                 if not vix_data.empty and len(vix_data) >= 5:
-                    vix_current = vix_data["Close"].iloc[-1]
-                    vix_20ma = vix_data["Close"].tail(20).mean()
+                    vix_current = float(vix_data["Close"].iloc[-1])
+                    vix_20ma = float(vix_data["Close"].tail(20).mean())
                     vix_score = 3 if vix_current > vix_20ma else 7  # Higher VIX = risk-off
                     indicators["vix"] = {
                         "value": round(vix_current, 2),
@@ -288,10 +325,10 @@ class ScarletWitch:
 
             # BTC (Bitcoin) - uptrend = risk-on
             try:
-                btc_data = yf.download("BTC-USD", period="3mo", progress=False)
+                btc_data = self._flatten_df(yf.download("BTC-USD", period="3mo", progress=False))
                 if not btc_data.empty and len(btc_data) >= 5:
-                    btc_current = btc_data["Close"].iloc[-1]
-                    btc_ma = btc_data["Close"].tail(20).mean()
+                    btc_current = float(btc_data["Close"].iloc[-1])
+                    btc_ma = float(btc_data["Close"].tail(20).mean())
                     btc_score = 7 if btc_current > btc_ma else 3  # BTC up = risk-on
                     indicators["btc"] = {
                         "value": round(btc_current, 2),
@@ -304,10 +341,10 @@ class ScarletWitch:
 
             # Gold (XAUUSD) - uptrend = risk-off
             try:
-                gold_data = yf.download("XAUUSD=X", period="3mo", progress=False)
+                gold_data = self._flatten_df(yf.download("GC=F", period="3mo", progress=False))
                 if not gold_data.empty and len(gold_data) >= 5:
-                    gold_current = gold_data["Close"].iloc[-1]
-                    gold_ma = gold_data["Close"].tail(20).mean()
+                    gold_current = float(gold_data["Close"].iloc[-1])
+                    gold_ma = float(gold_data["Close"].tail(20).mean())
                     gold_score = 3 if gold_current > gold_ma else 7  # Gold up = risk-off
                     indicators["gold"] = {
                         "value": round(gold_current, 2),
@@ -366,18 +403,18 @@ class ScarletWitch:
             if symbol not in self.CRYPTO_LEVELS:
                 return None
 
-            data = yf.download(symbol, period="1y", progress=False)
+            data = self._flatten_df(yf.download(symbol, period="1y", progress=False))
 
             if data.empty or len(data) < 200:
                 logger.warning(f"Insufficient data for {symbol}")
                 return None
 
             close = data["Close"]
-            current_price = close.iloc[-1]
+            current_price = float(close.iloc[-1])
 
             # 200 EMA
             ema_200 = close.ewm(span=200).mean()
-            ema_200_current = ema_200.iloc[-1]
+            ema_200_current = float(ema_200.iloc[-1])
 
             # Nearest levels
             levels = self.CRYPTO_LEVELS[symbol]
@@ -438,7 +475,9 @@ class ScarletWitch:
             }
 
             # Volume and momentum analysis for each pair
-            for pair in pairs:
+            # Resolve friendly names to yfinance tickers
+            resolved_pairs = [self._resolve_ticker(p) for p in pairs]
+            for pair in resolved_pairs:
                 try:
                     volume = self.get_volume_analysis(pair)
                     momentum = self.calculate_momentum_score(pair)
@@ -461,6 +500,7 @@ class ScarletWitch:
                 except Exception as e:
                     logger.debug(f"Error analyzing crypto {symbol}: {e}")
 
+            analysis['status'] = 'success'
             self.analysis_cache = analysis
             logger.info("Wanda's mind-read complete")
             return analysis
