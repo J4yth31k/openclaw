@@ -1,0 +1,122 @@
+//@version=5
+strategy("EMA/RSI Scalper - Webhook Alert", overlay=true, margin_long=100, margin_short=100)
+
+// ============================================================================
+// INPUT PARAMETERS
+// ============================================================================
+
+// EMA Settings
+ema_fast_length = input(9, title="EMA Fast Period", minval=1)
+ema_slow_length = input(21, title="EMA Slow Period", minval=1)
+
+// RSI Settings
+rsi_length = input(14, title="RSI Period", minval=1)
+rsi_buy_min = input(45, title="RSI Buy Zone Min", minval=0, maxval=100)
+rsi_buy_max = input(70, title="RSI Buy Zone Max", minval=0, maxval=100)
+rsi_sell_min = input(30, title="RSI Sell Zone Min", minval=0, maxval=100)
+rsi_sell_max = input(55, title="RSI Sell Zone Max", minval=0, maxval=100)
+
+// Risk Management
+take_profit_pips = input(8, title="Take Profit (pips)", minval=1)
+stop_loss_pips = input(6, title="Stop Loss (pips)", minval=1)
+
+// Position Sizing
+trade_size = input(1.0, title="Trade Size", minval=0.1)
+
+// ============================================================================
+// CALCULATIONS
+// ============================================================================
+
+// Calculate EMAs
+ema_fast = ta.ema(close, ema_fast_length)
+ema_slow = ta.ema(close, ema_slow_length)
+
+// Calculate RSI
+rsi = ta.rsi(close, rsi_length)
+
+// Get symbol information for pip calculation
+// For most forex pairs, 1 pip = 0.0001 (except JPY pairs where 1 pip = 0.01)
+is_jpy_pair = string.endswith(syminfo.tickerid, "JPY")
+pip_value = is_jpy_pair ? 0.01 : 0.0001
+
+// Calculate TP and SL levels
+tp_level = take_profit_pips * pip_value
+sl_level = stop_loss_pips * pip_value
+
+// ============================================================================
+// SIGNAL CONDITIONS
+// ============================================================================
+
+// BUY Signal: EMA fast > EMA slow AND RSI in buy zone
+buy_signal = ta.crossover(ema_fast, ema_slow) and rsi >= rsi_buy_min and rsi <= rsi_buy_max
+
+// SELL Signal: EMA fast < EMA slow AND RSI in sell zone
+sell_signal = ta.crossunder(ema_fast, ema_slow) and rsi >= rsi_sell_min and rsi <= rsi_sell_max
+
+// ============================================================================
+// ALERT MESSAGE FORMATTING
+// ============================================================================
+// Format JSON alert message for n8n webhook
+// Replace placeholders with actual values for webhook consumption
+
+alert_message_buy = '{"ticker":"' + syminfo.tickerid + '","action":"BUY","price":' + str.tostring(close, format.price) + ',"strategy":"EMA_RSI_Scalper","timeframe":"' + timeframe.period + '","tp":' + str.tostring(tp_level, format.price) + ',"sl":' + str.tostring(sl_level, format.price) + ',"timestamp":"' + str.tostring(time, format.iso8601) + '"}'
+
+alert_message_sell = '{"ticker":"' + syminfo.tickerid + '","action":"SELL","price":' + str.tostring(close, format.price) + ',"strategy":"EMA_RSI_Scalper","timeframe":"' + timeframe.period + '","tp":' + str.tostring(tp_level, format.price) + ',"sl":' + str.tostring(sl_level, format.price) + ',"timestamp":"' + str.tostring(time, format.iso8601) + '"}'
+
+// ============================================================================
+// STRATEGY EXECUTION
+// ============================================================================
+
+// Entry signals with alert
+if buy_signal
+    strategy.entry("BUY", strategy.long, qty=trade_size, alert_message=alert_message_buy)
+    alert(alert_message_buy, alert.freq_once_per_bar_close)
+
+if sell_signal
+    strategy.entry("SELL", strategy.short, qty=trade_size, alert_message=alert_message_sell)
+    alert(alert_message_sell, alert.freq_once_per_bar_close)
+
+// Exit with take profit and stop loss
+strategy.exit("TP/SL Long", from_entry="BUY", profit=tp_level, loss=sl_level)
+strategy.exit("TP/SL Short", from_entry="SELL", profit=tp_level, loss=sl_level)
+
+// ============================================================================
+// PLOTTING
+// ============================================================================
+
+// Plot EMAs
+plot(ema_fast, color=color.blue, linewidth=1, title="EMA Fast")
+plot(ema_slow, color=color.orange, linewidth=1, title="EMA Slow")
+
+// Plot RSI in a separate pane (via alert messages, RSI values sent to webhook)
+// Note: RSI is calculated but not plotted here to keep main chart clean
+// You can enable RSI plotting by uncommenting below and adding it to a new pane
+
+// hline(50, "RSI Midline", color=color.gray)
+// plot(rsi, color=color.purple, linewidth=1, title="RSI", display=display.none)
+
+// ============================================================================
+// WEBHOOK SETUP INSTRUCTIONS
+// ============================================================================
+//
+// TO SET UP WEBHOOK ALERTS:
+// 1. Go to TradingView Chart -> Click "Alert" button (bell icon)
+// 2. Select this strategy from dropdown
+// 3. Set "Condition" to "Any alert() function call"
+// 4. Select "Webhook URL" option
+// 5. Enter your n8n webhook URL, e.g.:
+//    https://[n8n-instance]/webhook/forex-scalper-alerts
+// 6. Test the webhook with a message
+// 7. Click "Create Alert"
+//
+// The JSON payload will be sent to your n8n webhook with:
+// - ticker: Currency pair (e.g., "EURUSD")
+// - action: "BUY" or "SELL"
+// - price: Entry price when signal triggered
+// - strategy: "EMA_RSI_Scalper" (identifies the strategy)
+// - timeframe: Chart timeframe (e.g., "5m", "15m")
+// - tp: Take profit level (in pip value)
+// - sl: Stop loss level (in pip value)
+// - timestamp: ISO8601 formatted timestamp
+//
+// ============================================================================

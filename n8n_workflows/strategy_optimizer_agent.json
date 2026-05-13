@@ -1,0 +1,212 @@
+{
+  "name": "Strategy Optimizer Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "everyWeek",
+        "dayOfWeek": 0,
+        "hour": 22,
+        "minute": 0
+      },
+      "id": "schedule-weekly",
+      "name": "Weekly Schedule (Sunday 10 PM UTC)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [50, 100]
+    },
+    {
+      "parameters": {
+        "assignments": [
+          {
+            "name": "pairs",
+            "value": "[\"BTCUSD\", \"ETHUSD\", \"SOLUSD\", \"EURUSD\", \"XAUUSD\", \"USDCAD\"]"
+          },
+          {
+            "name": "timeframe",
+            "value": "\"1m\""
+          },
+          {
+            "name": "optimization_type",
+            "value": "\"walk_forward\""
+          },
+          {
+            "name": "start_time",
+            "value": "={{ new Date().toISOString() }}"
+          }
+        ]
+      },
+      "id": "setup-optimization",
+      "name": "Setup Optimization",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [250, 100]
+    },
+    {
+      "parameters": {
+        "command": "cd /sessions/busy-awesome-noether/mnt/forex_scalper_bot && python optimizer.py --pairs BTCUSD ETHUSD SOLUSD EURUSD XAUUSD USDCAD --timeframe 1m --mode walk_forward --output /tmp/optimization_results.json 2>&1"
+      },
+      "id": "run-optimizer",
+      "name": "Run Walk-Forward Optimizer",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1.0,
+      "position": [450, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse optimizer output\nconst output = $input.first().json;\nconst fs = require('fs');\n\nlet results = {\n  optimization_type: 'walk_forward',\n  pairs_analyzed: $json.pairs,\n  timeframe: $json.timeframe,\n  recommendations: {},\n  best_overall: null,\n  worst_overall: null,\n  timestamp: new Date().toISOString()\n};\n\ntry {\n  const resultsFile = JSON.parse(fs.readFileSync('/tmp/optimization_results.json', 'utf8'));\n  results.raw_results = resultsFile;\n  \n  // Find best and worst performers\n  let bestSharpe = -Infinity;\n  let worstSharpe = Infinity;\n  \n  Object.entries(resultsFile).forEach(([pair, data]) => {\n    if (data.sharpe_ratio > bestSharpe) {\n      bestSharpe = data.sharpe_ratio;\n      results.best_overall = { pair, ...data };\n    }\n    if (data.sharpe_ratio < worstSharpe) {\n      worstSharpe = data.sharpe_ratio;\n      results.worst_overall = { pair, ...data };\n    }\n  });\n} catch (e) {\n  results.error = e.message;\n}\n\nreturn results;"
+      },
+      "id": "parse-optimization",
+      "name": "Parse Optimization Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [650, 100]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "userProvidedAgent": false,
+        "agentOptions": {
+          "mode": "chainOfThought"
+        },
+        "prompt": "=You are a quantitative trading analyst. Analyze these walk-forward optimization results and provide strategic recommendations.\n\nOptimization Results:\n{{ JSON.stringify($json.raw_results, null, 2) }}\n\nBest Performer:\n{{ JSON.stringify($json.best_overall, null, 2) }}\n\nWorst Performer:\n{{ JSON.stringify($json.worst_overall, null, 2) }}\n\nProvide:\n1. Which parameters performed best across all pairs\n2. Pair-specific recommendations\n3. Risk/return tradeoff analysis\n4. Top 3 actionable changes to implement\n5. Pairs to focus on vs deprioritize\n\nFormat as a structured JSON response.",
+        "options": {}
+      },
+      "id": "ai-optimizer",
+      "name": "AI Optimization Analyst",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.5,
+      "position": [850, 100],
+      "credentials": {
+        "openAiApi": "openai_api_credential"
+      }
+    },
+    {
+      "parameters": {
+        "jsonData": "={\n  \"content\": \"Weekly Strategy Optimization Report\",\n  \"embeds\": [\n    {\n      \"title\": \"Walk-Forward Optimization Results\",\n      \"description\": \"Weekly strategy analysis\",\n      \"color\": 3447003,\n      \"fields\": [\n        {\n          \"name\": \"Best Performer\",\n          \"value\": \"{{ $json.best_overall.pair }} - Sharpe: {{ $json.best_overall.sharpe_ratio }}\",\n          \"inline\": false\n        },\n        {\n          \"name\": \"Worst Performer\",\n          \"value\": \"{{ $json.worst_overall.pair }} - Sharpe: {{ $json.worst_overall.sharpe_ratio }}\",\n          \"inline\": false\n        },\n        {\n          \"name\": \"Recommendations\",\n          \"value\": $json.output?.split('\\n').slice(0, 10).join('\\n') || \"Analysis in progress\",\n          \"inline\": false\n        }\n      ]\n    }\n  ]\n}"
+      },
+      "id": "discord-optimization",
+      "name": "Send to Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1.1,
+      "position": [1050, 50],
+      "credentials": {
+        "discordBotApi": "discord_webhook_credential"
+      }
+    },
+    {
+      "parameters": {
+        "message": "=📈 Weekly Strategy Optimization Report\n\nBest Performer: {{ $json.best_overall.pair }}\nSharpe Ratio: {{ $json.best_overall.sharpe_ratio }}\n\nWorst Performer: {{ $json.worst_overall.pair }}\nSharpe Ratio: {{ $json.worst_overall.sharpe_ratio }}\n\nRecommendations:\n{{ $json.output }}\n\n#Optimization #StrategyTuning #Trading"
+      },
+      "id": "telegram-optimization",
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.0,
+      "position": [1050, 150],
+      "credentials": {
+        "telegramApi": "telegram_bot_credential"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Optional: Update config.yaml with best parameters\n// This requires manual review for safety\nconst fs = require('fs');\nconst yaml = require('js-yaml');\n\nconst configPath = '/sessions/busy-awesome-noether/mnt/forex_scalper_bot/config.yaml';\n\nlet config = {};\ntry {\n  config = yaml.load(fs.readFileSync(configPath, 'utf8'));\n} catch (e) {\n  console.log('Config file not found, creating new');\n}\n\n// Create updated config with best parameters\nconst updatedConfig = {\n  ...config,\n  optimization: {\n    last_run: new Date().toISOString(),\n    best_pair: $json.best_overall.pair,\n    best_params: $json.best_overall.optimal_params || {},\n    sharpe_ratio: $json.best_overall.sharpe_ratio,\n    recommendations: $json.output\n  }\n};\n\n// Save as candidate (not auto-applied)\nconst candidatePath = '/sessions/busy-awesome-noether/mnt/forex_scalper_bot/config_candidate.yaml';\nfs.writeFileSync(candidatePath, yaml.dump(updatedConfig));\n\nreturn { \n  status: 'config_candidate_created',\n  path: candidatePath,\n  message: 'Review the candidate config before applying'\n};"
+      },
+      "id": "update-config-candidate",
+      "name": "Create Config Candidate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [1050, 250]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Save detailed optimization report\nconst fs = require('fs');\nconst path = require('path');\n\nconst reportDir = '/sessions/busy-awesome-noether/mnt/forex_scalper_bot/optimization_reports';\nif (!fs.existsSync(reportDir)) {\n  fs.mkdirSync(reportDir, { recursive: true });\n}\n\nconst filename = path.join(reportDir, `optimization_report_${Date.now()}.json`);\nconst report = {\n  timestamp: $json.timestamp,\n  optimization_type: $json.optimization_type,\n  pairs_analyzed: $json.pairs_analyzed,\n  results: $json.raw_results,\n  best_overall: $json.best_overall,\n  worst_overall: $json.worst_overall,\n  ai_analysis: $json.output\n};\n\nfs.writeFileSync(filename, JSON.stringify(report, null, 2));\nreturn { saved_to: filename, status: 'success' };"
+      },
+      "id": "save-optimization-report",
+      "name": "Save Full Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [1050, 350]
+    }
+  ],
+  "connections": {
+    "schedule-weekly": {
+      "main": [
+        [
+          {
+            "node": "setup-optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setup-optimization": {
+      "main": [
+        [
+          {
+            "node": "run-optimizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "run-optimizer": {
+      "main": [
+        [
+          {
+            "node": "parse-optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse-optimization": {
+      "main": [
+        [
+          {
+            "node": "ai-optimizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ai-optimizer": {
+      "main": [
+        [
+          {
+            "node": "discord-optimization",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "telegram-optimization",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "update-config-candidate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "save-optimization-report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "meta": {
+    "instanceId": "af54825e0055e6f5f1234567890abcd"
+  },
+  "notes": "## Setup Steps\n\n1. Python Optimizer Script:\n   - Create optimizer.py at /sessions/busy-awesome-noether/mnt/forex_scalper_bot/\n   - Accepts: --pairs, --timeframe, --mode, --output\n   - Modes: 'walk_forward', 'grid_search', 'genetic'\n   - Output: JSON with per-pair optimization results\n   - Results should include: optimal_params, sharpe_ratio, win_rate, max_drawdown\n\n2. Configuration Files:\n   - config.yaml: Main trading configuration\n   - config_candidate.yaml: Generated by this workflow (review before applying)\n   - optimization_reports/: Historical optimization records\n\n3. Pair List:\n   - Currently optimizes: BTCUSD, ETHUSD, SOLUSD, EURUSD, XAUUSD, USDCAD\n   - Edit 'Setup Optimization' node to add/remove pairs\n\n4. Schedule:\n   - Runs every Sunday at 10 PM UTC\n   - Change rule in 'Weekly Schedule' for different timing\n\n5. Safety:\n   - Config updates NOT automatic\n   - Manual review required before applying candidate config\n   - AI provides analysis to guide decisions\n\n6. Credentials:\n   - discord_webhook_credential\n   - telegram_bot_credential\n   - openai_api_credential"
+}

@@ -1,0 +1,182 @@
+{
+  "name": "Backtester Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "/backtest",
+        "method": "POST",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.0,
+      "position": [50, 100]
+    },
+    {
+      "parameters": {
+        "assignments": [
+          {
+            "name": "pair",
+            "value": "={{ $json.body.pair || 'BTCUSD' }}"
+          },
+          {
+            "name": "timeframe",
+            "value": "={{ $json.body.timeframe || '5m' }}"
+          },
+          {
+            "name": "strategy_params",
+            "value": "={{ $json.body.strategy_params || {} }}"
+          },
+          {
+            "name": "start_time",
+            "value": "={{ new Date().toISOString() }}"
+          }
+        ]
+      },
+      "id": "extract-params",
+      "name": "Extract Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [250, 100]
+    },
+    {
+      "parameters": {
+        "command": "cd /sessions/busy-awesome-noether/mnt/forex_scalper_bot && python backtester.py --pair {{ $json.pair }} --timeframe {{ $json.timeframe }} --params '{{ JSON.stringify($json.strategy_params) }}'"
+      },
+      "id": "run-backtest",
+      "name": "Execute Backtest",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1.0,
+      "position": [450, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse backtest output\nconst output = $input.first().json;\nconst lines = output.stdout.split('\\n');\n\nlet results = {\n  pair: $json.pair,\n  timeframe: $json.timeframe,\n  status: 'completed',\n  metrics: {}\n};\n\nlines.forEach(line => {\n  if (line.includes('Win Rate:')) {\n    results.metrics.win_rate = parseFloat(line.match(/([0-9.]+)%/)[1]);\n  }\n  if (line.includes('Total Trades:')) {\n    results.metrics.total_trades = parseInt(line.match(/([0-9]+)/)[1]);\n  }\n  if (line.includes('Max Drawdown:')) {\n    results.metrics.max_drawdown = parseFloat(line.match(/([0-9.]+)%/)[1]);\n  }\n  if (line.includes('Sharpe Ratio:')) {\n    results.metrics.sharpe_ratio = parseFloat(line.match(/([0-9.]+)/)[1]);\n  }\n  if (line.includes('Final Equity:')) {\n    results.metrics.final_equity = parseFloat(line.match(/([0-9.]+)/)[1]);\n  }\n  if (line.includes('Avg Win:')) {\n    results.metrics.avg_win = parseFloat(line.match(/([0-9.]+)/)[1]);\n  }\n  if (line.includes('Avg Loss:')) {\n    results.metrics.avg_loss = parseFloat(line.match(/([0-9.]+)/)[1]);\n  }\n});\n\nreturn { ...results, execution_time: new Date().toISOString() };"
+      },
+      "id": "parse-results",
+      "name": "Parse Backtest Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [650, 100]
+    },
+    {
+      "parameters": {
+        "jsonData": "={\n  \"content\": \"Backtest Results for {{ $json.pair }}\",\n  \"embeds\": [\n    {\n      \"title\": \"{{ $json.pair }} - {{ $json.timeframe }}\",\n      \"description\": \"Backtest completed\",\n      \"color\": 3447003,\n      \"fields\": [\n        {\n          \"name\": \"Win Rate\",\n          \"value\": \"{{ $json.metrics.win_rate }}%\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Total Trades\",\n          \"value\": \"{{ $json.metrics.total_trades }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Max Drawdown\",\n          \"value\": \"{{ $json.metrics.max_drawdown }}%\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Sharpe Ratio\",\n          \"value\": \"{{ $json.metrics.sharpe_ratio }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Final Equity\",\n          \"value\": \"{{ $json.metrics.final_equity }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Avg Win / Loss\",\n          \"value\": \"{{ $json.metrics.avg_win }} / {{ $json.metrics.avg_loss }}\",\n          \"inline\": true\n        }\n      ]\n    }\n  ]\n}"
+      },
+      "id": "discord-results",
+      "name": "Send Results to Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1.1,
+      "position": [850, 50],
+      "credentials": {
+        "discordBotApi": "discord_webhook_credential"
+      }
+    },
+    {
+      "parameters": {
+        "message": "=📊 Backtest Results: {{ $json.pair }} ({{ $json.timeframe }})\n\nWin Rate: {{ $json.metrics.win_rate }}%\nTotal Trades: {{ $json.metrics.total_trades }}\nMax Drawdown: {{ $json.metrics.max_drawdown }}%\nSharpe Ratio: {{ $json.metrics.sharpe_ratio }}\nFinal Equity: {{ $json.metrics.final_equity }}\nAvg Win/Loss: {{ $json.metrics.avg_win }} / {{ $json.metrics.avg_loss }}\n\n#Backtest #Trading"
+      },
+      "id": "telegram-results",
+      "name": "Send Results to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.0,
+      "position": [850, 150],
+      "credentials": {
+        "telegramApi": "telegram_bot_credential"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Save results to JSON file for Performance Reporter\nconst fs = require('fs');\nconst path = require('path');\n\nconst resultsDir = '/sessions/busy-awesome-noether/mnt/forex_scalper_bot/backtest_results';\nif (!fs.existsSync(resultsDir)) {\n  fs.mkdirSync(resultsDir, { recursive: true });\n}\n\nconst filename = path.join(resultsDir, `${$json.pair}_${$json.timeframe}_${Date.now()}.json`);\nfs.writeFileSync(filename, JSON.stringify($json, null, 2));\n\nreturn { saved_to: filename, status: 'success' };"
+      },
+      "id": "save-backtest-results",
+      "name": "Save Results to File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [850, 250]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={\n  \"status\": \"completed\",\n  \"pair\": \"{{ $json.pair }}\",\n  \"timeframe\": \"{{ $json.timeframe }}\",\n  \"metrics\": {{ JSON.stringify($json.metrics) }}\n}"
+      },
+      "id": "return-response",
+      "name": "Return Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.0,
+      "position": [1050, 100]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "extract-params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract-params": {
+      "main": [
+        [
+          {
+            "node": "run-backtest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "run-backtest": {
+      "main": [
+        [
+          {
+            "node": "parse-results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse-results": {
+      "main": [
+        [
+          {
+            "node": "discord-results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "telegram-results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "save-backtest-results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "return-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "meta": {
+    "instanceId": "af54825e0055e6f5f1234567890abcd"
+  },
+  "notes": "## Setup Steps\n\n1. Webhook Configuration:\n   - This workflow triggers via webhook at path /backtest\n   - Can be called via POST with JSON body\n   - Example body:\n     ```json\n     {\n       \"pair\": \"BTCUSD\",\n       \"timeframe\": \"5m\",\n       \"strategy_params\": {\n         \"ema_short\": 8,\n         \"ema_long\": 21,\n         \"rsi_period\": 14\n       }\n     }\n     ```\n\n2. Python Backtester:\n   - Ensure backtester.py exists at /sessions/busy-awesome-noether/mnt/forex_scalper_bot/\n   - Script should accept --pair, --timeframe, --params arguments\n   - Output should contain metrics: Win Rate, Total Trades, Max Drawdown, Sharpe Ratio, Final Equity, Avg Win, Avg Loss\n\n3. Credentials:\n   - discord_webhook_credential: Discord webhook URL\n   - telegram_bot_credential: Telegram bot token and chat ID\n\n4. Results Storage:\n   - Backtest results saved to backtest_results/ folder\n   - Used by Performance Reporter workflow\n\n5. Integration:\n   - Can be triggered manually from n8n UI\n   - Can be scheduled via another workflow\n   - Can be called by external services via webhook URL"
+}

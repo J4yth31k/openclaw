@@ -1,0 +1,234 @@
+{
+  "name": "News Scanner Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "everyWeekDay",
+        "hour": 7,
+        "minute": 0
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [50, 100]
+    },
+    {
+      "parameters": {
+        "url": "https://min-api.cryptocompare.com/data/v2/news/?lang=EN&categories=bitcoin,ethereum",
+        "method": "GET",
+        "options": {}
+      },
+      "id": "crypto-news-fetch",
+      "name": "Fetch Crypto News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [250, 50]
+    },
+    {
+      "parameters": {
+        "url": "https://api.alternative.me/fng/",
+        "method": "GET",
+        "options": {}
+      },
+      "id": "fear-greed-fetch",
+      "name": "Fetch Fear & Greed Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [250, 150]
+    },
+    {
+      "parameters": {
+        "url": "https://economictimes.indiatimes.com/markets/forex",
+        "method": "GET",
+        "options": {}
+      },
+      "id": "forex-news-fetch",
+      "name": "Fetch Forex News (Manual Parse)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [250, 250]
+    },
+    {
+      "parameters": {
+        "assignments": [
+          {
+            "name": "crypto_news",
+            "value": "={{ $node[\"crypto-news-fetch\"].json.Data || [] }}"
+          },
+          {
+            "name": "fear_greed",
+            "value": "={{ $node[\"fear-greed-fetch\"].json.data }}"
+          },
+          {
+            "name": "forex_context",
+            "value": "=\"Forex news context - check ECB, Fed calendars for major events\""
+          },
+          {
+            "name": "timestamp",
+            "value": "={{ new Date().toISOString() }}"
+          }
+        ]
+      },
+      "id": "combine-news-data",
+      "name": "Combine News Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [450, 150]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "userProvidedAgent": false,
+        "agentOptions": {
+          "mode": "chainOfThought"
+        },
+        "prompt": "=You are a forex and crypto news analyst. Given the following news and market sentiment data, analyze and rank the TOP 10 most impactful items for a trading bot that trades BTCUSD, ETHUSD, SOLUSD, EURUSD, XAUUSD, USDCAD.\n\nNews Data:\n{{ $json.crypto_news }}\n\nFear & Greed Index: {{ $json.fear_greed }}\n\nForex Context: {{ $json.forex_context }}\n\nProvide a structured JSON response with:\n- rank (1-10)\n- title\n- impact_level (high/medium/low)\n- affected_pairs (array of pairs)\n- summary (2-3 sentences)\n- action (hold/buy/sell/monitor)\n- confidence (0-100)",
+        "options": {}
+      },
+      "id": "ai-news-analyzer",
+      "name": "AI News Analyzer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.5,
+      "position": [650, 150],
+      "credentials": {
+        "openAiApi": "openai_api_credential"
+      }
+    },
+    {
+      "parameters": {
+        "jsonData": "={\n  \"content\": \"Daily News Digest - \" + $json.timestamp,\n  \"embeds\": [\n    {\n      \"title\": \"Market Sentiment Report\",\n      \"description\": \"Fear & Greed: \" + ($json.fear_greed?.value || \"N/A\"),\n      \"color\": 3447003,\n      \"fields\": [\n        {\n          \"name\": \"Top Stories\",\n          \"value\": $json.output?.split('\\n').slice(0, 5).join('\\n') || \"Analysis in progress\",\n          \"inline\": false\n        }\n      ]\n    }\n  ]\n}"
+      },
+      "id": "discord-send",
+      "name": "Send to Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1.1,
+      "position": [850, 50],
+      "credentials": {
+        "discordBotApi": "discord_webhook_credential"
+      }
+    },
+    {
+      "parameters": {
+        "message": "=📰 Daily News Digest\n\nFear & Greed: {{ $json.fear_greed?.value }}\n\nTop Stories:\n{{ $json.output }}\n\n#ForexTrading #Crypto #Trading"
+      },
+      "id": "telegram-send",
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.0,
+      "position": [850, 150],
+      "credentials": {
+        "telegramApi": "telegram_bot_credential"
+      }
+    },
+    {
+      "parameters": {
+        "filePath": "/sessions/busy-awesome-noether/mnt/forex_scalper_bot/logs/news_digest_{{ $json.timestamp }}.json",
+        "fileContent": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "id": "save-digest-log",
+      "name": "Save Digest Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [850, 250]
+    }
+  ],
+  "connections": {
+    "schedule-trigger": {
+      "main": [
+        [
+          {
+            "node": "crypto-news-fetch",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "fear-greed-fetch",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "forex-news-fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "crypto-news-fetch": {
+      "main": [
+        [
+          {
+            "node": "combine-news-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fear-greed-fetch": {
+      "main": [
+        [
+          {
+            "node": "combine-news-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "forex-news-fetch": {
+      "main": [
+        [
+          {
+            "node": "combine-news-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "combine-news-data": {
+      "main": [
+        [
+          {
+            "node": "ai-news-analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ai-news-analyzer": {
+      "main": [
+        [
+          {
+            "node": "discord-send",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "telegram-send",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "save-digest-log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "meta": {
+    "instanceId": "af54825e0055e6f5f1234567890abcd"
+  },
+  "notes": "## Setup Steps\n\n1. Create Discord Webhook:\n   - Go to your Discord server → Channel → Integrations → Webhooks\n   - Copy webhook URL and save as credential 'discord_webhook_credential'\n\n2. Create Telegram Bot:\n   - Message @BotFather on Telegram\n   - Create new bot, get token\n   - Save token as credential 'telegram_bot_credential'\n\n3. Connect OpenAI API:\n   - Get API key from https://platform.openai.com/api-keys\n   - Save as credential 'openai_api_credential'\n\n4. Customize Schedule:\n   - Edit 'Schedule Trigger' for different timezone (currently 7 AM UTC)\n   - Use 'everyWeekDay' for Mon-Fri, or adjust as needed\n\n5. Add More News Sources:\n   - Integrate Forex Factory calendar API\n   - Add Economic Calendar data points\n   - Filter by currency pairs and event importance"
+}

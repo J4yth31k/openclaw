@@ -1,0 +1,208 @@
+{
+  "name": "Performance Reporter Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "everyWeek",
+        "dayOfWeek": 5,
+        "hour": 18,
+        "minute": 0
+      },
+      "id": "schedule-friday",
+      "name": "Weekly Report (Friday 6 PM UTC)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [50, 100]
+    },
+    {
+      "parameters": {
+        "assignments": [
+          {
+            "name": "report_date",
+            "value": "={{ new Date().toISOString().split('T')[0] }}"
+          },
+          {
+            "name": "week_start",
+            "value": "={{ new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0] }}"
+          },
+          {
+            "name": "journal_path",
+            "value": "=\"/sessions/busy-awesome-noether/mnt/forex_scalper_bot/trade_journal.json\""
+          }
+        ]
+      },
+      "id": "setup-report",
+      "name": "Setup Report Period",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [250, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read and parse trade journal\nconst fs = require('fs');\nconst journalPath = $json.journal_path;\n\nlet allTrades = [];\nif (fs.existsSync(journalPath)) {\n  try {\n    allTrades = JSON.parse(fs.readFileSync(journalPath, 'utf8'));\n  } catch (e) {\n    console.error('Error reading journal:', e);\n  }\n}\n\nconst weekStart = new Date($json.week_start);\nconst weekEnd = new Date(Date.now());\n\n// Filter trades from this week that are closed\nconst weekTrades = allTrades.filter(trade => {\n  const tradeTime = new Date(trade.signal_time);\n  return tradeTime >= weekStart && tradeTime <= weekEnd && trade.status === 'closed' && trade.pnl !== null;\n});\n\n// Calculate metrics\nlet totalPnL = 0;\nlet winCount = 0;\nlet lossCount = 0;\nlet totalWins = 0;\nlet totalLosses = 0;\nlet maxDrawdown = 0;\nlet pairStats = {};\nlet equity = 10000; // Starting equity\nlet equityCurve = [10000];\n\nweekTrades.forEach(trade => {\n  const pnl = parseFloat(trade.pnl);\n  totalPnL += pnl;\n  equity += pnl;\n  equityCurve.push(equity);\n  \n  if (pnl > 0) {\n    winCount++;\n    totalWins += pnl;\n  } else {\n    lossCount++;\n    totalLosses += Math.abs(pnl);\n  }\n  \n  // Track max drawdown\n  const peak = Math.max(...equityCurve);\n  const drawdown = ((equity - peak) / peak) * 100;\n  if (drawdown < maxDrawdown) maxDrawdown = drawdown;\n  \n  // Track per-pair stats\n  if (!pairStats[trade.ticker]) {\n    pairStats[trade.ticker] = { trades: 0, pnl: 0, wins: 0, losses: 0 };\n  }\n  pairStats[trade.ticker].trades++;\n  pairStats[trade.ticker].pnl += pnl;\n  if (pnl > 0) pairStats[trade.ticker].wins++;\n  else pairStats[trade.ticker].losses++;\n});\n\nconst totalTrades = winCount + lossCount;\nconst winRate = totalTrades > 0 ? (winCount / totalTrades * 100).toFixed(2) : 0;\nconst avgWin = winCount > 0 ? (totalWins / winCount).toFixed(2) : 0;\nconst avgLoss = lossCount > 0 ? (totalLosses / lossCount).toFixed(2) : 0;\nconst profitFactor = totalLosses > 0 ? (totalWins / totalLosses).toFixed(2) : (totalWins > 0 ? 'Inf' : 0);\n\n// Calculate Sharpe ratio (simplified)\nconst returns = equityCurve.slice(1).map((e, i) => (e - equityCurve[i]) / equityCurve[i]);\nconst avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b) / returns.length : 0;\nconst stdDev = returns.length > 0 ? Math.sqrt(returns.reduce((sq, n) => sq + Math.pow(n - avgReturn, 2)) / returns.length) : 0;\nconst sharpeRatio = stdDev > 0 ? (avgReturn / stdDev * Math.sqrt(252 / 5)).toFixed(2) : 0; // 252 trading days, 5-day week\n\nreturn {\n  report_period: `${$json.week_start} to ${$json.report_date}`,\n  total_trades: totalTrades,\n  total_pnl: totalPnL.toFixed(2),\n  win_rate: winRate,\n  wins: winCount,\n  losses: lossCount,\n  avg_win: avgWin,\n  avg_loss: avgLoss,\n  profit_factor: profitFactor,\n  max_drawdown: maxDrawdown.toFixed(2),\n  sharpe_ratio: sharpeRatio,\n  final_equity: equity.toFixed(2),\n  pair_stats: pairStats,\n  trades: weekTrades\n};"
+      },
+      "id": "calculate-metrics",
+      "name": "Calculate Performance Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [450, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find best and worst performers\nconst pairs = $json.pair_stats;\nlet bestPair = { name: 'N/A', pnl: -Infinity, trades: 0 };\nlet worstPair = { name: 'N/A', pnl: Infinity, trades: 0 };\n\nObject.entries(pairs).forEach(([pair, stats]) => {\n  if (stats.pnl > bestPair.pnl) {\n    bestPair = { name: pair, pnl: stats.pnl.toFixed(2), trades: stats.trades, wr: (stats.wins/stats.trades*100).toFixed(1) };\n  }\n  if (stats.pnl < worstPair.pnl) {\n    worstPair = { name: pair, pnl: stats.pnl.toFixed(2), trades: stats.trades, wr: (stats.wins/stats.trades*100).toFixed(1) };\n  }\n});\n\nreturn {\n  ...($json),\n  best_pair: bestPair,\n  worst_pair: worstPair\n};"
+      },
+      "id": "identify-best-worst",
+      "name": "Identify Best/Worst Pairs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [650, 100]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "userProvidedAgent": false,
+        "agentOptions": {
+          "mode": "chainOfThought"
+        },
+        "prompt": "=You are a professional trading performance analyst. Write a compelling weekly trading report based on these metrics:\n\nReport Period: {{ $json.report_period }}\n\nPerformance Summary:\n- Total Trades: {{ $json.total_trades }}\n- Total PnL: ${{ $json.total_pnl }}\n- Win Rate: {{ $json.win_rate }}%\n- Avg Win/Loss: {{ $json.avg_win }} / {{ $json.avg_loss }}\n- Profit Factor: {{ $json.profit_factor }}\n- Max Drawdown: {{ $json.max_drawdown }}%\n- Sharpe Ratio: {{ $json.sharpe_ratio }}\n- Final Equity: ${{ $json.final_equity }}\n\nBest Performing Pair:\n{{ JSON.stringify($json.best_pair, null, 2) }}\n\nWorst Performing Pair:\n{{ JSON.stringify($json.worst_pair, null, 2) }}\n\nDetailed Per-Pair Stats:\n{{ JSON.stringify($json.pair_stats, null, 2) }}\n\nProvide:\n1. Executive summary (2-3 sentences) of the week's performance\n2. Key wins and losses analysis\n3. Which pairs to focus on vs deprioritize\n4. Risk management observations\n5. Top 3 action items for next week\n\nFormat as a professional trading report narrative.",
+        "options": {}
+      },
+      "id": "ai-analyst",
+      "name": "AI Performance Analyst",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.5,
+      "position": [850, 100],
+      "credentials": {
+        "openAiApi": "openai_api_credential"
+      }
+    },
+    {
+      "parameters": {
+        "jsonData": "={\n  \"content\": \"Weekly Trading Performance Report\",\n  \"embeds\": [\n    {\n      \"title\": \"Performance Summary\",\n      \"description\": \"Week of {{ $json.report_period }}\",\n      \"color\": \"{{ parseFloat($json.total_pnl) >= 0 ? 3066993 : 15158332 }}\",\n      \"fields\": [\n        {\n          \"name\": \"Total PnL\",\n          \"value\": \"${{ $json.total_pnl }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Total Trades\",\n          \"value\": \"{{ $json.total_trades }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Win Rate\",\n          \"value\": \"{{ $json.win_rate }}%\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Max Drawdown\",\n          \"value\": \"{{ $json.max_drawdown }}%\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Sharpe Ratio\",\n          \"value\": \"{{ $json.sharpe_ratio }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Profit Factor\",\n          \"value\": \"{{ $json.profit_factor }}\",\n          \"inline\": true\n        }\n      ]\n    },\n    {\n      \"title\": \"Pair Performance\",\n      \"description\": \"Best vs Worst\",\n      \"color\": 3447003,\n      \"fields\": [\n        {\n          \"name\": \"🏆 Best\",\n          \"value\": \"{{ $json.best_pair.name }} - PnL: ${{ $json.best_pair.pnl }} (WR: {{ $json.best_pair.wr }}%)\",\n          \"inline\": false\n        },\n        {\n          \"name\": \"📉 Worst\",\n          \"value\": \"{{ $json.worst_pair.name }} - PnL: ${{ $json.worst_pair.pnl }} (WR: {{ $json.worst_pair.wr }}%)\",\n          \"inline\": false\n        }\n      ]\n    },\n    {\n      \"title\": \"Analyst Commentary\",\n      \"description\": $json.output?.split('\\n').slice(0, 15).join('\\n') || \"Analysis in progress\",\n      \"color\": 3447003\n    }\n  ]\n}"
+      },
+      "id": "discord-report",
+      "name": "Send Report to Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1.1,
+      "position": [1050, 50],
+      "credentials": {
+        "discordBotApi": "discord_webhook_credential"
+      }
+    },
+    {
+      "parameters": {
+        "message": "=📊 WEEKLY TRADING PERFORMANCE REPORT\n\n📅 {{ $json.report_period }}\n\n💰 Total PnL: ${{ $json.total_pnl }}\n📈 Total Trades: {{ $json.total_trades }}\n✅ Win Rate: {{ $json.win_rate }}%\n📉 Max Drawdown: {{ $json.max_drawdown }}%\n📊 Sharpe Ratio: {{ $json.sharpe_ratio }}\n🎯 Profit Factor: {{ $json.profit_factor }}\n\n🏆 Best Pair: {{ $json.best_pair.name }} (${{ $json.best_pair.pnl }}, {{ $json.best_pair.wr }}% WR)\n📉 Worst Pair: {{ $json.worst_pair.name }} (${{ $json.worst_pair.pnl }}, {{ $json.worst_pair.wr }}% WR)\n\n💡 ANALYSIS:\n{{ $json.output }}\n\n#WeeklyReport #Trading #Performance"
+      },
+      "id": "telegram-report",
+      "name": "Send Report to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.0,
+      "position": [1050, 150],
+      "credentials": {
+        "telegramApi": "telegram_bot_credential"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Save detailed report to file\nconst fs = require('fs');\nconst path = require('path');\n\nconst reportDir = '/sessions/busy-awesome-noether/mnt/forex_scalper_bot/weekly_reports';\nif (!fs.existsSync(reportDir)) {\n  fs.mkdirSync(reportDir, { recursive: true });\n}\n\nconst filename = path.join(reportDir, `weekly_report_${new Date().getTime()}.json`);\n\nconst report = {\n  report_date: new Date().toISOString(),\n  period: $json.report_period,\n  summary: {\n    total_trades: $json.total_trades,\n    total_pnl: parseFloat($json.total_pnl),\n    win_rate: parseFloat($json.win_rate),\n    wins: $json.wins,\n    losses: $json.losses,\n    avg_win: parseFloat($json.avg_win),\n    avg_loss: parseFloat($json.avg_loss),\n    profit_factor: $json.profit_factor,\n    max_drawdown: parseFloat($json.max_drawdown),\n    sharpe_ratio: parseFloat($json.sharpe_ratio),\n    final_equity: parseFloat($json.final_equity)\n  },\n  pair_performance: $json.pair_stats,\n  best_pair: $json.best_pair,\n  worst_pair: $json.worst_pair,\n  ai_analysis: $json.output,\n  trades: $json.trades\n};\n\nfs.writeFileSync(filename, JSON.stringify(report, null, 2));\nreturn { saved_to: filename, status: 'success' };"
+      },
+      "id": "save-report",
+      "name": "Save Detailed Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [1050, 250]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Export summary CSV for record-keeping\nconst fs = require('fs');\nconst path = require('path');\n\nconst csvDir = '/sessions/busy-awesome-noether/mnt/forex_scalper_bot/reports_csv';\nif (!fs.existsSync(csvDir)) {\n  fs.mkdirSync(csvDir, { recursive: true });\n}\n\nconst headers = 'Date,Period,TotalTrades,WinRate,TotalPnL,Wins,Losses,AvgWin,AvgLoss,ProfitFactor,MaxDrawdown,SharpeRatio,FinalEquity,BestPair,WorstPair';\nconst row = `${new Date().toISOString()},${$json.report_period},${$json.total_trades},${$json.win_rate}%,${$json.total_pnl},${$json.wins},${$json.losses},${$json.avg_win},${$json.avg_loss},${$json.profit_factor},${$json.max_drawdown}%,${$json.sharpe_ratio},${$json.final_equity},${$json.best_pair.name},${$json.worst_pair.name}`;\n\nconst csvPath = path.join(csvDir, 'weekly_summary.csv');\nlet content = '';\nif (!fs.existsSync(csvPath)) {\n  content = headers + '\\n';\n}\nelse {\n  content = fs.readFileSync(csvPath, 'utf8');\n}\n\ncontent += row + '\\n';\nfs.writeFileSync(csvPath, content);\n\nreturn { csv_saved: csvPath, status: 'success' };"
+      },
+      "id": "save-csv",
+      "name": "Save Summary CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [1050, 350]
+    }
+  ],
+  "connections": {
+    "schedule-friday": {
+      "main": [
+        [
+          {
+            "node": "setup-report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setup-report": {
+      "main": [
+        [
+          {
+            "node": "calculate-metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "calculate-metrics": {
+      "main": [
+        [
+          {
+            "node": "identify-best-worst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "identify-best-worst": {
+      "main": [
+        [
+          {
+            "node": "ai-analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ai-analyst": {
+      "main": [
+        [
+          {
+            "node": "discord-report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "telegram-report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "save-report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "save-csv",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "meta": {
+    "instanceId": "af54825e0055e6f5f1234567890abcd"
+  },
+  "notes": "## Setup Steps\n\n1. Trade Journal Source:\n   - Reads trade_journal.json created by TradingView Signal Alerter workflow\n   - Expects trades with: signal_time, ticker, action, entry_price, take_profit, stop_loss, position_size, strategy, status, exit_time, exit_price, pnl\n   - Only includes 'closed' trades with calculated PnL\n\n2. Performance Metrics Calculated:\n   - Total P&L: Sum of all closed trades\n   - Win Rate: (Wins / Total Trades) %\n   - Avg Win/Loss: Average size of winning/losing trades\n   - Profit Factor: Total Wins / Total Losses\n   - Max Drawdown: Largest equity peak-to-trough decline\n   - Sharpe Ratio: Risk-adjusted return (annualized)\n   - Per-pair statistics: Trades, PnL, Win rate by pair\n\n3. Report Files:\n   - weekly_reports/: Detailed JSON reports\n   - reports_csv/weekly_summary.csv: Cumulative summary (append mode)\n   - Both preserved for long-term tracking\n\n4. Schedule:\n   - Runs every Friday at 6 PM UTC\n   - Change rule in 'Weekly Schedule' for different timing\n   - Looks back 7 days for report period\n\n5. Output Channels:\n   - Discord: Rich embed with metrics and analysis\n   - Telegram: Text message with key metrics\n   - Files: JSON + CSV for historical records\n\n6. AI Analysis:\n   - GPT-4 writes narrative weekly report\n   - Includes: executive summary, pair analysis, action items\n   - Sent in Discord embed and Telegram message\n\n7. Credentials:\n   - discord_webhook_credential\n   - telegram_bot_credential\n   - openai_api_credential\n\n8. Data Flow:\n   TradingView → Signal Alerter → trade_journal.json → Performance Reporter → Discord/Telegram/Files"
+}

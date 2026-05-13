@@ -1,0 +1,104 @@
+pairs:
+- XAUUSD
+- EURUSD
+- CADUSD
+- BTCUSD
+- ETHUSD
+- SOLUSD
+bar_minutes: 1
+session_timezone: Europe/London
+trade_sessions:
+- start: 07:00
+  end: '11:30'
+- start: '13:00'
+  end: '16:00'
+initial_equity: 10000.0
+output_dir: ./output
+risk:
+  risk_per_trade: 0.003
+  daily_loss_limit: 0.02
+  max_trades_per_day: 20
+costs_default:
+  spread_pips: 1.0
+  commission_per_million: 7.0
+  slippage_pips: 0.2
+costs_overrides:
+  EURUSD:
+    spread_pips: 0.8
+    slippage_pips: 0.2
+    commission_per_million: 7.0
+  USDCAD:
+    spread_pips: 1.2
+    slippage_pips: 0.3
+    commission_per_million: 7.0
+  XAUUSD:
+    spread_pips: 20.0
+    slippage_pips: 1.0
+    commission_per_million: 7.0
+  BTCUSD:
+    spread_pips: 1.0
+    slippage_pips: 0.5
+    commission_per_million: 10.0
+  ETHUSD:
+    spread_pips: 0.5
+    slippage_pips: 0.3
+    commission_per_million: 10.0
+  SOLUSD:
+    spread_pips: 0.2
+    slippage_pips: 0.2
+    commission_per_million: 10.0
+strategy:
+  ema_fast: 9
+  ema_slow: 21
+  rsi_len: 14
+  rsi_buy_min: 45
+  rsi_buy_max: 70
+  rsi_sell_min: 30
+  rsi_sell_max: 55
+  tp_pips: 8
+  sl_pips: 6
+walk_forward:
+  train_days: 60
+  test_days: 15
+  ema_fast_grid:
+  - 6
+  - 9
+  - 12
+  ema_slow_grid:
+  - 18
+  - 21
+  - 26
+  tp_grid:
+  - 6
+  - 8
+  - 10
+  sl_grid:
+  - 5
+  - 6
+  - 8
+  rsi_buy_min_grid:
+  - 40
+  - 45
+  - 50
+  rsi_buy_max_grid:
+  - 65
+  - 70
+  rsi_sell_min_grid:
+  - 30
+  - 35
+  - 40
+  rsi_sell_max_grid:
+  - 50
+  - 55
+notifications:
+  discord:
+    enabled: false
+    webhook_url: "https://discordapp.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+  telegram:
+    enabled: false
+    bot_token: "YOUR_TELEGRAM_BOT_TOKEN"
+    chat_id: "YOUR_CHAT_ID"
+  n8n:
+    enabled: false
+    webhook_url: "https://your-n8n-instance.com/webhook/YOUR_WEBHOOK_PATH"
+seed: 42

@@ -1,0 +1,250 @@
+{
+  "name": "TradingView Signal Alerter",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "/tradingview-alert",
+        "method": "POST",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-tv-alert",
+      "name": "TradingView Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.0,
+      "position": [50, 100]
+    },
+    {
+      "parameters": {
+        "assignments": [
+          {
+            "name": "ticker",
+            "value": "={{ $json.body.ticker }}"
+          },
+          {
+            "name": "action",
+            "value": "={{ $json.body.action }}"
+          },
+          {
+            "name": "price",
+            "value": "={{ $json.body.price }}"
+          },
+          {
+            "name": "strategy",
+            "value": "={{ $json.body.strategy || 'Unknown' }}"
+          },
+          {
+            "name": "timeframe",
+            "value": "={{ $json.body.timeframe || '1m' }}"
+          },
+          {
+            "name": "message",
+            "value": "={{ $json.body.message || '' }}"
+          },
+          {
+            "name": "alert_time",
+            "value": "={{ new Date().toISOString() }}"
+          }
+        ]
+      },
+      "id": "extract-alert-data",
+      "name": "Extract Alert Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [250, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "type": "all",
+          "value": [
+            {
+              "key": "{{ $json.ticker }}",
+              "operator": "regex",
+              "value": "^(BTCUSD|ETHUSD|SOLUSD|EURUSD|XAUUSD|USDCAD)$"
+            },
+            {
+              "key": "{{ $json.action }}",
+              "operator": "regex",
+              "value": "^(buy|sell|close)$"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "validate-signal",
+      "name": "Validate Signal",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.0,
+      "position": [450, 100]
+    },
+    {
+      "parameters": {
+        "url": "https://api.example.com/market-price/{{ $json.ticker }}",
+        "method": "GET",
+        "options": {}
+      },
+      "id": "fetch-current-price",
+      "name": "Fetch Current Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 50]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate position sizing and levels\nconst alertPrice = $json.price;\nconst currentPrice = $input.first().json.price || alertPrice;\nconst action = $json.action;\n\nlet positionSize = 1.0; // Base lot size\nlet takeProfitOffset = 50; // pips/points\nlet stopLossOffset = 25; // pips/points\n\n// Adjust based on strategy\nif ($json.strategy.includes('Scalper')) {\n  positionSize = 0.5;\n  takeProfitOffset = 20;\n  stopLossOffset = 10;\n} else if ($json.strategy.includes('Swing')) {\n  positionSize = 2.0;\n  takeProfitOffset = 100;\n  stopLossOffset = 50;\n}\n\nlet entryPrice, tp, sl;\nif (action === 'buy') {\n  entryPrice = currentPrice;\n  tp = (entryPrice + takeProfitOffset).toFixed(2);\n  sl = (entryPrice - stopLossOffset).toFixed(2);\n} else {\n  entryPrice = currentPrice;\n  tp = (entryPrice - takeProfitOffset).toFixed(2);\n  sl = (entryPrice + stopLossOffset).toFixed(2);\n}\n\nreturn {\n  ...($json),\n  entry_price: entryPrice.toFixed(2),\n  take_profit: tp,\n  stop_loss: sl,\n  position_size: positionSize,\n  risk_reward_ratio: (Math.abs(entryPrice - tp) / Math.abs(entryPrice - sl)).toFixed(2),\n  enrichment_time: new Date().toISOString()\n};"
+      },
+      "id": "enrich-with-levels",
+      "name": "Enrich with Entry/TP/SL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [850, 50]
+    },
+    {
+      "parameters": {
+        "jsonData": "={\n  \"content\": \"🚨 Trading Signal Alert\",\n  \"embeds\": [\n    {\n      \"title\": \"{{ $json.action.toUpperCase() }} {{ $json.ticker }}\",\n      \"description\": \"Strategy: {{ $json.strategy }} | Timeframe: {{ $json.timeframe }}\",\n      \"color\": \"{{ $json.action === 'buy' ? 3066993 : 15158332 }}\",\n      \"fields\": [\n        {\n          \"name\": \"Entry Price\",\n          \"value\": \"{{ $json.entry_price }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Take Profit\",\n          \"value\": \"{{ $json.take_profit }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Stop Loss\",\n          \"value\": \"{{ $json.stop_loss }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Position Size\",\n          \"value\": \"{{ $json.position_size }} lot(s)\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Risk/Reward Ratio\",\n          \"value\": \"1:{{ $json.risk_reward_ratio }}\",\n          \"inline\": true\n        },\n        {\n          \"name\": \"Signal Message\",\n          \"value\": \"{{ $json.message }}\",\n          \"inline\": false\n        }\n      ],\n      \"footer\": {\n        \"text\": \"{{ $json.alert_time }}\"\n      }\n    }\n  ]\n}"
+      },
+      "id": "discord-alert",
+      "name": "Send Alert to Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1.1,
+      "position": [1050, 50],
+      "credentials": {
+        "discordBotApi": "discord_webhook_credential"
+      }
+    },
+    {
+      "parameters": {
+        "message": "=🚨 {{ $json.action.toUpperCase() }} {{ $json.ticker }}\n\nStrategy: {{ $json.strategy }}\nTimeframe: {{ $json.timeframe }}\n\nEntry: {{ $json.entry_price }}\nTP: {{ $json.take_profit }}\nSL: {{ $json.stop_loss }}\n\nPosition Size: {{ $json.position_size }} lot(s)\nRisk/Reward: 1:{{ $json.risk_reward_ratio }}\n\nMessage: {{ $json.message }}\n\nTime: {{ $json.alert_time }}\n\n#TradingView #Alert #{{ $json.ticker }}"
+      },
+      "id": "telegram-alert",
+      "name": "Send Alert to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.0,
+      "position": [1050, 150],
+      "credentials": {
+        "telegramApi": "telegram_bot_credential"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log signal to trade journal\nconst fs = require('fs');\nconst path = require('path');\n\nconst journalPath = '/sessions/busy-awesome-noether/mnt/forex_scalper_bot/trade_journal.json';\n\nlet journal = [];\nif (fs.existsSync(journalPath)) {\n  try {\n    journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));\n  } catch (e) {\n    journal = [];\n  }\n}\n\nconst entry = {\n  id: Math.random().toString(36).substr(2, 9),\n  signal_time: $json.alert_time,\n  ticker: $json.ticker,\n  action: $json.action,\n  entry_price: parseFloat($json.entry_price),\n  take_profit: parseFloat($json.take_profit),\n  stop_loss: parseFloat($json.stop_loss),\n  position_size: $json.position_size,\n  strategy: $json.strategy,\n  timeframe: $json.timeframe,\n  risk_reward: parseFloat($json.risk_reward_ratio),\n  status: 'open',\n  exit_time: null,\n  exit_price: null,\n  pnl: null\n};\n\njournal.push(entry);\nfs.writeFileSync(journalPath, JSON.stringify(journal, null, 2));\n\nreturn { saved_signal_id: entry.id, total_signals: journal.length };"
+      },
+      "id": "log-to-journal",
+      "name": "Log to Trade Journal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.0,
+      "position": [1050, 250]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={\n  \"status\": \"success\",\n  \"signal_id\": \"{{ $node['log-to-journal'].json.saved_signal_id }}\",\n  \"ticker\": \"{{ $json.ticker }}\",\n  \"action\": \"{{ $json.action }}\",\n  \"entry_price\": {{ $json.entry_price }},\n  \"take_profit\": {{ $json.take_profit }},\n  \"stop_loss\": {{ $json.stop_loss }},\n  \"alerts_sent\": [\"discord\", \"telegram\"]\n}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.0,
+      "position": [1250, 100]
+    },
+    {
+      "parameters": {
+        "responseCode": 400,
+        "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Invalid signal - ticker or action not recognized\",\n  \"received\": {\n    \"ticker\": \"{{ $json.body.ticker }}\",\n    \"action\": \"{{ $json.body.action }}\"\n  },\n  \"valid_pairs\": [\"BTCUSD\", \"ETHUSD\", \"SOLUSD\", \"EURUSD\", \"XAUUSD\", \"USDCAD\"],\n  \"valid_actions\": [\"buy\", \"sell\", \"close\"]\n}"
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.0,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "webhook-tv-alert": {
+      "main": [
+        [
+          {
+            "node": "extract-alert-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract-alert-data": {
+      "main": [
+        [
+          {
+            "node": "validate-signal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate-signal": {
+      "main": [
+        [
+          {
+            "node": "fetch-current-price",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "error-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-current-price": {
+      "main": [
+        [
+          {
+            "node": "enrich-with-levels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enrich-with-levels": {
+      "main": [
+        [
+          {
+            "node": "discord-alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "telegram-alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "log-to-journal",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "respond-webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "meta": {
+    "instanceId": "af54825e0055e6f5f1234567890abcd"
+  },
+  "notes": "## Setup Steps\n\n1. TradingView Pine Script Integration:\n   - Create alert in TradingView Pine Script:\n   ```\n   alertmessage = '{\"ticker\": \"' + syminfo.tickerid + '\", \"action\": \"buy\", \"price\": ' + str.tostring(close) + ', \"strategy\": \"EMA_RSI_Scalper\", \"timeframe\": \"' + timeframe.period + '\", \"message\": \"Signal triggered\"}'\n   alert(alertmessage, alert.freq_once_per_bar_close)\n   ```\n\n2. Alert Configuration:\n   - Get webhook URL from this workflow (copy-paste after creation)\n   - In TradingView Alerts, set webhook to: [your-n8n-instance]/webhook/tradingview-alert\n   - Test with sample payload\n\n3. Expected Webhook Payload:\n   ```json\n   {\n     \"ticker\": \"BTCUSD\",\n     \"action\": \"buy\",\n     \"price\": 60000,\n     \"strategy\": \"EMA_RSI_Scalper\",\n     \"timeframe\": \"1m\",\n     \"message\": \"Signal details here\"\n   }\n   ```\n\n4. Validation:\n   - Only accepts: BTCUSD, ETHUSD, SOLUSD, EURUSD, XAUUSD, USDCAD\n   - Only accepts: buy, sell, close actions\n   - Invalid signals return error response\n\n5. Position Sizing:\n   - Scalper strategies: 0.5 lot (tight TP/SL: 20/10)\n   - Default strategies: 1.0 lot (medium TP/SL: 50/25)\n   - Swing strategies: 2.0 lot (wide TP/SL: 100/50)\n   - Edit 'Enrich with Entry/TP/SL' node to customize\n\n6. Trade Journal:\n   - Saved to trade_journal.json\n   - Used by Performance Reporter for weekly analysis\n   - Contains: signal_time, ticker, action, prices, status, PnL\n\n7. Credentials:\n   - discord_webhook_credential\n   - telegram_bot_credential"
+}
