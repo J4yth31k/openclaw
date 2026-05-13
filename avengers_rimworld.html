@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OpenClaw — Avengers Colony</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{--bg:#06060c;--bg2:#0a0a14;--bg3:#0e0e1a;--card:rgba(10,10,20,0.94);
+--bdr:rgba(74,108,247,0.1);--txt:#d8d8e8;--dim:#4a4a6a;--mut:#7a7a9a;
+--blue:#4a6cf7;--purple:#7c3aed;--cyan:#06b6d4;--green:#10b981;
+--red:#ef4444;--orange:#f59e0b;--pink:#ec4899;--yellow:#eab308;
+--safe-b:env(safe-area-inset-bottom,0px);}
+body{background:var(--bg);color:var(--txt);font-family:'Inter',sans-serif;overflow:hidden;height:100vh;height:100dvh;display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent;}
+
+/* ===== TOP BAR ===== */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:6px 16px;background:var(--bg2);border-bottom:1px solid var(--bdr);z-index:60;flex-shrink:0;height:40px;}
+.tb-left{display:flex;align-items:center;gap:12px;}
+.tb-logo{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;letter-spacing:3px;background:linear-gradient(90deg,var(--blue),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.tb-sep{width:1px;height:20px;background:var(--bdr);}
+.tb-clock{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);}
+.tb-dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px;animation:dp 2s infinite;}
+@keyframes dp{0%,100%{opacity:1;}50%{opacity:.3;}}
+.tb-right{display:flex;align-items:center;gap:10px;}
+.speed-btn{font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 8px;border:1px solid var(--bdr);background:transparent;color:var(--dim);border-radius:4px;cursor:pointer;transition:all .2s;}
+.speed-btn.active{color:var(--cyan);border-color:var(--cyan);background:rgba(6,182,212,0.08);}
+.assemble-btn{font-family:'Orbitron',monospace;font-size:10px;font-weight:600;letter-spacing:2px;padding:4px 14px;border:1px solid var(--blue);background:rgba(74,108,247,0.08);color:var(--blue);border-radius:5px;cursor:pointer;transition:all .3s;}
+.assemble-btn.running{border-color:var(--green);color:var(--green);background:rgba(16,185,129,0.08);}
+
+/* ===== MAIN AREA (Desktop) ===== */
+.main-area{flex:1;display:flex;overflow:hidden;position:relative;}
+
+/* ===== LEFT PANEL ===== */
+.left-panel{width:200px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--bdr);display:flex;flex-direction:column;z-index:20;}
+.lp-title{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;padding:10px 12px 6px;border-bottom:1px solid var(--bdr);}
+.colonist-list{flex:1;overflow-y:auto;}
+.colonist{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.02);cursor:pointer;transition:all .15s;}
+.colonist:hover{background:rgba(255,255,255,0.02);}
+.colonist.selected{background:rgba(74,108,247,0.08);border-left:2px solid var(--blue);}
+.col-emo{font-size:20px;flex-shrink:0;}
+.col-info{flex:1;min-width:0;}
+.col-name{font-family:'Orbitron',monospace;font-size:9px;font-weight:600;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.col-role{font-size:9px;color:var(--dim);white-space:nowrap;}
+.col-task{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--mut);margin-top:2px;}
+.col-bars{display:flex;flex-direction:column;gap:2px;width:30px;flex-shrink:0;}
+.col-bar{height:3px;border-radius:2px;background:var(--bg);}
+.col-bar-fill{height:100%;border-radius:2px;transition:width .5s;}
+
+/* ===== CENTER: ROOM ===== */
+.room-viewport{flex:1;position:relative;overflow:hidden;}
+.room-viewport canvas{display:block;width:100%;height:100%;}
+.sel-label{position:absolute;z-index:30;pointer-events:none;text-align:center;opacity:0;transition:opacity .2s;}
+.sel-label.visible{opacity:1;}
+.sel-label .name{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-shadow:0 0 8px rgba(0,0,0,0.8);}
+.sel-label .task{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--mut);text-shadow:0 0 6px rgba(0,0,0,0.8);}
+
+/* ===== RIGHT PANEL ===== */
+.right-panel{width:320px;flex-shrink:0;background:var(--bg2);border-left:1px solid var(--bdr);display:flex;flex-direction:column;z-index:20;overflow:hidden;}
+.rp-tabs{display:flex;border-bottom:1px solid var(--bdr);flex-shrink:0;}
+.rp-tab{flex:1;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;text-align:center;padding:8px 4px;cursor:pointer;color:var(--dim);border-bottom:2px solid transparent;transition:all .2s;}
+.rp-tab.active{color:var(--cyan);border-bottom-color:var(--cyan);background:rgba(6,182,212,0.04);}
+.rp-tab:hover{color:var(--txt);}
+.rp-content{flex:1;overflow-y:auto;padding:0;}
+.rp-section{display:none;padding:12px;}
+.rp-section.active{display:block;}
+
+/* Chart */
+.mini-chart{width:100%;height:200px;position:relative;}
+.mini-chart canvas{width:100%;height:100%;}
+.pair-tabs-mini{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;}
+.pt-mini{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,0.03);color:var(--dim);cursor:pointer;border:1px solid transparent;transition:all .2s;}
+.pt-mini.active{color:var(--cyan);border-color:rgba(6,182,212,0.3);background:rgba(6,182,212,0.06);}
+
+/* Signal cards */
+.sig-card{padding:10px;border-radius:8px;border:1px solid var(--bdr);margin-bottom:8px;background:rgba(0,0,0,0.2);}
+.sig-dir{font-family:'Orbitron',monospace;font-size:12px;font-weight:800;letter-spacing:1px;display:inline-block;padding:2px 10px;border-radius:5px;margin-bottom:6px;}
+.sig-dir.long{color:var(--green);background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);}
+.sig-dir.short{color:var(--red);background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);}
+.sig-pair{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;display:inline;margin-left:8px;}
+.sig-score{float:right;font-family:'Orbitron',monospace;font-size:16px;font-weight:900;}
+.sig-row{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);margin-top:4px;}
+.sig-row .val{color:var(--txt);}
+
+/* Sessions */
+.ses-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.02);}
+.ses-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.ses-dot.on{background:var(--green);box-shadow:0 0 6px var(--green);}
+.ses-dot.off{background:var(--dim);}
+.ses-name{font-family:'Orbitron',monospace;font-size:10px;font-weight:600;letter-spacing:1px;flex:1;}
+.ses-time{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim);}
+.ses-verdict{margin-top:10px;padding:8px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:10px;text-align:center;line-height:1.5;}
+.ses-verdict.go{color:var(--green);background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);}
+.ses-verdict.wait{color:var(--orange);background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);}
+.ses-verdict.no{color:var(--red);background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);}
+
+/* Report */
+.report-box{font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.7;color:var(--mut);white-space:pre-wrap;}
+.report-box .rh{font-weight:600;font-size:11px;}
+.report-box .buy{color:var(--green);}
+.report-box .sell{color:var(--red);}
+.report-box .warn{color:var(--orange);}
+.report-box .info{color:var(--cyan);}
+
+/* ===== BOTTOM BAR ===== */
+.bottombar{display:flex;align-items:center;justify-content:space-between;padding:4px 16px;background:var(--bg2);border-top:1px solid var(--bdr);z-index:60;flex-shrink:0;height:32px;}
+.bb-feed{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.bb-stats{display:flex;gap:16px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);}
+.bb-stat b{color:var(--txt);margin-left:4px;}
+
+/* ===== MOBILE BOTTOM NAV (hidden on desktop) ===== */
+.mobile-nav{display:none;}
+
+/* ================================================================
+   MOBILE RESPONSIVE
+   ================================================================ */
+@media(max-width:900px){
+  /* Top bar compact */
+  .topbar{padding:6px 10px;height:38px;gap:6px;}
+  .tb-logo{font-size:11px;letter-spacing:2px;}
+  .tb-sep,.tb-clock{display:none;}
+  .speed-btn{padding:2px 6px;font-size:9px;}
+  .assemble-btn{font-size:9px;padding:4px 10px;letter-spacing:1px;}
+
+  /* Hide desktop side panels */
+  .left-panel{display:none;}
+  .right-panel{display:none;}
+
+  /* Room takes full width, shorter to make room for bottom panels */
+  .main-area{flex-direction:column;}
+  .room-viewport{flex:none;height:45vh;height:45dvh;}
+
+  /* Bottom bar hidden on mobile (replaced by nav) */
+  .bottombar{display:none;}
+
+  /* Show mobile nav */
+  .mobile-nav{
+    display:flex;
+    flex-shrink:0;
+    border-top:1px solid var(--bdr);
+    background:var(--bg2);
+    z-index:70;
+    padding-bottom:var(--safe-b);
+  }
+  .mob-tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:6px 2px;cursor:pointer;color:var(--dim);transition:all .2s;
+    font-family:'Orbitron',monospace;border:none;background:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .mob-tab.active{color:var(--cyan);background:rgba(6,182,212,0.05);}
+  .mob-tab .mob-ico{font-size:16px;margin-bottom:2px;}
+  .mob-tab .mob-lbl{font-size:7px;letter-spacing:1px;text-transform:uppercase;}
+
+  /* Mobile panel (slides up from bottom, below room) */
+  .mobile-panel{
+    flex:1;
+    overflow-y:auto;
+    background:var(--bg2);
+    border-top:1px solid var(--bdr);
+    -webkit-overflow-scrolling:touch;
+  }
+  .mobile-panel .rp-section{display:none;padding:12px;}
+  .mobile-panel .rp-section.active{display:block;}
+
+  /* Pair tabs wrap better on mobile */
+  .pair-tabs-mini{gap:3px;}
+  .pt-mini{font-size:8px;padding:3px 6px;}
+
+  /* Signal cards touch-friendly */
+  .sig-card{padding:12px;}
+  .sig-row{padding:2px 0;}
+
+  /* Sessions touch-friendly */
+  .ses-row{padding:8px 0;}
+
+  /* Colonist list horizontal scroll on mobile */
+  .mob-roster{display:flex;gap:8px;padding:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .mob-col{
+    flex-shrink:0;width:100px;padding:10px 8px;border-radius:10px;
+    border:1px solid var(--bdr);background:rgba(0,0,0,0.2);text-align:center;cursor:pointer;
+    transition:all .2s;
+  }
+  .mob-col.selected{border-color:var(--blue);background:rgba(74,108,247,0.08);}
+  .mob-col .mc-emo{font-size:24px;display:block;margin-bottom:4px;}
+  .mob-col .mc-name{font-family:'Orbitron',monospace;font-size:8px;font-weight:600;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mob-col .mc-role{font-size:8px;color:var(--dim);margin-top:2px;}
+  .mob-col .mc-task{font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--mut);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  /* Chart taller on mobile */
+  .mini-chart{height:180px;}
+
+  /* Selection label smaller */
+  .sel-label .name{font-size:8px;}
+  .sel-label .task{font-size:7px;}
+}
+
+/* Extra small phones */
+@media(max-width:400px){
+  .topbar{padding:4px 8px;height:34px;}
+  .tb-logo{font-size:10px;letter-spacing:1px;}
+  .speed-btn{display:none;}
+  .room-viewport{height:40vh;height:40dvh;}
+  .mob-tab .mob-ico{font-size:14px;}
+  .mob-tab .mob-lbl{font-size:6px;}
+  .mini-chart{height:150px;}
+}
+
+/* Tablet */
+@media(min-width:901px) and (max-width:1200px){
+  .left-panel{width:170px;}
+  .right-panel{width:280px;}
+  .col-name{font-size:8px;}
+  .rp-tab{font-size:8px;padding:6px 2px;}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="tb-left">
+    <span style="font-size:16px;">🐾</span>
+    <span class="tb-logo">OPENCLAW</span>
+    <span class="tb-sep"></span>
+    <span class="tb-clock"><span class="tb-dot"></span><span id="clock">--:--:--</span> UTC</span>
+  </div>
+  <div class="tb-right">
+    <button class="speed-btn" onclick="setSpeed(1)" id="sp1">1×</button>
+    <button class="speed-btn active" onclick="setSpeed(2)" id="sp2">2×</button>
+    <button class="speed-btn" onclick="setSpeed(3)" id="sp3">3×</button>
+    <span class="tb-sep"></span>
+    <button class="assemble-btn" id="asmBtn" onclick="runAssemble()">▶ ASSEMBLE</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main-area">
+
+  <!-- LEFT: Colonist List (Desktop) -->
+  <div class="left-panel">
+    <div class="lp-title">🛡️ Avengers Roster</div>
+    <div class="colonist-list" id="colonistList"></div>
+  </div>
+
+  <!-- CENTER: Isometric Room -->
+  <div class="room-viewport" id="roomViewport">
+    <canvas id="roomCanvas"></canvas>
+    <div class="sel-label" id="selLabel"><div class="name" id="selName"></div><div class="task" id="selTask"></div></div>
+  </div>
+
+  <!-- RIGHT: Trading Intel (Desktop) -->
+  <div class="right-panel" id="rightPanel">
+    <div class="rp-tabs">
+      <div class="rp-tab active" onclick="switchTab('chart')" id="tab-chart">📊 CHART</div>
+      <div class="rp-tab" onclick="switchTab('signals')" id="tab-signals">🎯 SIGNALS</div>
+      <div class="rp-tab" onclick="switchTab('sessions')" id="tab-sessions">🕐 SESSIONS</div>
+      <div class="rp-tab" onclick="switchTab('report')" id="tab-report">📋 REPORT</div>
+    </div>
+    <div class="rp-content" id="rpContent">
+      <div class="rp-section active" id="sec-chart">
+        <div class="pair-tabs-mini" id="pairTabsMini"></div>
+        <div class="mini-chart"><canvas id="miniChart"></canvas></div>
+        <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim);">
+          <span style="color:var(--pink);">━</span> EMA9 &nbsp;
+          <span style="color:var(--blue);">━</span> EMA21 &nbsp;
+          <span style="color:var(--orange);">━</span> EMA50 &nbsp;
+          <span style="color:var(--green);">▲</span> BUY &nbsp;
+          <span style="color:var(--red);">▼</span> SELL
+        </div>
+      </div>
+      <div class="rp-section" id="sec-signals"><div id="signalsList"></div></div>
+      <div class="rp-section" id="sec-sessions">
+        <div id="sessionsList"></div>
+        <div class="ses-verdict" id="sesVerdict"></div>
+        <div style="margin-top:12px;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--dim);">KILL ZONES</div>
+        <div id="killZones" style="margin-top:6px;"></div>
+      </div>
+      <div class="rp-section" id="sec-report">
+        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;color:var(--dim);margin-bottom:8px;" id="reportTitle">Select an agent...</div>
+        <div class="report-box" id="reportBox">Click an Avenger in the room or roster to view their full intelligence report.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE: Bottom Panel (hidden on desktop) -->
+  <div class="mobile-panel" id="mobilePanel" style="display:none;">
+    <!-- Roster (horizontal) -->
+    <div class="rp-section" id="mob-sec-roster">
+      <div class="mob-roster" id="mobRoster"></div>
+    </div>
+    <!-- Chart -->
+    <div class="rp-section" id="mob-sec-chart">
+      <div class="pair-tabs-mini" id="mobPairTabs"></div>
+      <div class="mini-chart"><canvas id="mobMiniChart"></canvas></div>
+      <div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--dim);">
+        <span style="color:var(--pink);">━</span> EMA9 <span style="color:var(--blue);">━</span> EMA21 <span style="color:var(--orange);">━</span> EMA50 <span style="color:var(--green);">▲</span> BUY <span style="color:var(--red);">▼</span> SELL
+      </div>
+    </div>
+    <!-- Signals -->
+    <div class="rp-section" id="mob-sec-signals"><div id="mobSignalsList"></div></div>
+    <!-- Sessions -->
+    <div class="rp-section" id="mob-sec-sessions">
+      <div id="mobSessionsList"></div>
+      <div class="ses-verdict" id="mobSesVerdict"></div>
+      <div style="margin-top:10px;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--dim);">KILL ZONES</div>
+      <div id="mobKillZones" style="margin-top:6px;"></div>
+    </div>
+    <!-- Report -->
+    <div class="rp-section" id="mob-sec-report">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;color:var(--dim);margin-bottom:8px;" id="mobReportTitle">Select an agent...</div>
+      <div class="report-box" id="mobReportBox">Tap an Avenger in the room or roster to view their report.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM BAR (Desktop) -->
+<div class="bottombar">
+  <div class="bb-feed" id="bbFeed">OpenClaw Avengers Colony — all systems nominal</div>
+  <div class="bb-stats">
+    <span>Agents:<b id="bbAgents">6</b></span>
+    <span>Signals:<b id="bbSignals">0</b></span>
+    <span>Ideas:<b id="bbIdeas">0</b></span>
+    <span>FGI:<b id="bbFGI">--</b></span>
+  </div>
+</div>
+
+<!-- MOBILE NAV (hidden on desktop) -->
+<nav class="mobile-nav" id="mobileNav">
+  <button class="mob-tab" onclick="switchMobTab('roster')" id="mobt-roster"><span class="mob-ico">🛡️</span><span class="mob-lbl">Roster</span></button>
+  <button class="mob-tab active" onclick="switchMobTab('chart')" id="mobt-chart"><span class="mob-ico">📊</span><span class="mob-lbl">Chart</span></button>
+  <button class="mob-tab" onclick="switchMobTab('signals')" id="mobt-signals"><span class="mob-ico">🎯</span><span class="mob-lbl">Signals</span></button>
+  <button class="mob-tab" onclick="switchMobTab('sessions')" id="mobt-sessions"><span class="mob-ico">🕐</span><span class="mob-lbl">Sessions</span></button>
+  <button class="mob-tab" onclick="switchMobTab('report')" id="mobt-report"><span class="mob-ico">📋</span><span class="mob-lbl">Report</span></button>
+</nav>
+
+<script>
+// ===================================================================
+// RESPONSIVE DETECTION
+// ===================================================================
+let isMobile = window.innerWidth <= 900;
+function checkMobile() {
+  isMobile = window.innerWidth <= 900;
+  const mp = document.getElementById('mobilePanel');
+  if (isMobile) {
+    mp.style.display = 'flex';
+    mp.style.flexDirection = 'column';
+    // Show active mobile section
+    switchMobTab(activeMobTab);
+  } else {
+    mp.style.display = 'none';
+  }
+}
+window.addEventListener('resize', () => { checkMobile(); resizeRoom(); drawMiniChart(); });
+
+let activeMobTab = 'chart';
+function switchMobTab(tab) {
+  activeMobTab = tab;
+  document.querySelectorAll('.mob-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('mobt-' + tab).classList.add('active');
+  document.querySelectorAll('#mobilePanel .rp-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('mob-sec-' + tab).classList.add('active');
+  if (tab === 'chart') drawMiniChart();
+  if (tab === 'signals') renderSignals();
+  if (tab === 'sessions') updateSessions();
+  if (tab === 'roster') renderMobRoster();
+}
+
+// ===================================================================
+// GLOBALS
+// ===================================================================
+let gameSpeed = 2;
+let selectedAgentId = null;
+let activePair = 'BTCUSD';
+let activeTab = 'chart';
+
+const PAIRS = ['BTCUSD','ETHUSD','SOLUSD','EURUSD','XAUUSD','USDCAD'];
+const PCFG = {
+  BTCUSD:{base:80660,vol:500,d:0},ETHUSD:{base:2302,vol:30,d:2},SOLUSD:{base:95.20,vol:2.5,d:2},
+  EURUSD:{base:1.1703,vol:0.0030,d:4},XAUUSD:{base:4721,vol:20,d:2},USDCAD:{base:1.3700,vol:0.002,d:4},
+};
+
+// Chart data
+let chartData = {};
+PAIRS.forEach(pair => {
+  const c = PCFG[pair]; let p = c.base; const candles = [];
+  for (let i = 0; i < 80; i++) {
+    const o=p, ch=(Math.random()-.48)*c.vol*.15;
+    const h=o+Math.abs(ch)+Math.random()*c.vol*.05, l=o-Math.abs(ch)-Math.random()*c.vol*.05, cl=o+ch;
+    candles.push({o,h,l,c:cl}); p=cl;
+  }
+  chartData[pair] = candles;
+});
+
+// Signals
+let sigs = {};
+PAIRS.forEach(pair => {
+  const c=chartData[pair]; const s=[];
+  const reasons={BUY:['EMA crossover','RSI oversold','MACD bull cross','Support bounce','Bull engulfing'],
+                 SELL:['EMA death cross','RSI overbought','MACD bear cross','Resistance reject','Bear engulfing']};
+  for(let i=12;i<c.length;i+=Math.floor(7+Math.random()*10)){
+    const t=Math.random()>.45?'BUY':'SELL';
+    s.push({i,t,price:t==='BUY'?c[i].l:c[i].h,reason:reasons[t][Math.floor(Math.random()*5)],conf:Math.floor(Math.random()*4)+3});
+  }
+  sigs[pair]=s;
+});
+
+// ===================================================================
+// AGENTS
+// ===================================================================
+const AGENTS = [
+  {id:'ironman',emoji:'🦾',name:'Iron Man',role:'Tech Analyst',color:'#ef4444',deskX:100,deskY:100,x:100,y:100,tx:100,ty:100,state:'work',st:0,phase:Math.random()*6.28,tasks:['Scanning EMAs','Computing RSI','Reading MACD','Checking Bollinger','Plotting S/R'],mood:85,energy:90},
+  {id:'captain',emoji:'🛡️',name:'Capt. America',role:'Fundamentals',color:'#4a6cf7',deskX:250,deskY:80,x:250,y:80,tx:250,ty:80,state:'work',st:0,phase:Math.random()*6.28,tasks:['Reviewing calendar','Tracking ECB','Checking NFP','Monitoring Fed','Analyzing rates'],mood:92,energy:88},
+  {id:'scarlet',emoji:'🔮',name:'Scarlet Witch',role:'Sentiment',color:'#ec4899',deskX:400,deskY:100,x:400,y:100,tx:400,ty:100,state:'work',st:0,phase:Math.random()*6.28,tasks:['Reading Fear&Greed','Scanning social','Tracking whales','Options flow','Gauging mood'],mood:78,energy:82},
+  {id:'thor',emoji:'⚡',name:'Thor',role:'Correlations',color:'#06b6d4',deskX:100,deskY:260,x:100,y:260,tx:100,ty:260,state:'work',st:0,phase:Math.random()*6.28,tasks:['Opening Bifrost','Scanning DXY','Cross-asset matrix','Detecting divergence','VIX analysis'],mood:95,energy:95},
+  {id:'widow',emoji:'🕷️',name:'Black Widow',role:'Trade Ideas',color:'#10b981',deskX:250,deskY:280,x:250,y:280,tx:250,ty:280,state:'work',st:0,phase:Math.random()*6.28,tasks:['Scoring confluence','Weaving intel','Generating setups','Filtering signals','Setting entries'],mood:88,energy:75},
+  {id:'hawkeye',emoji:'🏹',name:'Hawkeye',role:'Webhooks',color:'#f59e0b',deskX:400,deskY:260,x:400,y:260,tx:400,ty:260,state:'work',st:0,phase:Math.random()*6.28,tasks:['Watching webhooks','Processing alert','Logging signal','Forwarding to TG','Monitoring Pine'],mood:80,energy:85},
+  {id:'fury',emoji:'👁️',name:'Nick Fury',role:'Director',color:'#7c3aed',deskX:250,deskY:180,x:300,y:150,tx:300,ty:150,state:'patrol',st:0,phase:Math.random()*6.28,tasks:['Inspecting agents','Reviewing reports','Planning briefing','Checking status','Assembling team'],mood:70,energy:60},
+];
+const FURY_ROUTE=[{x:150,y:140},{x:300,y:100},{x:420,y:140},{x:420,y:280},{x:300,y:300},{x:150,y:280},{x:250,y:200}];
+let furyIdx=0;
+
+// ===================================================================
+// COLONIST LIST (Desktop)
+// ===================================================================
+function renderColonists() {
+  const el = document.getElementById('colonistList');
+  el.innerHTML = AGENTS.map(a => {
+    const task = a.tasks[Math.floor(Math.random()*a.tasks.length)];
+    return `<div class="colonist ${selectedAgentId===a.id?'selected':''}" onclick="selectAgent('${a.id}')" id="col-${a.id}">
+      <span class="col-emo">${a.emoji}</span>
+      <div class="col-info">
+        <div class="col-name" style="color:${a.color}">${a.name}</div>
+        <div class="col-role">${a.role}</div>
+        <div class="col-task" id="colTask-${a.id}">${a.state==='work'?task:a.state==='patrol'?'Patrolling':'Walking...'}</div>
+      </div>
+      <div class="col-bars">
+        <div class="col-bar"><div class="col-bar-fill" style="width:${a.mood}%;background:${a.mood>60?'var(--green)':'var(--orange)'}"></div></div>
+        <div class="col-bar"><div class="col-bar-fill" style="width:${a.energy}%;background:var(--cyan)"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+renderColonists();
+
+// Mobile roster (horizontal cards)
+function renderMobRoster() {
+  const el = document.getElementById('mobRoster');
+  el.innerHTML = AGENTS.map(a => `
+    <div class="mob-col ${selectedAgentId===a.id?'selected':''}" onclick="selectAgent('${a.id}')" style="border-color:${selectedAgentId===a.id?a.color:''}">
+      <span class="mc-emo">${a.emoji}</span>
+      <div class="mc-name" style="color:${a.color}">${a.name}</div>
+      <div class="mc-role">${a.role}</div>
+      <div class="mc-task">${a.tasks[0]}</div>
+    </div>`).join('');
+}
+
+function selectAgent(id) {
+  selectedAgentId = id;
+  renderColonists();
+  renderMobRoster();
+  const a = AGENTS.find(a=>a.id===id);
+  // Desktop
+  switchTab('report');
+  document.getElementById('reportTitle').innerHTML = `${a.emoji} ${a.name} — ${a.role}`;
+  document.getElementById('reportTitle').style.color = a.color;
+  document.getElementById('reportBox').innerHTML = getReport(a);
+  // Mobile
+  if (isMobile) {
+    switchMobTab('report');
+    document.getElementById('mobReportTitle').innerHTML = `${a.emoji} ${a.name} — ${a.role}`;
+    document.getElementById('mobReportTitle').style.color = a.color;
+    document.getElementById('mobReportBox').innerHTML = getReport(a);
+  }
+}
+
+// ===================================================================
+// REPORTS
+// ===================================================================
+function getReport(a) {
+  const pair=activePair,cfg=PCFG[pair],c=chartData[pair],last=c[c.length-1];
+  if(a.id==='ironman'){const rsi=40+Math.random()*30,ea=last.c>c.slice(-9).reduce((s,x)=>s+x.c,0)/9,m=Math.random()>.5;
+    return `<span class="rh" style="color:${a.color}">━━ IRON MAN — ${pair} ━━</span>\n\n📍 Price: <b>${last.c.toFixed(cfg.d)}</b>\n\n<span class="info">EMA Analysis:</span>\n  EMA 9:  ${(last.c*(1+(Math.random()-.5)*.002)).toFixed(cfg.d)}\n  EMA 21: ${(last.c*(1+(Math.random()-.5)*.004)).toFixed(cfg.d)}\n  EMA 50: ${(last.c*(1+(Math.random()-.5)*.008)).toFixed(cfg.d)}\n  Price ${ea?'ABOVE':'BELOW'} fast EMA → ${ea?'<span class="buy">Bullish</span>':'<span class="sell">Bearish</span>'}\n\n<span class="info">RSI(14):</span> ${rsi.toFixed(1)} → ${rsi>70?'<span class="sell">OVERBOUGHT ⚠️</span>':rsi<30?'<span class="buy">OVERSOLD 🟢</span>':'Neutral'}\n\n<span class="info">MACD:</span> ${m?'<span class="buy">Bullish cross</span>':'<span class="sell">Bearish divergence</span>'}\n\n<span class="info">Support:</span> ${(last.c*0.985).toFixed(cfg.d)}\n<span class="info">Resistance:</span> ${(last.c*1.015).toFixed(cfg.d)}\n<span class="info">ATR(14):</span> ${(cfg.vol*0.08).toFixed(cfg.d)}`;}
+  if(a.id==='captain'){return `<span class="rh" style="color:${a.color}">━━ CAPTAIN AMERICA ━━</span>\n\n<span class="warn">⚠️ HIGH-IMPACT EVENTS:</span>\n\n📅 May 14 — FOMC Minutes (USD) <span class="sell">HIGH</span>\n   Rate hold expected — 2 cuts priced\n\n📅 May 15 — ECB Decision (EUR) <span class="sell">HIGH</span>\n   Hold 3.25% — dovish guidance\n\n📅 May 16 — US Retail Sales <span class="warn">MED</span>\n   Consensus +0.3% MoM\n\n<span class="info">Central Bank Rates:</span>\n  FED 4.50% | ECB 3.25% | BOJ 0.25%\n  BOC 3.75% | BOE 4.25%\n\n<b><span class="sell">⚠️ DO NOT TRADE 30min before/after:</span></b>\n  • FOMC — May 14 18:00 UTC\n  • ECB — May 15 12:15 UTC\n\n<span class="info">Macro Bias:</span>\n  USD: <span class="buy">Slightly bullish</span>\n  EUR: <span class="sell">Neutral-bearish</span>\n  BTC: <span class="buy">Bullish</span> (risk-on)`;}
+  if(a.id==='scarlet'){const fgi=Math.floor(55+Math.random()*25);return `<span class="rh" style="color:${a.color}">━━ SCARLET WITCH ━━</span>\n\n🔮 <span class="info">Fear & Greed:</span> <b>${fgi}</b> — <span class="${fgi>55?'buy':'sell'}">${fgi>75?'Extreme Greed':fgi>55?'Greed':'Neutral'}</span>\n\n<span class="info">Social Sentiment (24h):</span>\n  BTC: <span class="buy">Bullish</span> +${Math.floor(15+Math.random()*20)}%\n  ETH: <span class="buy">Bullish</span>\n  SOL: <span class="warn">Mixed</span>\n\n<span class="info">Options Flow:</span>\n  Put/Call: ${(.6+Math.random()*.3).toFixed(2)} → <span class="buy">Calls dominating</span>\n\n<span class="info">Whale Activity:</span>\n  🐳 ${Math.floor(2+Math.random()*5)} large transfers\n  ${Math.random()>.5?'<span class="buy">Outflow (accumulating)</span>':'<span class="sell">Inflow (distributing)</span>'}`;}
+  if(a.id==='thor'){return `<span class="rh" style="color:${a.color}">━━ THOR — BIFROST ━━</span>\n\n<span class="info">Correlations (30d):</span>\n  BTC-ETH:  <span class="buy"> 0.${Math.floor(85+Math.random()*8)}</span>\n  BTC-SOL:  <span class="buy"> 0.${Math.floor(70+Math.random()*12)}</span>\n  BTC-DXY:  <span class="sell">-0.${Math.floor(30+Math.random()*20)}</span>\n  EUR-DXY:  <span class="sell">-0.${Math.floor(60+Math.random()*15)}</span>\n\n💱 <span class="info">DXY:</span> <span class="sell">BEARISH</span>\n  → <span class="buy">Risk-ON for crypto & EUR</span>\n\n📍 VIX: 14.${Math.floor(Math.random()*9)} — complacency\n\n<span class="info">Regime:</span> <span class="buy">🟢 RISK-ON</span>`;}
+  if(a.id==='widow'){return `<span class="rh" style="color:${a.color}">━━ BLACK WIDOW ━━</span>\n\n<span class="info">Confluence: -8 to +8</span>\n  Technical ±3  Fundamental ±2\n  Sentiment ±2  Correlation ±1\n\n  +5 to +8: <span class="buy">STRONG BUY</span>\n  +3 to +4: <span class="buy">BUY</span>\n  -2 to +2: <span class="warn">NO TRADE</span>\n  -3 to -4: <span class="sell">SELL</span>\n  -5 to -8: <span class="sell">STRONG SELL</span>\n\nSee SIGNALS tab for live setups →`;}
+  if(a.id==='hawkeye'){return `<span class="rh" style="color:${a.color}">━━ HAWKEYE ━━</span>\n\n<span class="info">Server:</span> <span class="buy">ONLINE</span> :5000\n  POST /webhook — ready\n  GET /health — 200 OK\n\n<span class="info">Signals Today:</span> ${Math.floor(Math.random()*8)}\n<span class="info">Total Logged:</span> ${Math.floor(50+Math.random()*200)}\n\n<span class="info">Last Alerts:</span>\n  BUY BTCUSD @ 80,590\n  SELL EURUSD @ 1.1715\n  BUY SOLUSD @ 94.80`;}
+  if(a.id==='fury'){return `<span class="rh" style="color:${a.color}">━━ NICK FURY ━━</span>\n\n<span class="info">Agent Status:</span>\n  🦾 Iron Man:      <span class="buy">ONLINE</span>\n  🛡️ Capt America: <span class="buy">ONLINE</span>\n  🔮 Scarlet Witch: <span class="buy">ONLINE</span>\n  ⚡ Thor:          <span class="buy">ONLINE</span>\n  🕷️ Black Widow:  <span class="buy">ONLINE</span>\n  🏹 Hawkeye:      <span class="buy">ONLINE</span>\n\n<span class="info">Pairs:</span> ${PAIRS.join(' ')}\n\nTap ASSEMBLE to run full briefing.`;}
+  return '';
+}
+
+// ===================================================================
+// TABS (Desktop)
+// ===================================================================
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('#rightPanel .rp-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#rpContent .rp-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-'+tab)?.classList.add('active');
+  document.getElementById('sec-'+tab)?.classList.add('active');
+  if (tab==='chart') drawMiniChart();
+  if (tab==='signals') renderSignals();
+  if (tab==='sessions') updateSessions();
+}
+
+// Pair tabs
+function renderPairTabs() {
+  const html = PAIRS.map(p=>`<div class="pt-mini ${p===activePair?'active':''}" onclick="switchPair('${p}')">${p}</div>`).join('');
+  document.getElementById('pairTabsMini').innerHTML = html;
+  const mobEl = document.getElementById('mobPairTabs');
+  if (mobEl) mobEl.innerHTML = html;
+}
+renderPairTabs();
+function switchPair(p){activePair=p;renderPairTabs();drawMiniChart();renderSignals();}
+
+// ===================================================================
+// MINI CHART (works on both desktop and mobile canvases)
+// ===================================================================
+function drawMiniChart() {
+  const canvasId = isMobile ? 'mobMiniChart' : 'miniChart';
+  const cv = document.getElementById(canvasId);
+  if (!cv) return;
+  const wrap = cv.parentElement;
+  cv.width = wrap.clientWidth*2; cv.height = wrap.clientHeight*2;
+  const mc = cv.getContext('2d');
+  mc.scale(2,2);
+  const W=wrap.clientWidth,H=wrap.clientHeight;
+  mc.fillStyle='#06060c';mc.fillRect(0,0,W,H);
+
+  const candles=chartData[activePair],cfg=PCFG[activePair],sg=sigs[activePair];
+  const pL=40,pR=8,pT=8,pB=16;
+  const cw=(W-pL-pR)/candles.length;
+  const all=candles.flatMap(c=>[c.h,c.l]);
+  const mn=Math.min(...all),mx=Math.max(...all),rng=mx-mn||1;
+  const yP=p=>pT+(1-(p-mn)/rng)*(H-pT-pB);
+
+  // Grid
+  mc.strokeStyle='rgba(74,108,247,0.05)';mc.lineWidth=.5;
+  for(let i=0;i<=4;i++){const p=mn+rng*i/4,y=yP(p);mc.beginPath();mc.moveTo(pL,y);mc.lineTo(W-pR,y);mc.stroke();
+    mc.fillStyle='#334';mc.font='7px JetBrains Mono';mc.textAlign='right';mc.fillText(p.toFixed(cfg.d),pL-3,y+3);}
+
+  // EMAs
+  function ema(data,per){const k=2/(per+1);let r=[data[0]];for(let i=1;i<data.length;i++)r.push(data[i]*k+r[i-1]*(1-k));return r;}
+  const cl=candles.map(c=>c.c);
+  [[ema(cl,9),'rgba(236,72,153,0.5)'],[ema(cl,21),'rgba(74,108,247,0.5)'],[ema(cl,50),'rgba(245,158,11,0.35)']].forEach(([d,col])=>{
+    mc.beginPath();mc.strokeStyle=col;mc.lineWidth=1;d.forEach((v,i)=>{const x=pL+i*cw+cw/2,y=yP(v);i===0?mc.moveTo(x,y):mc.lineTo(x,y);});mc.stroke();});
+
+  // Candles
+  candles.forEach((c,i)=>{const x=pL+i*cw,g=c.c>=c.o;
+    mc.strokeStyle=g?'rgba(16,185,129,0.6)':'rgba(239,68,68,0.6)';mc.lineWidth=1;
+    mc.beginPath();mc.moveTo(x+cw/2,yP(c.h));mc.lineTo(x+cw/2,yP(c.l));mc.stroke();
+    mc.fillStyle=g?'rgba(16,185,129,0.85)':'rgba(239,68,68,0.85)';
+    const t=yP(Math.max(c.o,c.c)),b=yP(Math.min(c.o,c.c));mc.fillRect(x+1,t,cw-2,Math.max(1,b-t));});
+
+  // Signals
+  sg.forEach(s=>{const x=pL+s.i*cw+cw/2,y=yP(s.price),buy=s.t==='BUY';
+    mc.beginPath();if(buy){mc.moveTo(x,y+5);mc.lineTo(x-4,y+12);mc.lineTo(x+4,y+12);}
+    else{mc.moveTo(x,y-5);mc.lineTo(x-4,y-12);mc.lineTo(x+4,y-12);}
+    mc.closePath();mc.fillStyle=buy?'rgba(16,185,129,0.9)':'rgba(239,68,68,0.9)';mc.fill();
+    mc.font='bold 6px Orbitron';mc.fillStyle=buy?'#10b981':'#ef4444';mc.textAlign='center';
+    mc.fillText(s.t,x,buy?y+19:y-15);});
+
+  // Price line
+  const lp=candles[candles.length-1].c,ly=yP(lp);
+  mc.setLineDash([3,3]);mc.strokeStyle='rgba(6,182,212,0.3)';mc.lineWidth=.8;
+  mc.beginPath();mc.moveTo(pL,ly);mc.lineTo(W-pR,ly);mc.stroke();mc.setLineDash([]);
+}
+drawMiniChart();
+
+// ===================================================================
+// SIGNALS
+// ===================================================================
+function renderSignals() {
+  const ideas=[];
+  PAIRS.forEach(pair=>{const cfg=PCFG[pair],c=chartData[pair],last=c[c.length-1],score=Math.floor(Math.random()*12)-4;
+    if(Math.abs(score)<3)return;const isL=score>0,entry=last.c,sl=isL?entry*(1-.008):entry*(1+.008),tp=isL?entry*(1+.016):entry*(1-.016),rr=Math.abs((tp-entry)/(entry-sl)).toFixed(1);
+    ideas.push({pair,score,isL,entry,sl,tp,rr,d:cfg.d});});
+  ideas.sort((a,b)=>Math.abs(b.score)-Math.abs(a.score));
+  document.getElementById('bbIdeas').textContent=ideas.length;
+  document.getElementById('bbSignals').textContent=ideas.filter(i=>Math.abs(i.score)>=5).length;
+
+  const html = ideas.length ? ideas.map(idea=>`
+    <div class="sig-card">
+      <div class="sig-dir ${idea.isL?'long':'short'}">${idea.isL?'▲ LONG':'▼ SHORT'}</div>
+      <span class="sig-pair">${idea.pair}</span>
+      <span class="sig-score" style="color:${idea.isL?'var(--green)':'var(--red)'}">${idea.score>0?'+':''}${idea.score}</span>
+      <div class="sig-row"><span>Entry</span><span class="val">${idea.entry.toFixed(idea.d)}</span></div>
+      <div class="sig-row"><span>Stop Loss</span><span class="val" style="color:var(--red)">${idea.sl.toFixed(idea.d)}</span></div>
+      <div class="sig-row"><span>Take Profit</span><span class="val" style="color:var(--green)">${idea.tp.toFixed(idea.d)}</span></div>
+      <div class="sig-row"><span>R:R</span><span class="val" style="color:var(--cyan)">1:${idea.rr}</span></div>
+    </div>`).join('') : '<div style="color:var(--dim);font-size:11px;padding:16px;text-align:center;">No high-conviction setups.<br>Wait for better opportunities.</div>';
+
+  document.getElementById('signalsList').innerHTML = html;
+  const mobEl = document.getElementById('mobSignalsList');
+  if (mobEl) mobEl.innerHTML = html;
+}
+
+// ===================================================================
+// SESSIONS
+// ===================================================================
+const SESS=[{name:'SYDNEY',start:21,end:6,color:'var(--cyan)',pairs:'AUD NZD'},{name:'TOKYO',start:0,end:9,color:'var(--pink)',pairs:'JPY AUD'},{name:'LONDON',start:7,end:16,color:'var(--blue)',pairs:'EUR GBP CHF'},{name:'NEW YORK',start:13,end:22,color:'var(--green)',pairs:'USD CAD'}];
+const KZ=[{name:'London Open KZ',start:7,end:10,q:'HIGH'},{name:'NY Open KZ',start:13,end:16,q:'HIGH'},{name:'London Close',start:15,end:17,q:'MED'},{name:'Asian Low Vol',start:0,end:5,q:'LOW'}];
+
+function updateSessions(){
+  const h=new Date().getUTCHours();
+  let html='';
+  SESS.forEach(s=>{const on=s.start<s.end?h>=s.start&&h<s.end:h>=s.start||h<s.end;
+    html+=`<div class="ses-row"><div class="ses-dot ${on?'on':'off'}"></div><div class="ses-name" style="color:${s.color};${on?'':'opacity:.4'}">${s.name}</div><div class="ses-time">${s.start}:00–${s.end}:00 · ${s.pairs}</div></div>`;});
+
+  document.getElementById('sessionsList').innerHTML=html;
+  const mobEl=document.getElementById('mobSessionsList');if(mobEl)mobEl.innerHTML=html;
+
+  const kz=KZ.find(k=>k.start<k.end?h>=k.start&&h<k.end:h>=k.start||h<k.end);
+  const setVerdict=(id)=>{const v=document.getElementById(id);if(!v)return;
+    if(kz&&kz.q==='HIGH'){v.className='ses-verdict go';v.innerHTML=`🟢 <b>${kz.name}</b><br>PRIME WINDOW — TRADE NOW`;}
+    else if(kz&&kz.q==='MED'){v.className='ses-verdict wait';v.innerHTML=`🟡 <b>${kz.name}</b><br>MODERATE — USE CAUTION`;}
+    else if(kz&&kz.q==='LOW'){v.className='ses-verdict wait';v.innerHTML=`🟡 <b>${kz.name}</b><br>LOW VOL — RANGES ONLY`;}
+    else{v.className='ses-verdict wait';v.innerHTML=`🟡 WAIT FOR KILL ZONE<br>Off-peak hours`;}};
+  setVerdict('sesVerdict');setVerdict('mobSesVerdict');
+
+  const kzHtml=KZ.map(k=>{const on=k.start<k.end?h>=k.start&&h<k.end:h>=k.start||h<k.end;const col=k.q==='HIGH'?'var(--green)':k.q==='MED'?'var(--orange)':'var(--dim)';
+    return `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${on?col:'var(--dim)'};padding:3px 0;${on?'font-weight:600':'opacity:.5'}">${on?'●':'○'} ${k.name} (${k.start}:00–${k.end}:00) — ${k.q}</div>`;}).join('');
+  document.getElementById('killZones').innerHTML=kzHtml;
+  const mobKZ=document.getElementById('mobKillZones');if(mobKZ)mobKZ.innerHTML=kzHtml;
+}
+updateSessions();
+
+// ===================================================================
+// ISOMETRIC ROOM (Canvas)
+// ===================================================================
+const rc=document.getElementById('roomCanvas');const ctx=rc.getContext('2d');
+let RW,RH,sc;
+function resizeRoom(){const vp=document.getElementById('roomViewport');rc.width=vp.clientWidth*2;rc.height=vp.clientHeight*2;RW=vp.clientWidth;RH=vp.clientHeight;sc=Math.min(RW/700,RH/500);ctx.scale(2,2);}
+resizeRoom();
+
+const ISO=Math.PI/6,COS=Math.cos(ISO),SIN=Math.sin(ISO);
+const FW=520,FD=400,WH=160;
+function toScr(x,y,z){return{sx:RW/2+(x-y)*COS*sc,sy:RH/2+(x+y)*SIN*sc-z*sc+20*sc};}
+
+function drawFloor(){const f=[toScr(0,0,0),toScr(FW,0,0),toScr(FW,FD,0),toScr(0,FD,0)];ctx.beginPath();f.forEach((p,i)=>i?ctx.lineTo(p.sx,p.sy):ctx.moveTo(p.sx,p.sy));ctx.closePath();ctx.fillStyle='#0a0a14';ctx.fill();
+  ctx.strokeStyle='rgba(74,108,247,0.04)';ctx.lineWidth=.5;
+  for(let i=0;i<=FW;i+=40){const a=toScr(i,0,0),b=toScr(i,FD,0);ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();}
+  for(let j=0;j<=FD;j+=40){const a=toScr(0,j,0),b=toScr(FW,j,0);ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();}}
+
+function drawWalls(){let w=[toScr(0,FD,0),toScr(FW,FD,0),toScr(FW,FD,WH),toScr(0,FD,WH)];ctx.beginPath();w.forEach((p,i)=>i?ctx.lineTo(p.sx,p.sy):ctx.moveTo(p.sx,p.sy));ctx.closePath();ctx.fillStyle='#08080f';ctx.fill();
+  w=[toScr(FW,0,0),toScr(FW,FD,0),toScr(FW,FD,WH),toScr(FW,0,WH)];ctx.beginPath();w.forEach((p,i)=>i?ctx.lineTo(p.sx,p.sy):ctx.moveTo(p.sx,p.sy));ctx.closePath();ctx.fillStyle='#060610';ctx.fill();
+  ctx.strokeStyle='rgba(74,108,247,0.08)';ctx.lineWidth=1;
+  [[0,FD,0,0,FD,WH],[FW,FD,0,FW,FD,WH],[FW,0,0,FW,0,WH],[0,FD,WH,FW,FD,WH],[FW,0,WH,FW,FD,WH]].forEach(([x1,y1,z1,x2,y2,z2])=>{const a=toScr(x1,y1,z1),b=toScr(x2,y2,z2);ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();});}
+
+function drawBox(x,y,z,w,d,h,tc,lc,rc2){const t=[toScr(x,y,z+h),toScr(x+w,y,z+h),toScr(x+w,y+d,z+h),toScr(x,y+d,z+h)];ctx.beginPath();t.forEach((p,i)=>i?ctx.lineTo(p.sx,p.sy):ctx.moveTo(p.sx,p.sy));ctx.closePath();ctx.fillStyle=tc;ctx.fill();
+  const bl=toScr(x,y+d,z),br=toScr(x+w,y+d,z);ctx.beginPath();ctx.moveTo(t[3].sx,t[3].sy);ctx.lineTo(t[2].sx,t[2].sy);ctx.lineTo(br.sx,br.sy);ctx.lineTo(bl.sx,bl.sy);ctx.closePath();ctx.fillStyle=lc;ctx.fill();
+  const rr=toScr(x+w,y,z);ctx.beginPath();ctx.moveTo(t[1].sx,t[1].sy);ctx.lineTo(t[2].sx,t[2].sy);ctx.lineTo(br.sx,br.sy);ctx.lineTo(rr.sx,rr.sy);ctx.closePath();ctx.fillStyle=rc2;ctx.fill();}
+
+function drawDesk(x,y,col){drawBox(x,y,0,60,35,28,col,'#0c0c18','#080812');drawBox(x+15,y+3,28,28,3,22,'#0e0e1a','#0a0a14','#080810');
+  const s1=toScr(x+16,y+2,30),s2=toScr(x+42,y+2,48);ctx.fillStyle=col+'25';ctx.fillRect(Math.min(s1.sx,s2.sx),Math.min(s1.sy,s2.sy),Math.abs(s2.sx-s1.sx),Math.abs(s2.sy-s1.sy));}
+
+function drawHoloTable(t){drawBox(200,155,0,80,55,24,'#12122a','#0c0c1e','#08080f');
+  const c=toScr(240,182,45),r=(22+Math.sin(t*.002)*4)*sc;
+  ctx.beginPath();ctx.ellipse(c.sx,c.sy,r,r*.35,0,0,Math.PI*2);ctx.strokeStyle=`rgba(74,108,247,${.25+Math.sin(t*.003)*.1})`;ctx.lineWidth=1.2;ctx.stroke();
+  ctx.beginPath();ctx.ellipse(c.sx,c.sy-4*sc,r*.6,r*.2,t*.001,0,Math.PI*2);ctx.strokeStyle=`rgba(6,182,212,${.2+Math.sin(t*.004)*.08})`;ctx.stroke();
+  const bb=toScr(240,182,24),bt=toScr(240,182,70),bg=ctx.createLinearGradient(c.sx,bt.sy,c.sx,bb.sy);
+  bg.addColorStop(0,'rgba(74,108,247,0)');bg.addColorStop(.4,'rgba(74,108,247,0.06)');bg.addColorStop(1,'rgba(74,108,247,0)');
+  ctx.fillStyle=bg;ctx.fillRect(c.sx-10*sc,bt.sy,20*sc,bb.sy-bt.sy);
+  ctx.font=`${6*sc}px JetBrains Mono`;ctx.fillStyle=`rgba(74,108,247,${.35+Math.sin(t*.005)*.15})`;ctx.textAlign='center';
+  ['BTC $80,660','ETH $2,302','SOL $95.20'].forEach((l,i)=>{ctx.fillText(l,c.sx,c.sy-(15+i*10)*sc+Math.sin(t*.003+i)*2);});}
+
+function drawServerRack(x,y){drawBox(x,y,0,18,14,70,'#101024','#0c0c1c','#080814');
+  for(let i=0;i<5;i++){const p=toScr(x+17,y+3,8+i*11);ctx.beginPath();ctx.arc(p.sx,p.sy,1.5*sc,0,Math.PI*2);ctx.fillStyle=['#10b981','#4a6cf7','#06b6d4','#10b981','#f59e0b'][i];ctx.fill();}}
+
+function drawWallScreen(x,y,z,w,h,col,t){drawBox(x,y,z,w,2,h,'#08080f','#060610','#04040a');
+  ctx.beginPath();ctx.strokeStyle=col+'40';ctx.lineWidth=1;
+  for(let i=0;i<=12;i++){const px=x+3+((w-6)*i/12),pz=z+h*.3+Math.sin(i*.6+t*.002)*h*.15+Math.sin(i*1.3)*h*.08;const sp=toScr(px,y,pz);i===0?ctx.moveTo(sp.sx,sp.sy):ctx.lineTo(sp.sx,sp.sy);}ctx.stroke();}
+
+// ===== AGENT DRAWING =====
+function drawAgent(a,t){
+  const bob=Math.sin(t*.004+a.phase)*1.5,isW=a.state==='walk'||a.state==='patrol',wBob=isW?Math.sin(t*.012+a.phase)*2.5:0;
+  const p=toScr(a.x+30,a.y+17,28+bob+wBob*.3),s=sc;
+
+  const sh=toScr(a.x+30,a.y+17,0);ctx.beginPath();ctx.ellipse(sh.sx,sh.sy,7*s,3.5*s,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.25)';ctx.fill();
+
+  if(selectedAgentId===a.id){ctx.beginPath();ctx.ellipse(sh.sx,sh.sy,12*s,6*s,0,0,Math.PI*2);ctx.strokeStyle=a.color+'90';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
+    const lbl=document.getElementById('selLabel');lbl.style.left=(p.sx-50)+'px';lbl.style.top=(p.sy-38*s)+'px';lbl.classList.add('visible');
+    document.getElementById('selName').textContent=a.name;document.getElementById('selName').style.color=a.color;
+    document.getElementById('selTask').textContent=a.tasks[Math.floor(t/3000)%a.tasks.length];}
+
+  ctx.beginPath();ctx.ellipse(p.sx,p.sy+3*s,5*s,9*s,0,0,Math.PI*2);ctx.fillStyle=a.color+'cc';ctx.fill();
+  ctx.beginPath();ctx.arc(p.sx,p.sy-7*s,4.5*s,0,Math.PI*2);ctx.fillStyle=a.color;ctx.fill();
+  const f=isW?Math.atan2(a.ty-a.y,a.tx-a.x):0,eo=Math.cos(f)*1.2*s;
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(p.sx-1.5*s+eo,p.sy-8*s,1*s,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(p.sx+1.5*s+eo,p.sy-8*s,1*s,0,Math.PI*2);ctx.fill();
+
+  ctx.beginPath();ctx.arc(p.sx,p.sy-2*s,14*s,0,Math.PI*2);const ag=ctx.createRadialGradient(p.sx,p.sy-2*s,3*s,p.sx,p.sy-2*s,14*s);
+  ag.addColorStop(0,a.color+'12');ag.addColorStop(1,a.color+'00');ctx.fillStyle=ag;ctx.fill();
+
+  ctx.font=`${10*s}px Arial`;ctx.textAlign='center';ctx.fillText(a.emoji,p.sx,p.sy-14*s);
+
+  if(isW){const ls=Math.sin(t*.012)*3.5*s;ctx.strokeStyle=a.color+'cc';ctx.lineWidth=2*s;
+    ctx.beginPath();ctx.moveTo(p.sx-2.5*s,p.sy+10*s);ctx.lineTo(p.sx-2.5*s+ls,p.sy+16*s);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p.sx+2.5*s,p.sy+10*s);ctx.lineTo(p.sx+2.5*s-ls,p.sy+16*s);ctx.stroke();}
+
+  if(a.state==='work'&&Math.random()<.12){const sx2=p.sx+(Math.random()-.5)*16*s,sy2=p.sy+(Math.random()-.5)*8*s;
+    ctx.beginPath();ctx.arc(sx2,sy2,.8*s,0,Math.PI*2);ctx.fillStyle=a.color+'60';ctx.fill();}
+
+  a.sx=p.sx;a.sy=p.sy;
+}
+
+// Flow particles
+let flows=[];
+function spawnFlow(from,to){flows.push({fx:from.x+30,fy:from.y+17,tx:to.x+30,ty:to.y+17,p:0,col:from.color,spd:.004+Math.random()*.003});}
+function updateFlows(dt){flows=flows.filter(f=>{f.p+=f.spd*dt;return f.p<1;});
+  if(Math.random()<.025){spawnFlow(AGENTS[Math.floor(Math.random()*6)],AGENTS[6]);}
+  if(Math.random()<.015){spawnFlow(AGENTS[Math.floor(Math.random()*4)],AGENTS[4]);}}
+function drawFlows(){flows.forEach(f=>{const x=f.fx+(f.tx-f.fx)*f.p,y=f.fy+(f.ty-f.fy)*f.p,z=35+Math.sin(f.p*Math.PI)*25,sp=toScr(x,y,z);
+  ctx.beginPath();ctx.arc(sp.sx,sp.sy,2.5*sc,0,Math.PI*2);ctx.fillStyle=f.col;ctx.fill();
+  ctx.beginPath();ctx.arc(sp.sx,sp.sy,6*sc,0,Math.PI*2);const g=ctx.createRadialGradient(sp.sx,sp.sy,0,sp.sx,sp.sy,6*sc);
+  g.addColorStop(0,f.col+'30');g.addColorStop(1,f.col+'00');ctx.fillStyle=g;ctx.fill();});}
+
+// Agent AI
+function updateAgent(a,dt){a.st-=dt*gameSpeed;
+  if(a.id==='fury'){const tgt=FURY_ROUTE[furyIdx],dx=tgt.x-a.x,dy=tgt.y-a.y,d=Math.sqrt(dx*dx+dy*dy);
+    if(d<5){a.state='look';if(a.st<=0){furyIdx=(furyIdx+1)%FURY_ROUTE.length;a.state='patrol';a.st=800;}}
+    else{a.state='patrol';const sp=.05*gameSpeed;a.x+=dx*sp*dt*.016;a.y+=dy*sp*dt*.016;a.tx=tgt.x;a.ty=tgt.y;}return;}
+  if(a.st<=0){if(a.state==='work'){if(Math.random()<.25){a.state='walk';a.tx=a.deskX+(Math.random()-.5)*100;a.ty=a.deskY+(Math.random()-.5)*70;
+    a.tx=Math.max(20,Math.min(FW-60,a.tx));a.ty=Math.max(20,Math.min(FD-40,a.ty));a.st=2500+Math.random()*4000;}else a.st=4000+Math.random()*8000;}
+    else{a.state='walk';a.tx=a.deskX;a.ty=a.deskY;a.st=3000;setTimeout(()=>{if(a.state==='walk'){a.state='work';a.st=6000+Math.random()*10000;}},3000/gameSpeed);}}
+  if(a.state==='walk'){const dx=a.tx-a.x,dy=a.ty-a.y,d=Math.sqrt(dx*dx+dy*dy);
+    if(d>3){const sp=.04*gameSpeed;a.x+=dx*sp*dt*.016;a.y+=dy*sp*dt*.016;}else{a.state='work';a.st=6000+Math.random()*10000;}}}
+
+// Click/tap detection
+function handleInteract(mx,my){let found=null;AGENTS.forEach(a=>{if(a.sx&&a.sy){const dx=mx-a.sx,dy=my-a.sy;
+  if(Math.sqrt(dx*dx+dy*dy)<(isMobile?30:20)*sc)found=a;}});
+  if(found)selectAgent(found.id);else{selectedAgentId=null;renderColonists();renderMobRoster();document.getElementById('selLabel').classList.remove('visible');}}
+
+rc.addEventListener('click',e=>{const rect=rc.getBoundingClientRect();handleInteract(e.clientX-rect.left,e.clientY-rect.top);});
+rc.addEventListener('touchend',e=>{if(e.changedTouches.length){const touch=e.changedTouches[0],rect=rc.getBoundingClientRect();
+  handleInteract(touch.clientX-rect.left,touch.clientY-rect.top);}},{passive:true});
+
+// ===== MAIN LOOP =====
+let lastT=performance.now();let assembling=false;
+function render(now){const dt=now-lastT;lastT=now;ctx.clearRect(0,0,RW,RH);
+  drawFloor();drawWalls();
+  drawDesk(70,70,'#1a1028');drawDesk(220,50,'#101a2a');drawDesk(370,70,'#1a1028');
+  drawDesk(70,230,'#101a2a');drawDesk(220,250,'#0f1a1a');drawDesk(370,230,'#1a1a10');
+  drawHoloTable(now);drawServerRack(470,60);drawServerRack(470,90);drawServerRack(470,120);
+  drawWallScreen(140,FD-2,55,140,75,'#4a6cf7',now);drawWallScreen(FW-2,100,55,2,65,'#06b6d4',now);
+  AGENTS.forEach(a=>updateAgent(a,dt));updateFlows(dt);drawFlows();
+  [...AGENTS].sort((a,b)=>a.y-b.y).forEach(a=>drawAgent(a,now));
+  if(assembling){const c=toScr(240,182,45),r2=(40+Math.sin(now*.008)*15)*sc;ctx.beginPath();ctx.arc(c.sx,c.sy,r2,0,Math.PI*2);
+    const fg=ctx.createRadialGradient(c.sx,c.sy,0,c.sx,c.sy,r2);fg.addColorStop(0,'rgba(74,108,247,0.08)');fg.addColorStop(1,'rgba(74,108,247,0)');ctx.fillStyle=fg;ctx.fill();}
+  if(Math.floor(now/2000)!==Math.floor((now-dt)/2000)){AGENTS.forEach(a=>{const el=document.getElementById('colTask-'+a.id);
+    if(el)el.textContent=a.state==='work'?a.tasks[Math.floor(now/3000)%a.tasks.length]:a.state==='patrol'?'Patrolling':'Walking...';});}
+  requestAnimationFrame(render);}
+requestAnimationFrame(render);
+
+// Speed
+function setSpeed(s){gameSpeed=s;[1,2,3].forEach(i=>{document.getElementById('sp'+i).classList.toggle('active',i===s);});}
+
+// Assemble
+function runAssemble(){if(assembling)return;assembling=true;
+  const btn=document.getElementById('asmBtn');btn.textContent='⟳ ASSEMBLING...';btn.classList.add('running');
+  feedMsg('👁️ Nick Fury: Avengers, assemble!');
+  AGENTS.forEach(a=>{if(a.id!=='fury'){a.state='walk';a.tx=220+(Math.random()-.5)*40;a.ty=175+(Math.random()-.5)*30;a.st=15000;}});
+  for(let i=0;i<15;i++)setTimeout(()=>{spawnFlow(AGENTS[Math.floor(Math.random()*6)],AGENTS[6]);},i*200);
+  const names=['Iron Man','Capt America','Scarlet Witch','Thor','Black Widow','Hawkeye'];
+  AGENTS.slice(0,6).forEach((a,i)=>{setTimeout(()=>feedMsg(`${a.emoji} ${names[i]}: Reporting in ✓`),(i+1)*600);});
+  setTimeout(()=>{AGENTS.forEach(a=>{if(a.id!=='fury'){a.state='walk';a.tx=a.deskX;a.ty=a.deskY;a.st=5000;}});
+    assembling=false;btn.textContent='▶ ASSEMBLE';btn.classList.remove('running');
+    feedMsg('👁️ Nick Fury: Briefing complete');renderSignals();
+    document.getElementById('bbFGI').textContent=Math.floor(55+Math.random()*25);
+    if(isMobile)switchMobTab('signals');else switchTab('signals');},6000);}
+
+// Feed
+function feedMsg(msg){document.getElementById('bbFeed').textContent=msg;}
+const ambientMsgs=['🦾 Iron Man: RSI scanning...','🛡️ Capt: Calendar check','🔮 Scarlet Witch: Reading sentiment...','⚡ Thor: Bifrost stable','🕷️ Black Widow: Filtering signals','🏹 Hawkeye: Webhooks idle','👁️ Fury: All agents nominal'];
+setInterval(()=>feedMsg(ambientMsgs[Math.floor(Math.random()*ambientMsgs.length)]),5000);
+
+// Clock
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toUTCString().split(' ')[4];},1000);
+
+// Live chart update
+setInterval(()=>{PAIRS.forEach(pair=>{const c=chartData[pair],l=c[c.length-1],cfg=PCFG[pair];
+  l.c+=(Math.random()-.48)*cfg.vol*.02;l.h=Math.max(l.h,l.c);l.l=Math.min(l.l,l.c);});
+  if(activeTab==='chart'||activeMobTab==='chart')drawMiniChart();},2500);
+
+// Init
+checkMobile();
+setTimeout(()=>runAssemble(),2000);
+</script>
+</body>
+</html>

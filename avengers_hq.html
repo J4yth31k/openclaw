@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — Avengers HQ</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #080810;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+  color: #e0e0f0;
+  user-select: none;
+}
+
+canvas { display: block; }
+
+/* HUD Overlay */
+.hud {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  padding: 16px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(8,8,16,0.85) 0%, transparent 100%);
+}
+
+.hud > * { pointer-events: auto; }
+
+.hud-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hud-logo {
+  width: 40px; height: 40px;
+  background: linear-gradient(135deg, #4a6cf7, #7c3aed);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 0 20px rgba(74,108,247,0.4);
+}
+
+.hud-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  background: linear-gradient(90deg, #4a6cf7, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hud-subtitle {
+  font-size: 10px;
+  color: #556;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.hud-clock {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #667;
+}
+
+.hud-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #10b981;
+}
+
+.hud-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px #10b981; }
+  50% { opacity: 0.4; box-shadow: 0 0 10px #10b981; }
+}
+
+.assemble-btn {
+  font-family: 'Orbitron', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  padding: 8px 20px;
+  border: 1px solid #4a6cf7;
+  background: rgba(74,108,247,0.1);
+  color: #4a6cf7;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.assemble-btn:hover {
+  background: rgba(74,108,247,0.25);
+  box-shadow: 0 0 20px rgba(74,108,247,0.3);
+}
+
+/* Agent Info Tooltip */
+.tooltip {
+  position: fixed;
+  z-index: 200;
+  background: rgba(12,12,24,0.95);
+  border: 1px solid rgba(100,120,255,0.2);
+  border-radius: 12px;
+  padding: 14px 18px;
+  backdrop-filter: blur(20px);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  max-width: 280px;
+}
+
+.tooltip.visible { opacity: 1; }
+
+.tooltip-name {
+  font-family: 'Orbitron', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.tooltip-role {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.tooltip-quote {
+  font-size: 10px;
+  color: #667;
+  font-style: italic;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.tooltip-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+/* Activity Log (bottom) */
+.activity-log {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  padding: 12px 28px 16px;
+  z-index: 100;
+  pointer-events: none;
+  background: linear-gradient(0deg, rgba(8,8,16,0.9) 0%, transparent 100%);
+}
+
+.log-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 100px;
+  overflow: hidden;
+}
+
+.log-entry {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #556;
+  opacity: 0;
+  animation: logIn 0.3s forwards;
+}
+
+.log-entry .time { color: #334; }
+.log-entry .agent { font-weight: 500; }
+.log-entry .msg { color: #667; }
+
+@keyframes logIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<!-- HUD -->
+<div class="hud">
+  <div class="hud-left">
+    <div class="hud-logo">🐾</div>
+    <div>
+      <div class="hud-title">OPENCLAW</div>
+      <div class="hud-subtitle">Avengers Headquarters</div>
+    </div>
+  </div>
+  <div class="hud-right">
+    <div class="hud-clock" id="clock">--:--:-- UTC</div>
+    <div class="hud-status"><div class="hud-dot"></div> ALL SYSTEMS NOMINAL</div>
+    <button class="assemble-btn" id="assembleBtn" onclick="triggerAssemble()">▶ ASSEMBLE</button>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-name" id="ttName"></div>
+  <div class="tooltip-role" id="ttRole"></div>
+  <div class="tooltip-quote" id="ttQuote"></div>
+  <div class="tooltip-status" id="ttStatus"></div>
+</div>
+
+<!-- Activity Log -->
+<div class="activity-log">
+  <div class="log-entries" id="logEntries"></div>
+</div>
+
+<script>
+// ===================================================================
+// AVENGERS HQ — ISOMETRIC ROOM WITH ANIMATED AGENTS
+// ===================================================================
+
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+
+let W, H, scale;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  scale = Math.min(W / 1400, H / 900);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Clock
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toUTCString().split(' ')[4] + ' UTC';
+}, 1000);
+
+// ===== ISOMETRIC HELPERS =====
+const ISO_ANGLE = Math.PI / 6; // 30 degrees
+const COS_A = Math.cos(ISO_ANGLE);
+const SIN_A = Math.sin(ISO_ANGLE);
+
+function toIso(x, y, z) {
+  return {
+    sx: (x - y) * COS_A,
+    sy: (x + y) * SIN_A - z
+  };
+}
+
+function worldToScreen(x, y, z) {
+  const iso = toIso(x, y, z);
+  return {
+    sx: W / 2 + iso.sx * scale,
+    sy: H / 2 + iso.sy * scale + 40 * scale
+  };
+}
+
+// ===== ROOM GEOMETRY =====
+const ROOM_W = 500;
+const ROOM_D = 400;
+const WALL_H = 180;
+
+function drawRoom() {
+  // Floor
+  const f0 = worldToScreen(0, 0, 0);
+  const f1 = worldToScreen(ROOM_W, 0, 0);
+  const f2 = worldToScreen(ROOM_W, ROOM_D, 0);
+  const f3 = worldToScreen(0, ROOM_D, 0);
+
+  // Floor gradient
+  const grd = ctx.createLinearGradient(f0.sx, f0.sy, f2.sx, f2.sy);
+  grd.addColorStop(0, '#0d0d1a');
+  grd.addColorStop(1, '#0a0a14');
+
+  ctx.beginPath();
+  ctx.moveTo(f0.sx, f0.sy);
+  ctx.lineTo(f1.sx, f1.sy);
+  ctx.lineTo(f2.sx, f2.sy);
+  ctx.lineTo(f3.sx, f3.sy);
+  ctx.closePath();
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  // Floor grid
+  ctx.strokeStyle = 'rgba(74, 108, 247, 0.06)';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= ROOM_W; i += 50) {
+    const a = worldToScreen(i, 0, 0);
+    const b = worldToScreen(i, ROOM_D, 0);
+    ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+  }
+  for (let j = 0; j <= ROOM_D; j += 50) {
+    const a = worldToScreen(0, j, 0);
+    const b = worldToScreen(ROOM_W, j, 0);
+    ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+  }
+
+  // Left wall
+  const lw0 = worldToScreen(0, ROOM_D, 0);
+  const lw1 = worldToScreen(ROOM_W, ROOM_D, 0);
+  const lw2 = worldToScreen(ROOM_W, ROOM_D, WALL_H);
+  const lw3 = worldToScreen(0, ROOM_D, WALL_H);
+
+  const lwGrd = ctx.createLinearGradient(lw0.sx, lw2.sy, lw0.sx, lw0.sy);
+  lwGrd.addColorStop(0, '#0e0e1c');
+  lwGrd.addColorStop(1, '#080812');
+
+  ctx.beginPath();
+  ctx.moveTo(lw0.sx, lw0.sy);
+  ctx.lineTo(lw1.sx, lw1.sy);
+  ctx.lineTo(lw2.sx, lw2.sy);
+  ctx.lineTo(lw3.sx, lw3.sy);
+  ctx.closePath();
+  ctx.fillStyle = lwGrd;
+  ctx.fill();
+
+  // Right wall
+  const rw0 = worldToScreen(ROOM_W, 0, 0);
+  const rw1 = worldToScreen(ROOM_W, ROOM_D, 0);
+  const rw2 = worldToScreen(ROOM_W, ROOM_D, WALL_H);
+  const rw3 = worldToScreen(ROOM_W, 0, WALL_H);
+
+  const rwGrd = ctx.createLinearGradient(rw0.sx, rw2.sy, rw0.sx, rw0.sy);
+  rwGrd.addColorStop(0, '#0c0c18');
+  rwGrd.addColorStop(1, '#060610');
+
+  ctx.beginPath();
+  ctx.moveTo(rw0.sx, rw0.sy);
+  ctx.lineTo(rw1.sx, rw1.sy);
+  ctx.lineTo(rw2.sx, rw2.sy);
+  ctx.lineTo(rw3.sx, rw3.sy);
+  ctx.closePath();
+  ctx.fillStyle = rwGrd;
+  ctx.fill();
+
+  // Wall edge lines
+  ctx.strokeStyle = 'rgba(74, 108, 247, 0.12)';
+  ctx.lineWidth = 1;
+  // Back wall bottom
+  ctx.beginPath(); ctx.moveTo(lw0.sx, lw0.sy); ctx.lineTo(lw1.sx, lw1.sy); ctx.stroke();
+  // Back wall top
+  ctx.beginPath(); ctx.moveTo(lw3.sx, lw3.sy); ctx.lineTo(lw2.sx, lw2.sy); ctx.stroke();
+  // Right wall top
+  ctx.beginPath(); ctx.moveTo(rw3.sx, rw3.sy); ctx.lineTo(rw2.sx, rw2.sy); ctx.stroke();
+  // Corners
+  ctx.beginPath(); ctx.moveTo(lw0.sx, lw0.sy); ctx.lineTo(lw3.sx, lw3.sy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(lw1.sx, lw1.sy); ctx.lineTo(lw2.sx, lw2.sy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rw0.sx, rw0.sy); ctx.lineTo(rw3.sx, rw3.sy); ctx.stroke();
+}
+
+// ===== FURNITURE =====
+function drawBox(x, y, z, w, d, h, topColor, leftColor, rightColor) {
+  // Top face
+  const t0 = worldToScreen(x, y, z + h);
+  const t1 = worldToScreen(x + w, y, z + h);
+  const t2 = worldToScreen(x + w, y + d, z + h);
+  const t3 = worldToScreen(x, y + d, z + h);
+  ctx.beginPath();
+  ctx.moveTo(t0.sx, t0.sy); ctx.lineTo(t1.sx, t1.sy);
+  ctx.lineTo(t2.sx, t2.sy); ctx.lineTo(t3.sx, t3.sy);
+  ctx.closePath();
+  ctx.fillStyle = topColor;
+  ctx.fill();
+
+  // Left face
+  const l0 = worldToScreen(x, y + d, z);
+  const l1 = worldToScreen(x + w, y + d, z);
+  ctx.beginPath();
+  ctx.moveTo(t3.sx, t3.sy); ctx.lineTo(t2.sx, t2.sy);
+  ctx.lineTo(l1.sx, l1.sy); ctx.lineTo(l0.sx, l0.sy);
+  ctx.closePath();
+  ctx.fillStyle = leftColor;
+  ctx.fill();
+
+  // Right face
+  const r0 = worldToScreen(x + w, y, z);
+  ctx.beginPath();
+  ctx.moveTo(t1.sx, t1.sy); ctx.lineTo(t2.sx, t2.sy);
+  ctx.lineTo(l1.sx, l1.sy); ctx.lineTo(r0.sx, r0.sy);
+  ctx.closePath();
+  ctx.fillStyle = rightColor;
+  ctx.fill();
+}
+
+function drawDesk(x, y, color) {
+  // Desk surface
+  drawBox(x, y, 0, 70, 40, 32, color, shadeColor(color, -30), shadeColor(color, -50));
+  // Monitor
+  drawBox(x + 20, y + 5, 32, 30, 3, 25, '#1a1a2e', '#12121e', '#0e0e18');
+  // Screen glow
+  const s = worldToScreen(x + 21, y + 4, 34);
+  const s2 = worldToScreen(x + 49, y + 4, 56);
+  ctx.fillStyle = shadeColor(color, 40) + '40';
+  ctx.fillRect(s.sx, s2.sy, s2.sx - s.sx, s.sy - s2.sy);
+}
+
+function drawScreen(x, y, z, w, h, color) {
+  // Big wall-mounted screen
+  drawBox(x, y, z, w, 2, h, '#0a0a14', '#08080f', '#060610');
+  // Screen content glow
+  const s1 = worldToScreen(x + 1, y, z + 1);
+  const s2 = worldToScreen(x + w - 1, y, z + h - 1);
+  const grad = ctx.createLinearGradient(s1.sx, s1.sy, s2.sx, s2.sy);
+  grad.addColorStop(0, color + '30');
+  grad.addColorStop(0.5, color + '15');
+  grad.addColorStop(1, color + '30');
+
+  ctx.beginPath();
+  const sc0 = worldToScreen(x + 1, y, z + 1);
+  const sc1 = worldToScreen(x + w - 1, y, z + 1);
+  const sc2 = worldToScreen(x + w - 1, y, z + h - 1);
+  const sc3 = worldToScreen(x + 1, y, z + h - 1);
+  ctx.moveTo(sc0.sx, sc0.sy); ctx.lineTo(sc1.sx, sc1.sy);
+  ctx.lineTo(sc2.sx, sc2.sy); ctx.lineTo(sc3.sx, sc3.sy);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+function drawServerRack(x, y) {
+  drawBox(x, y, 0, 20, 15, 80, '#141428', '#101020', '#0c0c18');
+  // LED lights
+  for (let i = 0; i < 6; i++) {
+    const p = worldToScreen(x + 19, y + 3, 10 + i * 10);
+    ctx.beginPath();
+    ctx.arc(p.sx, p.sy, 2 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = i % 3 === 0 ? '#10b981' : (i % 3 === 1 ? '#4a6cf7' : '#06b6d4');
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.sx, p.sy, 4 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = (i % 3 === 0 ? '#10b981' : (i % 3 === 1 ? '#4a6cf7' : '#06b6d4')) + '20';
+    ctx.fill();
+  }
+}
+
+function drawCoffeeMug(x, y) {
+  const p = worldToScreen(x, y, 32);
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy, 4 * scale, 0, Math.PI * 2);
+  ctx.fillStyle = '#2a1a0a';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy - 2 * scale, 4 * scale, 0, Math.PI * 2);
+  ctx.fillStyle = '#3a2a1a';
+  ctx.fill();
+}
+
+function drawPlant(x, y) {
+  // Pot
+  drawBox(x, y, 0, 12, 12, 18, '#3a2a1a', '#2a1a0a', '#201508');
+  // Leaves
+  const top = worldToScreen(x + 6, y + 6, 25);
+  const colors = ['#10b981', '#059669', '#0d9f70'];
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2 + Date.now() * 0.0003;
+    const r = 12 * scale;
+    ctx.beginPath();
+    ctx.ellipse(
+      top.sx + Math.cos(angle) * r,
+      top.sy + Math.sin(angle) * r * 0.5 - 8 * scale,
+      6 * scale, 3 * scale, angle, 0, Math.PI * 2
+    );
+    ctx.fillStyle = colors[i % 3];
+    ctx.fill();
+  }
+}
+
+function shadeColor(hex, amount) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const r = Math.max(0, Math.min(255, parseInt(hex.substr(0, 2), 16) + amount));
+  const g = Math.max(0, Math.min(255, parseInt(hex.substr(2, 2), 16) + amount));
+  const b = Math.max(0, Math.min(255, parseInt(hex.substr(4, 2), 16) + amount));
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+// ===== AGENTS (TINY CHARACTERS) =====
+const AGENTS = [
+  {
+    id: 'ironman', name: 'IRON MAN', emoji: '🦾', role: 'Technical Analysis',
+    quote: 'I am Iron Man. The numbers don\'t lie.',
+    color: '#ef4444', deskX: 60, deskY: 80,
+    x: 60, y: 80, targetX: 60, targetY: 80, z: 0,
+    state: 'working', stateTimer: 0, bobPhase: Math.random() * Math.PI * 2,
+    headColor: '#ef4444', bodyColor: '#cc3333'
+  },
+  {
+    id: 'captain', name: 'CAPTAIN AMERICA', emoji: '🛡️', role: 'Fundamental Analysis',
+    quote: 'I can do this all day. The calendar never rests.',
+    color: '#4a6cf7', deskX: 200, deskY: 80,
+    x: 200, y: 80, targetX: 200, targetY: 80, z: 0,
+    state: 'working', stateTimer: 0, bobPhase: Math.random() * Math.PI * 2,
+    headColor: '#4a6cf7', bodyColor: '#3355dd'
+  },
+  {
+    id: 'scarlet', name: 'SCARLET WITCH', emoji: '🔮', role: 'Sentiment Analysis',
+    quote: 'I can feel the market\'s fear... and its greed.',
+    color: '#ec4899', deskX: 340, deskY: 80,
+    x: 340, y: 80, targetX: 340, targetY: 80, z: 0,
+    state: 'working', stateTimer: 0, bobPhase: Math.random() * Math.PI * 2,
+    headColor: '#ec4899', bodyColor: '#cc2277'
+  },
+  {
+    id: 'thor', name: 'THOR', emoji: '⚡', role: 'Correlation Tracker',
+    quote: 'The Bifrost reveals connections across all realms.',
+    color: '#06b6d4', deskX: 60, deskY: 220,
+    x: 60, y: 220, targetX: 60, targetY: 220, z: 0,
+    state: 'working', stateTimer: 0, bobPhase: Math.random() * Math.PI * 2,
+    headColor: '#06b6d4', bodyColor: '#0599b0'
+  },
+  {
+    id: 'widow', name: 'BLACK WIDOW', emoji: '🕷️', role: 'Trade Ideas Generator',
+    quote: 'I weave intelligence into precision strike plans.',
+    color: '#10b981', deskX: 200, deskY: 220,
+    x: 200, y: 220, targetX: 200, targetY: 220, z: 0,
+    state: 'working', stateTimer: 0, bobPhase: Math.random() * Math.PI * 2,
+    headColor: '#10b981', bodyColor: '#0a9966'
+  },
+  {
+    id: 'hawkeye', name: 'HAWKEYE', emoji: '🏹', role: 'Webhook Receiver',
+    quote: 'I see better from a distance. Nothing escapes my eye.',
+    color: '#f59e0b', deskX: 340, deskY: 220,
+    x: 340, y: 220, targetX: 340, targetY: 220, z: 0,
+    state: 'working', stateTimer: 0, bobPhase: Math.random() * Math.PI * 2,
+    headColor: '#f59e0b', bodyColor: '#cc8500'
+  },
+  {
+    id: 'fury', name: 'NICK FURY', emoji: '👁️', role: 'Orchestrator',
+    quote: 'I\'m here because we need you. The world needs the Avengers.',
+    color: '#7c3aed', deskX: 200, deskY: 310,
+    x: 250, y: 170, targetX: 250, targetY: 170, z: 0,
+    state: 'walking', stateTimer: 0, bobPhase: Math.random() * Math.PI * 2,
+    headColor: '#7c3aed', bodyColor: '#5a22bb'
+  },
+];
+
+// Fury's patrol route (center of room, walking between agents)
+const FURY_ROUTE = [
+  { x: 130, y: 130 }, { x: 270, y: 130 }, { x: 400, y: 130 },
+  { x: 400, y: 270 }, { x: 270, y: 270 }, { x: 130, y: 270 },
+  { x: 200, y: 200 }, { x: 130, y: 130 },
+];
+let furyRouteIdx = 0;
+
+function drawAgent(agent, time) {
+  const bob = Math.sin(time * 0.004 + agent.bobPhase) * 2;
+  const isWalking = agent.state === 'walking';
+  const walkBob = isWalking ? Math.sin(time * 0.01 + agent.bobPhase) * 3 : 0;
+
+  const footZ = agent.z + walkBob * 0.3;
+  const p = worldToScreen(agent.x + 35, agent.y + 20, 32 + bob + footZ);
+
+  const sz = scale;
+
+  // Shadow on floor
+  const shadowP = worldToScreen(agent.x + 35, agent.y + 20, 0);
+  ctx.beginPath();
+  ctx.ellipse(shadowP.sx, shadowP.sy, 8 * sz, 4 * sz, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fill();
+
+  // Body (pill shape)
+  ctx.beginPath();
+  ctx.ellipse(p.sx, p.sy + 4 * sz, 6 * sz, 10 * sz, 0, 0, Math.PI * 2);
+  ctx.fillStyle = agent.bodyColor;
+  ctx.fill();
+
+  // Glow outline
+  ctx.beginPath();
+  ctx.ellipse(p.sx, p.sy + 4 * sz, 7 * sz, 11 * sz, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = agent.color + '40';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Head
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy - 8 * sz, 5.5 * sz, 0, Math.PI * 2);
+  ctx.fillStyle = agent.headColor;
+  ctx.fill();
+
+  // Eyes (facing direction)
+  const facing = isWalking ? Math.atan2(agent.targetY - agent.y, agent.targetX - agent.x) : 0;
+  const eyeOff = Math.cos(facing) * 1.5 * sz;
+  ctx.beginPath();
+  ctx.arc(p.sx - 2 * sz + eyeOff, p.sy - 9 * sz, 1.2 * sz, 0, Math.PI * 2);
+  ctx.arc(p.sx + 2 * sz + eyeOff, p.sy - 9 * sz, 1.2 * sz, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+
+  // Agent color glow aura
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy - 2 * sz, 16 * sz, 0, Math.PI * 2);
+  const auraGrad = ctx.createRadialGradient(p.sx, p.sy - 2 * sz, 4 * sz, p.sx, p.sy - 2 * sz, 16 * sz);
+  auraGrad.addColorStop(0, agent.color + '15');
+  auraGrad.addColorStop(1, agent.color + '00');
+  ctx.fillStyle = auraGrad;
+  ctx.fill();
+
+  // Emoji above head
+  ctx.font = `${12 * sz}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.fillText(agent.emoji, p.sx, p.sy - 17 * sz);
+
+  // Name tag
+  ctx.font = `bold ${7 * sz}px 'Orbitron', monospace`;
+  ctx.fillStyle = agent.color;
+  ctx.textAlign = 'center';
+  ctx.fillText(agent.name, p.sx, p.sy + 18 * sz);
+
+  // Status indicator
+  if (agent.state === 'working') {
+    // Typing particles
+    if (Math.random() < 0.15) {
+      const sparkX = p.sx + (Math.random() - 0.5) * 20 * sz;
+      const sparkY = p.sy + (Math.random() - 0.5) * 10 * sz;
+      ctx.beginPath();
+      ctx.arc(sparkX, sparkY, 1 * sz, 0, Math.PI * 2);
+      ctx.fillStyle = agent.color + '80';
+      ctx.fill();
+    }
+  }
+
+  // Walking legs animation
+  if (isWalking) {
+    const legSwing = Math.sin(time * 0.012) * 4 * sz;
+    // Left leg
+    ctx.beginPath();
+    ctx.moveTo(p.sx - 3 * sz, p.sy + 12 * sz);
+    ctx.lineTo(p.sx - 3 * sz + legSwing, p.sy + 18 * sz);
+    ctx.strokeStyle = agent.bodyColor;
+    ctx.lineWidth = 2.5 * sz;
+    ctx.stroke();
+    // Right leg
+    ctx.beginPath();
+    ctx.moveTo(p.sx + 3 * sz, p.sy + 12 * sz);
+    ctx.lineTo(p.sx + 3 * sz - legSwing, p.sy + 18 * sz);
+    ctx.stroke();
+  }
+
+  // Store screen position for hover
+  agent.screenX = p.sx;
+  agent.screenY = p.sy;
+}
+
+function updateAgent(agent, dt, time) {
+  agent.stateTimer -= dt;
+
+  if (agent.id === 'fury') {
+    // Fury patrols the room
+    const target = FURY_ROUTE[furyRouteIdx];
+    const dx = target.x - agent.x;
+    const dy = target.y - agent.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < 5) {
+      agent.state = 'looking';
+      agent.stateTimer -= dt;
+      if (agent.stateTimer <= 0) {
+        furyRouteIdx = (furyRouteIdx + 1) % FURY_ROUTE.length;
+        agent.state = 'walking';
+        agent.stateTimer = 1000;
+      }
+    } else {
+      agent.state = 'walking';
+      const speed = 0.06;
+      agent.x += dx * speed * dt * 0.01;
+      agent.y += dy * speed * dt * 0.01;
+      agent.targetX = target.x;
+      agent.targetY = target.y;
+    }
+    return;
+  }
+
+  // Other agents: alternate between working and walking
+  if (agent.stateTimer <= 0) {
+    if (agent.state === 'working') {
+      // Occasionally get up and walk
+      if (Math.random() < 0.3) {
+        agent.state = 'walking';
+        // Walk to a random nearby spot
+        agent.targetX = agent.deskX + (Math.random() - 0.5) * 120;
+        agent.targetY = agent.deskY + (Math.random() - 0.5) * 80;
+        // Clamp to room
+        agent.targetX = Math.max(20, Math.min(ROOM_W - 60, agent.targetX));
+        agent.targetY = Math.max(20, Math.min(ROOM_D - 40, agent.targetY));
+        agent.stateTimer = 3000 + Math.random() * 4000;
+      } else {
+        agent.stateTimer = 5000 + Math.random() * 8000;
+      }
+    } else if (agent.state === 'walking') {
+      // Return to desk
+      agent.state = 'returning';
+      agent.targetX = agent.deskX;
+      agent.targetY = agent.deskY;
+      agent.stateTimer = 5000;
+    } else {
+      agent.state = 'working';
+      agent.stateTimer = 6000 + Math.random() * 10000;
+    }
+  }
+
+  // Move toward target
+  if (agent.state === 'walking' || agent.state === 'returning') {
+    const dx = agent.targetX - agent.x;
+    const dy = agent.targetY - agent.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 3) {
+      const speed = 0.04;
+      agent.x += dx * speed * dt * 0.016;
+      agent.y += dy * speed * dt * 0.016;
+    } else if (agent.state === 'returning') {
+      agent.state = 'working';
+      agent.stateTimer = 8000 + Math.random() * 12000;
+    }
+  }
+}
+
+// ===== DATA FLOW PARTICLES =====
+let flowParticles = [];
+
+function spawnFlowParticle(fromAgent, toAgent) {
+  flowParticles.push({
+    fromX: fromAgent.x + 35, fromY: fromAgent.y + 20,
+    toX: toAgent.x + 35, toY: toAgent.y + 20,
+    progress: 0,
+    color: fromAgent.color,
+    speed: 0.005 + Math.random() * 0.005,
+  });
+}
+
+function updateFlowParticles(dt) {
+  flowParticles = flowParticles.filter(p => {
+    p.progress += p.speed * dt;
+    return p.progress < 1;
+  });
+
+  // Randomly spawn particles between agents
+  if (Math.random() < 0.03) {
+    const from = AGENTS[Math.floor(Math.random() * 6)]; // intelligence agents
+    const to = AGENTS[6]; // to Fury
+    spawnFlowParticle(from, to);
+  }
+  if (Math.random() < 0.02) {
+    const from = AGENTS[Math.floor(Math.random() * 4)]; // analysts
+    const to = AGENTS[4]; // to Black Widow
+    spawnFlowParticle(from, to);
+  }
+}
+
+function drawFlowParticles() {
+  flowParticles.forEach(p => {
+    const x = p.fromX + (p.toX - p.fromX) * p.progress;
+    const y = p.fromY + (p.toY - p.fromY) * p.progress;
+    const z = 40 + Math.sin(p.progress * Math.PI) * 30; // arc up
+    const sp = worldToScreen(x, y, z);
+
+    // Trail
+    const trailLen = 5;
+    for (let i = 0; i < trailLen; i++) {
+      const tp = Math.max(0, p.progress - i * 0.02);
+      const tx = p.fromX + (p.toX - p.fromX) * tp;
+      const ty = p.fromY + (p.toY - p.fromY) * tp;
+      const tz = 40 + Math.sin(tp * Math.PI) * 30;
+      const tsp = worldToScreen(tx, ty, tz);
+      ctx.beginPath();
+      ctx.arc(tsp.sx, tsp.sy, (2 - i * 0.3) * scale, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.floor(80 - i * 15).toString(16).padStart(2, '0');
+      ctx.fill();
+    }
+
+    // Main particle
+    ctx.beginPath();
+    ctx.arc(sp.sx, sp.sy, 3 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+
+    // Glow
+    ctx.beginPath();
+    ctx.arc(sp.sx, sp.sy, 8 * scale, 0, Math.PI * 2);
+    const g = ctx.createRadialGradient(sp.sx, sp.sy, 0, sp.sx, sp.sy, 8 * scale);
+    g.addColorStop(0, p.color + '40');
+    g.addColorStop(1, p.color + '00');
+    ctx.fillStyle = g;
+    ctx.fill();
+  });
+}
+
+// ===== HOLOGRAM PROJECTION (center table) =====
+function drawHoloTable(time) {
+  // Central table
+  drawBox(180, 140, 0, 80, 60, 28, '#16162a', '#101020', '#0c0c18');
+
+  // Holographic projection
+  const center = worldToScreen(220, 170, 50);
+  const haloR = (25 + Math.sin(time * 0.002) * 5) * scale;
+
+  // Rotating ring
+  ctx.beginPath();
+  ctx.ellipse(center.sx, center.sy, haloR, haloR * 0.35, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(74, 108, 247, ${0.3 + Math.sin(time * 0.003) * 0.1})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Second ring
+  ctx.beginPath();
+  ctx.ellipse(center.sx, center.sy - 5 * scale, haloR * 0.7, haloR * 0.25, time * 0.001, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(6, 182, 212, ${0.25 + Math.sin(time * 0.004) * 0.1})`;
+  ctx.stroke();
+
+  // Vertical glow beam
+  const beamBottom = worldToScreen(220, 170, 28);
+  const beamTop = worldToScreen(220, 170, 80);
+  const beamGrad = ctx.createLinearGradient(center.sx, beamTop.sy, center.sx, beamBottom.sy);
+  beamGrad.addColorStop(0, 'rgba(74, 108, 247, 0)');
+  beamGrad.addColorStop(0.3, 'rgba(74, 108, 247, 0.08)');
+  beamGrad.addColorStop(0.7, 'rgba(74, 108, 247, 0.05)');
+  beamGrad.addColorStop(1, 'rgba(74, 108, 247, 0)');
+  ctx.fillStyle = beamGrad;
+  ctx.fillRect(center.sx - 15 * scale, beamTop.sy, 30 * scale, beamBottom.sy - beamTop.sy);
+
+  // Floating data text
+  ctx.font = `${7 * scale}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = `rgba(74, 108, 247, ${0.4 + Math.sin(time * 0.005) * 0.2})`;
+  ctx.textAlign = 'center';
+  const dataLines = ['BTC $80,660', 'ETH $2,302', 'SOL $95.20'];
+  dataLines.forEach((line, i) => {
+    const ly = center.sy - (20 + i * 12) * scale + Math.sin(time * 0.003 + i) * 3;
+    ctx.fillText(line, center.sx, ly);
+  });
+}
+
+// ===== WALL SCREENS =====
+function drawWallScreens(time) {
+  // Large screen on back wall (market chart)
+  drawScreen(150, ROOM_D - 2, 60, 140, 80, '#4a6cf7');
+
+  // Draw fake chart on it
+  const chartStart = worldToScreen(160, ROOM_D - 3, 70);
+  const chartEnd = worldToScreen(280, ROOM_D - 3, 130);
+  ctx.beginPath();
+  ctx.strokeStyle = '#4a6cf7' + '50';
+  ctx.lineWidth = 1.5;
+  const steps = 20;
+  let prevX, prevY;
+  for (let i = 0; i <= steps; i++) {
+    const px = 160 + (120 * i / steps);
+    const pz = 90 + Math.sin(i * 0.5 + time * 0.002) * 15 + Math.sin(i * 1.2) * 8;
+    const sp = worldToScreen(px, ROOM_D - 3, pz);
+    if (i === 0) ctx.moveTo(sp.sx, sp.sy);
+    else ctx.lineTo(sp.sx, sp.sy);
+  }
+  ctx.stroke();
+
+  // Smaller screen on right wall (correlation matrix)
+  drawScreen(ROOM_W - 2, 100, 60, 2, 70, '#06b6d4');
+
+  // Status text on right wall
+  const rsp = worldToScreen(ROOM_W - 3, 140, 110);
+  ctx.font = `${6 * scale}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = '#06b6d4' + '60';
+  ctx.textAlign = 'center';
+  ctx.fillText('BIFROST ACTIVE', rsp.sx, rsp.sy);
+}
+
+// ===== AMBIENT EFFECTS =====
+let ambientParticles = [];
+for (let i = 0; i < 30; i++) {
+  ambientParticles.push({
+    x: Math.random() * ROOM_W,
+    y: Math.random() * ROOM_D,
+    z: Math.random() * WALL_H,
+    speed: 0.1 + Math.random() * 0.3,
+    size: 0.5 + Math.random() * 1,
+    opacity: 0.1 + Math.random() * 0.2,
+  });
+}
+
+function drawAmbientParticles(time) {
+  ambientParticles.forEach(p => {
+    p.z += p.speed;
+    if (p.z > WALL_H) {
+      p.z = 0;
+      p.x = Math.random() * ROOM_W;
+      p.y = Math.random() * ROOM_D;
+    }
+    const sp = worldToScreen(p.x, p.y, p.z);
+    ctx.beginPath();
+    ctx.arc(sp.sx, sp.sy, p.size * scale, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(74, 108, 247, ${p.opacity * (1 - p.z / WALL_H)})`;
+    ctx.fill();
+  });
+}
+
+// ===== HOVER DETECTION =====
+let hoveredAgent = null;
+const tooltipEl = document.getElementById('tooltip');
+
+canvas.addEventListener('mousemove', (e) => {
+  const mx = e.clientX;
+  const my = e.clientY;
+  hoveredAgent = null;
+
+  for (const agent of AGENTS) {
+    if (agent.screenX && agent.screenY) {
+      const dx = mx - agent.screenX;
+      const dy = my - agent.screenY;
+      if (Math.sqrt(dx * dx + dy * dy) < 25 * scale) {
+        hoveredAgent = agent;
+        break;
+      }
+    }
+  }
+
+  if (hoveredAgent) {
+    tooltipEl.classList.add('visible');
+    tooltipEl.style.left = (mx + 16) + 'px';
+    tooltipEl.style.top = (my - 10) + 'px';
+    document.getElementById('ttName').textContent = hoveredAgent.name;
+    document.getElementById('ttName').style.color = hoveredAgent.color;
+    document.getElementById('ttRole').textContent = hoveredAgent.role;
+    document.getElementById('ttQuote').textContent = `"${hoveredAgent.quote}"`;
+    const statusEl = document.getElementById('ttStatus');
+    const stateLabel = hoveredAgent.state === 'working' ? 'ANALYZING' : hoveredAgent.state === 'walking' ? 'PATROLLING' : 'EN ROUTE';
+    statusEl.textContent = stateLabel;
+    statusEl.style.color = hoveredAgent.color;
+    statusEl.style.background = hoveredAgent.color + '20';
+    statusEl.style.border = `1px solid ${hoveredAgent.color}40`;
+    canvas.style.cursor = 'pointer';
+  } else {
+    tooltipEl.classList.remove('visible');
+    canvas.style.cursor = 'default';
+  }
+});
+
+// ===== ACTIVITY LOG =====
+const logTemplates = [
+  { agent: 'Iron Man', color: '#ef4444', msgs: ['RSI divergence on BTC 4H', 'EMA crossover detected on ETH', 'Scanning SOLUSD candles...', 'MACD histogram flip on EURUSD'] },
+  { agent: 'Captain America', color: '#4a6cf7', msgs: ['FOMC decision in 72 hours', 'ECB rate unchanged', 'NFP data processing...', 'BOJ meeting minutes analyzed'] },
+  { agent: 'Scarlet Witch', color: '#ec4899', msgs: ['Fear & Greed: 72 (Greed)', 'Social volume spike detected', 'Whale alert: 500 BTC moved', 'Options flow turning bullish'] },
+  { agent: 'Thor', color: '#06b6d4', msgs: ['BTC-ETH correlation: 0.89', 'DXY weakening — risk-on', 'Gold diverging from dollar', 'VIX at 14.2 — complacency'] },
+  { agent: 'Black Widow', color: '#10b981', msgs: ['Trade idea: LONG BTC +6 score', 'Filtering confluence matrix...', 'EURUSD setup rejected (-2)', '3 ideas generated this cycle'] },
+  { agent: 'Hawkeye', color: '#f59e0b', msgs: ['Webhook listener active', 'TradingView alert received', 'Signal logged to journal', 'Monitoring alert conditions'] },
+  { agent: 'Nick Fury', color: '#7c3aed', msgs: ['Checking agent status...', 'All agents reporting nominal', 'Briefing cycle complete', 'Next scan in 4 hours'] },
+];
+
+function addLogEntry() {
+  const t = logTemplates[Math.floor(Math.random() * logTemplates.length)];
+  const msg = t.msgs[Math.floor(Math.random() * t.msgs.length)];
+  const time = new Date().toTimeString().slice(0, 8);
+  const el = document.createElement('div');
+  el.className = 'log-entry';
+  el.innerHTML = `<span class="time">${time}</span> <span class="agent" style="color:${t.color}">${t.agent}</span> <span class="msg">— ${msg}</span>`;
+  const container = document.getElementById('logEntries');
+  container.insertBefore(el, container.firstChild);
+  while (container.children.length > 8) container.removeChild(container.lastChild);
+}
+
+for (let i = 0; i < 4; i++) setTimeout(() => addLogEntry(), i * 500);
+setInterval(addLogEntry, 3500 + Math.random() * 2000);
+
+// ===== ASSEMBLE ANIMATION =====
+let assembling = false;
+let assemblePhase = 0;
+let assembleTimer = 0;
+
+function triggerAssemble() {
+  if (assembling) return;
+  assembling = true;
+  assemblePhase = 0;
+  assembleTimer = 0;
+  document.getElementById('assembleBtn').textContent = '⟳ ASSEMBLING...';
+  document.getElementById('assembleBtn').style.borderColor = '#10b981';
+  document.getElementById('assembleBtn').style.color = '#10b981';
+
+  // Make all agents walk to center
+  AGENTS.forEach(a => {
+    if (a.id !== 'fury') {
+      a.state = 'walking';
+      a.targetX = 200 + (Math.random() - 0.5) * 40;
+      a.targetY = 160 + (Math.random() - 0.5) * 30;
+      a.stateTimer = 15000;
+    }
+  });
+
+  // After gathering, send them back
+  setTimeout(() => {
+    AGENTS.forEach(a => {
+      if (a.id !== 'fury') {
+        a.state = 'returning';
+        a.targetX = a.deskX;
+        a.targetY = a.deskY;
+        a.stateTimer = 5000;
+      }
+    });
+    assembling = false;
+    document.getElementById('assembleBtn').textContent = '▶ ASSEMBLE';
+    document.getElementById('assembleBtn').style.borderColor = '#4a6cf7';
+    document.getElementById('assembleBtn').style.color = '#4a6cf7';
+    addLogEntry();
+  }, 8000);
+
+  // Burst of flow particles
+  for (let i = 0; i < 20; i++) {
+    setTimeout(() => {
+      const from = AGENTS[Math.floor(Math.random() * 6)];
+      const to = AGENTS[6];
+      spawnFlowParticle(from, to);
+    }, i * 200);
+  }
+}
+
+// ===== MAIN RENDER LOOP =====
+let lastTime = performance.now();
+
+function render(now) {
+  const dt = now - lastTime;
+  lastTime = now;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Room
+  drawRoom();
+
+  // Furniture (back row)
+  drawDesk(60, 80, '#1a1020');
+  drawDesk(200, 80, '#101a2a');
+  drawDesk(340, 80, '#1a1020');
+
+  // Front row desks
+  drawDesk(60, 220, '#101a2a');
+  drawDesk(200, 220, '#0f1a1a');
+  drawDesk(340, 220, '#1a1a10');
+
+  // Coffee mugs
+  drawCoffeeMug(120, 90);
+  drawCoffeeMug(260, 230);
+
+  // Plants
+  drawPlant(10, 10);
+  drawPlant(440, 350);
+
+  // Server racks
+  drawServerRack(450, 60);
+  drawServerRack(450, 90);
+  drawServerRack(450, 120);
+
+  // Holo table
+  drawHoloTable(now);
+
+  // Wall screens
+  drawWallScreens(now);
+
+  // Ambient particles
+  drawAmbientParticles(now);
+
+  // Update agents
+  AGENTS.forEach(a => updateAgent(a, dt, now));
+
+  // Sort agents by Y for correct depth
+  const sorted = [...AGENTS].sort((a, b) => a.y - b.y);
+
+  // Flow particles (behind agents)
+  updateFlowParticles(dt);
+  drawFlowParticles();
+
+  // Draw agents
+  sorted.forEach(a => drawAgent(a, now));
+
+  // Assemble flash effect
+  if (assembling) {
+    const center = worldToScreen(220, 170, 50);
+    const flashR = (50 + Math.sin(now * 0.008) * 20) * scale;
+    ctx.beginPath();
+    ctx.arc(center.sx, center.sy, flashR, 0, Math.PI * 2);
+    const flashGrad = ctx.createRadialGradient(center.sx, center.sy, 0, center.sx, center.sy, flashR);
+    flashGrad.addColorStop(0, 'rgba(74, 108, 247, 0.1)');
+    flashGrad.addColorStop(1, 'rgba(74, 108, 247, 0)');
+    ctx.fillStyle = flashGrad;
+    ctx.fill();
+  }
+
+  requestAnimationFrame(render);
+}
+
+requestAnimationFrame(render);
+</script>
+</body>
+</html>

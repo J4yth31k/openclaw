@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — Avengers Command Center</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-card: rgba(18, 18, 30, 0.85);
+    --border-glow: rgba(100, 120, 255, 0.15);
+    --text-primary: #e8e8f0;
+    --text-secondary: #8888aa;
+    --text-dim: #555570;
+    --accent-blue: #4a6cf7;
+    --accent-purple: #7c3aed;
+    --accent-cyan: #06b6d4;
+    --accent-green: #10b981;
+    --accent-red: #ef4444;
+    --accent-orange: #f59e0b;
+    --accent-pink: #ec4899;
+    --glow-blue: 0 0 20px rgba(74, 108, 247, 0.3);
+    --glow-purple: 0 0 20px rgba(124, 58, 237, 0.3);
+    --glow-cyan: 0 0 20px rgba(6, 182, 212, 0.3);
+    --glow-green: 0 0 20px rgba(16, 185, 129, 0.3);
+    --glow-red: 0 0 20px rgba(239, 68, 68, 0.3);
+    --glow-orange: 0 0 20px rgba(245, 158, 11, 0.3);
+  }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ===== BACKGROUND GRID ===== */
+  .grid-bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image:
+      linear-gradient(rgba(74, 108, 247, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(74, 108, 247, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .grid-bg::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(74, 108, 247, 0.08) 0%, transparent 60%);
+  }
+
+  /* ===== PARTICLES CANVAS ===== */
+  #particles {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ===== HEADER ===== */
+  .header {
+    position: relative;
+    z-index: 10;
+    padding: 24px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-glow);
+    backdrop-filter: blur(20px);
+    background: rgba(10, 10, 15, 0.8);
+  }
+
+  .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo-icon {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    box-shadow: var(--glow-blue);
+    animation: logoPulse 3s ease-in-out infinite;
+  }
+
+  @keyframes logoPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(74, 108, 247, 0.3); }
+    50% { box-shadow: 0 0 40px rgba(74, 108, 247, 0.6); }
+  }
+
+  .logo-text h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .logo-text p {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+
+  .status-dot.scanning { background: var(--accent-cyan); animation: dotPulse 1s ease-in-out infinite; }
+  .status-dot.idle { background: var(--text-dim); animation: none; }
+
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 4px currentColor; }
+    50% { opacity: 0.5; box-shadow: 0 0 12px currentColor; }
+  }
+
+  .run-btn {
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    padding: 10px 24px;
+    border: 1px solid var(--accent-blue);
+    background: rgba(74, 108, 247, 0.1);
+    color: var(--accent-blue);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+  }
+
+  .run-btn:hover {
+    background: rgba(74, 108, 247, 0.25);
+    box-shadow: var(--glow-blue);
+    transform: translateY(-1px);
+  }
+
+  .run-btn.running {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+    background: rgba(16, 185, 129, 0.1);
+    animation: btnPulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes btnPulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.2); }
+    50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.4); }
+  }
+
+  /* ===== MAIN LAYOUT ===== */
+  .main {
+    position: relative;
+    z-index: 5;
+    padding: 30px 40px;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: auto 1fr;
+    gap: 24px;
+    min-height: calc(100vh - 100px);
+  }
+
+  /* ===== AGENT TOPOLOGY ===== */
+  .topology {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    position: relative;
+    min-height: 700px;
+  }
+
+  .topology-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  /* SVG Flow Lines */
+  .flow-svg {
+    position: absolute;
+    top: 60px;
+    left: 0;
+    width: 100%;
+    height: calc(100% - 60px);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .flow-line {
+    stroke: rgba(74, 108, 247, 0.15);
+    stroke-width: 1.5;
+    fill: none;
+  }
+
+  .flow-particle {
+    fill: var(--accent-cyan);
+    filter: url(#particleGlow);
+  }
+
+  /* ===== AGENT CARDS ===== */
+  .agents-grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: 20px;
+    padding-top: 10px;
+  }
+
+  .agent-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-glow);
+    border-radius: 16px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--agent-color);
+    opacity: 0.6;
+    transition: opacity 0.3s;
+  }
+
+  .agent-card:hover {
+    border-color: var(--agent-color);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3), 0 0 30px color-mix(in srgb, var(--agent-color) 15%, transparent);
+  }
+
+  .agent-card:hover::before { opacity: 1; }
+
+  .agent-card.active {
+    border-color: var(--agent-color);
+    box-shadow: 0 0 30px color-mix(in srgb, var(--agent-color) 20%, transparent);
+  }
+
+  .agent-card.active::before { opacity: 1; }
+
+  /* Nick Fury - spans full width at bottom */
+  .agent-card.fury {
+    grid-column: 1 / -1;
+  }
+
+  .agent-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .agent-avatar {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    background: color-mix(in srgb, var(--agent-color) 15%, var(--bg-secondary));
+    border: 1px solid color-mix(in srgb, var(--agent-color) 30%, transparent);
+    flex-shrink: 0;
+  }
+
+  .agent-info h3 {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--agent-color);
+  }
+
+  .agent-info .role {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .agent-status-badge {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .agent-status-badge.online {
+    color: var(--accent-green);
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .agent-status-badge.scanning {
+    color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    animation: statusPulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .agent-quote {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-style: italic;
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+
+  .agent-metrics {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .metric {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .metric-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .metric-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-top: 2px;
+  }
+
+  .metric-value.positive { color: var(--accent-green); }
+  .metric-value.negative { color: var(--accent-red); }
+  .metric-value.neutral { color: var(--accent-cyan); }
+
+  /* Agent-specific output area */
+  .agent-output {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    max-height: 80px;
+    overflow-y: auto;
+  }
+
+  .agent-output .log-line {
+    opacity: 0;
+    animation: fadeInLog 0.3s forwards;
+  }
+
+  @keyframes fadeInLog {
+    to { opacity: 1; }
+  }
+
+  .agent-output .log-time { color: var(--text-dim); }
+  .agent-output .log-msg { color: var(--text-secondary); }
+  .agent-output .log-ok { color: var(--accent-green); }
+  .agent-output .log-warn { color: var(--accent-orange); }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-glow);
+    border-radius: 16px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+  }
+
+  .panel-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title .icon { font-size: 14px; }
+
+  /* Activity Feed */
+  .activity-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .activity-feed::-webkit-scrollbar { width: 3px; }
+  .activity-feed::-webkit-scrollbar-track { background: transparent; }
+  .activity-feed::-webkit-scrollbar-thumb { background: var(--border-glow); border-radius: 3px; }
+
+  .activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    animation: slideIn 0.4s forwards;
+    font-size: 12px;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .activity-item .emoji { font-size: 16px; flex-shrink: 0; }
+  .activity-item .time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .activity-item .msg { color: var(--text-secondary); line-height: 1.4; }
+  .activity-item .agent-name { color: var(--text-primary); font-weight: 500; }
+
+  /* Market Ticker */
+  .ticker-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ticker-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .ticker-symbol { color: var(--text-primary); font-weight: 500; }
+  .ticker-price { color: var(--text-secondary); }
+  .ticker-change.up { color: var(--accent-green); }
+  .ticker-change.down { color: var(--accent-red); }
+
+  /* System Stats */
+  .sys-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .sys-stat {
+    text-align: center;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+  }
+
+  .sys-stat .val {
+    font-family: 'Orbitron', monospace;
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .sys-stat .label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  /* ===== FURY BRIEFING MODAL ===== */
+  .briefing-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 100;
+    backdrop-filter: blur(8px);
+    align-items: center;
+    justify-content: center;
+  }
+
+  .briefing-overlay.visible { display: flex; }
+
+  .briefing-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-glow);
+    border-radius: 20px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 30px;
+  }
+
+  .briefing-modal h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    letter-spacing: 3px;
+    color: var(--accent-blue);
+    margin-bottom: 20px;
+  }
+
+  .briefing-output {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+  }
+
+  .briefing-close {
+    margin-top: 20px;
+    padding: 10px 24px;
+    border: 1px solid var(--accent-blue);
+    background: transparent;
+    color: var(--accent-blue);
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 1100px) {
+    .main {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
+    }
+    .sidebar { grid-column: 1; grid-row: 2; }
+    .agents-grid { grid-template-columns: repeat(2, 1fr); }
+    .agent-card.fury { grid-column: 1 / -1; }
+  }
+
+  @media (max-width: 700px) {
+    .header { padding: 16px 20px; }
+    .main { padding: 16px 20px; }
+    .agents-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<canvas id="particles"></canvas>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo-area">
+    <div class="logo-icon">🐾</div>
+    <div class="logo-text">
+      <h1>OPENCLAW</h1>
+      <p>Avengers Command Center</p>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-indicator">
+      <div class="status-dot" id="globalStatus"></div>
+      <span id="globalStatusText">SYSTEMS ONLINE</span>
+    </div>
+    <div class="status-indicator">
+      <span id="clockDisplay">--:--:-- UTC</span>
+    </div>
+    <button class="run-btn" id="runBtn" onclick="runBriefing()">
+      ▶ ASSEMBLE
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- TOPOLOGY (Left) -->
+  <section class="topology">
+    <div class="topology-title">⬡ Agent Topology</div>
+
+    <!-- Animated Flow SVG -->
+    <svg class="flow-svg" id="flowSvg">
+      <defs>
+        <filter id="particleGlow">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge>
+            <feMergeNode in="blur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+    </svg>
+
+    <!-- Agent Cards -->
+    <div class="agents-grid">
+
+      <!-- Row 1: Intelligence Gatherers -->
+      <div class="agent-card" style="--agent-color: var(--accent-red);" id="card-ironman">
+        <div class="agent-header">
+          <div class="agent-avatar">🦾</div>
+          <div class="agent-info">
+            <h3>IRON MAN</h3>
+            <div class="role">Technical Analysis</div>
+          </div>
+          <span class="agent-status-badge online" id="status-ironman">ONLINE</span>
+        </div>
+        <div class="agent-quote">"I am Iron Man. The numbers don't lie."</div>
+        <div class="agent-metrics">
+          <div class="metric">
+            <div class="metric-label">Indicators</div>
+            <div class="metric-value neutral">EMA RSI MACD BB</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Timeframes</div>
+            <div class="metric-value">3 Active</div>
+          </div>
+        </div>
+        <div class="agent-output" id="output-ironman"></div>
+      </div>
+
+      <div class="agent-card" style="--agent-color: var(--accent-blue);" id="card-captain">
+        <div class="agent-header">
+          <div class="agent-avatar">🛡️</div>
+          <div class="agent-info">
+            <h3>CAPTAIN AMERICA</h3>
+            <div class="role">Fundamental Analysis</div>
+          </div>
+          <span class="agent-status-badge online" id="status-captain">ONLINE</span>
+        </div>
+        <div class="agent-quote">"I can do this all day. The calendar never rests."</div>
+        <div class="agent-metrics">
+          <div class="metric">
+            <div class="metric-label">Events Tracked</div>
+            <div class="metric-value neutral">80+</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Central Banks</div>
+            <div class="metric-value">5</div>
+          </div>
+        </div>
+        <div class="agent-output" id="output-captain"></div>
+      </div>
+
+      <div class="agent-card" style="--agent-color: var(--accent-pink);" id="card-scarlet">
+        <div class="agent-header">
+          <div class="agent-avatar">🔮</div>
+          <div class="agent-info">
+            <h3>SCARLET WITCH</h3>
+            <div class="role">Sentiment Analysis</div>
+          </div>
+          <span class="agent-status-badge online" id="status-scarlet">ONLINE</span>
+        </div>
+        <div class="agent-quote">"I can feel the market's fear… and its greed."</div>
+        <div class="agent-metrics">
+          <div class="metric">
+            <div class="metric-label">Fear & Greed</div>
+            <div class="metric-value" id="fgi-value">--</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Momentum</div>
+            <div class="metric-value" id="momentum-value">--</div>
+          </div>
+        </div>
+        <div class="agent-output" id="output-scarlet"></div>
+      </div>
+
+      <!-- Row 2: Analysis Layer -->
+      <div class="agent-card" style="--agent-color: var(--accent-cyan);" id="card-thor">
+        <div class="agent-header">
+          <div class="agent-avatar">⚡</div>
+          <div class="agent-info">
+            <h3>THOR</h3>
+            <div class="role">Correlation Tracker</div>
+          </div>
+          <span class="agent-status-badge online" id="status-thor">ONLINE</span>
+        </div>
+        <div class="agent-quote">"The Bifrost reveals connections across all realms."</div>
+        <div class="agent-metrics">
+          <div class="metric">
+            <div class="metric-label">Realms</div>
+            <div class="metric-value neutral">8 Assets</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">DXY</div>
+            <div class="metric-value" id="dxy-value">--</div>
+          </div>
+        </div>
+        <div class="agent-output" id="output-thor"></div>
+      </div>
+
+      <div class="agent-card" style="--agent-color: var(--accent-green);" id="card-widow">
+        <div class="agent-header">
+          <div class="agent-avatar">🕷️</div>
+          <div class="agent-info">
+            <h3>BLACK WIDOW</h3>
+            <div class="role">Trade Ideas Generator</div>
+          </div>
+          <span class="agent-status-badge online" id="status-widow">ONLINE</span>
+        </div>
+        <div class="agent-quote">"I weave intelligence into precision strike plans."</div>
+        <div class="agent-metrics">
+          <div class="metric">
+            <div class="metric-label">Confluence</div>
+            <div class="metric-value neutral">±8 Score</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Ideas</div>
+            <div class="metric-value" id="ideas-value">--</div>
+          </div>
+        </div>
+        <div class="agent-output" id="output-widow"></div>
+      </div>
+
+      <div class="agent-card" style="--agent-color: var(--accent-orange);" id="card-hawkeye">
+        <div class="agent-header">
+          <div class="agent-avatar">🏹</div>
+          <div class="agent-info">
+            <h3>HAWKEYE</h3>
+            <div class="role">Webhook Receiver</div>
+          </div>
+          <span class="agent-status-badge online" id="status-hawkeye">ONLINE</span>
+        </div>
+        <div class="agent-quote">"I see better from a distance. Nothing escapes my eye."</div>
+        <div class="agent-metrics">
+          <div class="metric">
+            <div class="metric-label">Signals</div>
+            <div class="metric-value" id="signals-value">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Endpoint</div>
+            <div class="metric-value neutral">POST /webhook</div>
+          </div>
+        </div>
+        <div class="agent-output" id="output-hawkeye"></div>
+      </div>
+
+      <!-- Row 3: Orchestrator -->
+      <div class="agent-card fury" style="--agent-color: var(--accent-purple);" id="card-fury">
+        <div class="agent-header">
+          <div class="agent-avatar">👁️</div>
+          <div class="agent-info">
+            <h3>NICK FURY</h3>
+            <div class="role">Orchestrator — The One Who Assembles</div>
+          </div>
+          <span class="agent-status-badge online" id="status-fury">ONLINE</span>
+        </div>
+        <div class="agent-quote">"I'm here because we need you. The world needs the Avengers."</div>
+        <div class="agent-metrics">
+          <div class="metric">
+            <div class="metric-label">Agents</div>
+            <div class="metric-value neutral">6 Active</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Pairs</div>
+            <div class="metric-value">BTCUSD ETHUSD SOLUSD EURUSD XAUUSD USDCAD</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Last Briefing</div>
+            <div class="metric-value" id="lastBriefing">Never</div>
+          </div>
+        </div>
+        <div class="agent-output" id="output-fury" style="max-height: 60px;"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SIDEBAR (Right) -->
+  <aside class="sidebar">
+
+    <!-- Live Activity Feed -->
+    <div class="panel">
+      <div class="panel-title"><span class="icon">📡</span> LIVE ACTIVITY</div>
+      <div class="activity-feed" id="activityFeed"></div>
+    </div>
+
+    <!-- Market Tickers -->
+    <div class="panel">
+      <div class="panel-title"><span class="icon">📊</span> MARKET WATCH</div>
+      <div class="ticker-strip" id="tickerStrip"></div>
+    </div>
+
+    <!-- System Stats -->
+    <div class="panel">
+      <div class="panel-title"><span class="icon">⚙️</span> SYSTEM</div>
+      <div class="sys-stats">
+        <div class="sys-stat">
+          <div class="val" style="color: var(--accent-green);" id="agentsOnline">6</div>
+          <div class="label">Agents Online</div>
+        </div>
+        <div class="sys-stat">
+          <div class="val" style="color: var(--accent-cyan);" id="signalsToday">0</div>
+          <div class="label">Signals Today</div>
+        </div>
+        <div class="sys-stat">
+          <div class="val" style="color: var(--accent-purple);" id="briefingsRun">0</div>
+          <div class="label">Briefings Run</div>
+        </div>
+        <div class="sys-stat">
+          <div class="val" style="color: var(--accent-orange);" id="uptime">00:00</div>
+          <div class="label">Uptime</div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+</main>
+
+<!-- Briefing Modal -->
+<div class="briefing-overlay" id="briefingOverlay">
+  <div class="briefing-modal">
+    <h2>🔒 FURY'S BRIEFING</h2>
+    <div class="briefing-output" id="briefingOutput"></div>
+    <button class="briefing-close" onclick="closeBriefing()">DISMISS</button>
+  </div>
+</div>
+
+<script>
+// ===== PARTICLES =====
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+let particles = [];
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+class Particle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height;
+    this.size = Math.random() * 1.5 + 0.5;
+    this.speedX = (Math.random() - 0.5) * 0.3;
+    this.speedY = (Math.random() - 0.5) * 0.3;
+    this.opacity = Math.random() * 0.3 + 0.1;
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(74, 108, 247, ${this.opacity})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 80; i++) particles.push(new Particle());
+
+function animateParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => { p.update(); p.draw(); });
+
+  // Draw connections
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120) {
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        ctx.strokeStyle = `rgba(74, 108, 247, ${0.05 * (1 - dist / 120)})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+  requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
+// ===== CLOCK =====
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clockDisplay').textContent =
+    now.toUTCString().split(' ').slice(4, 5).join('') + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ===== MARKET TICKERS (simulated) =====
+const tickers = [
+  { symbol: 'BTCUSD', base: 80660, vol: 500 },
+  { symbol: 'ETHUSD', base: 2302, vol: 30 },
+  { symbol: 'SOLUSD', base: 95.20, vol: 2.5 },
+  { symbol: 'EURUSD', base: 1.1703, vol: 0.003 },
+  { symbol: 'XAUUSD', base: 4721, vol: 20 },
+  { symbol: 'USDCAD', base: 1.3700, vol: 0.003 },
+];
+
+let tickerPrices = tickers.map(t => ({
+  ...t,
+  price: t.base,
+  change: 0,
+}));
+
+function updateTickers() {
+  const strip = document.getElementById('tickerStrip');
+  strip.innerHTML = '';
+  tickerPrices.forEach(t => {
+    const delta = (Math.random() - 0.48) * t.vol * 0.05;
+    t.price += delta;
+    t.change = ((t.price - t.base) / t.base * 100);
+    const isUp = t.change >= 0;
+    const prec = t.base < 10 ? 4 : t.base < 1000 ? 2 : 0;
+    strip.innerHTML += `
+      <div class="ticker-row">
+        <span class="ticker-symbol">${t.symbol}</span>
+        <span class="ticker-price">${t.price.toFixed(prec)}</span>
+        <span class="ticker-change ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${t.change.toFixed(2)}%</span>
+      </div>`;
+  });
+}
+setInterval(updateTickers, 2000);
+updateTickers();
+
+// ===== ACTIVITY FEED =====
+const feedEl = document.getElementById('activityFeed');
+let activityCount = 0;
+
+const activityTemplates = [
+  { emoji: '🦾', agent: 'Iron Man', msgs: ['Scanned BTCUSD 1H — EMA crossover detected', 'RSI divergence on ETHUSD 4H', 'Bollinger squeeze forming on SOLUSD', 'MACD histogram flip on EURUSD Daily', 'ATR expansion detected across crypto pairs'] },
+  { emoji: '🛡️', agent: 'Captain America', msgs: ['FOMC minutes release in 3 days', 'ECB rate decision approaching', 'NFP data shows labor strength', 'BOJ policy unchanged — JPY steady', 'Fed funds futures pricing 2 cuts'] },
+  { emoji: '🔮', agent: 'Scarlet Witch', msgs: ['Fear & Greed Index: 72 (Greed)', 'Social volume spike on BTC', 'Put/Call ratio declining — bullish shift', 'Whale accumulation detected on-chain', 'Retail sentiment flipping bearish'] },
+  { emoji: '⚡', agent: 'Thor', msgs: ['BTC-ETH correlation: 0.89 (normal)', 'DXY weakening — risk-on signal', 'Gold-Dollar divergence widening', 'VIX below 15 — complacency zone', 'SOL decoupling from BTC detected'] },
+  { emoji: '🕷️', agent: 'Black Widow', msgs: ['Trade idea generated: LONG BTCUSD +6 confluence', 'EURUSD SHORT setup — 3 confirmations', 'No high-conviction setups on XAUUSD', 'SOLUSD breakout play — risk:reward 1:2.4', 'Filtering signals through confluence matrix'] },
+  { emoji: '🏹', agent: 'Hawkeye', msgs: ['Webhook receiver active on :5000', 'TradingView alert processed: BUY BTCUSD', 'Signal logged to trade journal', 'Pine Script alert forwarded to Telegram', 'Monitoring 6 active alert conditions'] },
+  { emoji: '👁️', agent: 'Nick Fury', msgs: ['Assembling morning briefing...', 'All agents reporting — systems nominal', 'Dispatching analysis to Telegram', 'Scheduling next scan cycle', 'Avengers assembled — briefing complete'] },
+];
+
+function addActivity() {
+  const template = activityTemplates[Math.floor(Math.random() * activityTemplates.length)];
+  const msg = template.msgs[Math.floor(Math.random() * template.msgs.length)];
+  const now = new Date();
+  const time = now.toTimeString().slice(0, 8);
+
+  const item = document.createElement('div');
+  item.className = 'activity-item';
+  item.innerHTML = `
+    <span class="emoji">${template.emoji}</span>
+    <div>
+      <div class="time">${time}</div>
+      <div class="msg"><span class="agent-name">${template.agent}</span> — ${msg}</div>
+    </div>`;
+
+  feedEl.insertBefore(item, feedEl.firstChild);
+  activityCount++;
+
+  // Keep only last 30
+  while (feedEl.children.length > 30) feedEl.removeChild(feedEl.lastChild);
+}
+
+// Initial burst
+for (let i = 0; i < 5; i++) setTimeout(() => addActivity(), i * 300);
+setInterval(addActivity, 4000 + Math.random() * 3000);
+
+// ===== AGENT OUTPUT SIMULATION =====
+const agentLogs = {
+  'ironman': ['Fetching BTCUSD candles...', 'Computing EMA(9,21,50,200)...', 'RSI(14) = 62.4', 'MACD: bullish crossover', 'Support @ 103,800 | Resistance @ 105,200', 'Confluence score: +4'],
+  'captain': ['Loading economic calendar...', '3 high-impact events this week', 'FOMC: May 14 — rate hold expected', 'ECB: dovish tone emerging', 'Macro bias: slightly bullish USD'],
+  'scarlet': ['Querying Fear & Greed API...', 'Index: 72 — Greed', 'BTC social volume: +23% 24h', 'ETH options: calls dominating', 'Sentiment aggregate: BULLISH'],
+  'thor': ['Opening Bifrost to 8 realms...', 'BTC-ETH corr: 0.89', 'DXY trending BEARISH', 'Gold-DXY inverse: -0.63', 'No major realm fractures', 'Risk-ON bias confirmed'],
+  'widow': ['Ingesting 4 intel streams...', 'Scoring confluence matrix...', 'BTCUSD: +6 (STRONG BUY)', 'EURUSD: -3 (MILD SELL)', 'SOLUSD: +4 (BUY)', '3 trade ideas generated'],
+  'hawkeye': ['Webhook server listening...', 'POST /webhook ready', 'GET /health — 200 OK', 'Awaiting TradingView alerts...', '0 signals received today'],
+  'fury': ['Assembling the Avengers...', 'Iron Man: ✓ reporting', 'Captain America: ✓ reporting', 'Scarlet Witch: ✓ reporting', 'Thor: ✓ reporting', 'Black Widow: ✓ reporting', 'Hawkeye: ✓ reporting', 'All agents assembled.'],
+};
+
+function simulateAgentOutput(agentId, logs) {
+  const el = document.getElementById(`output-${agentId}`);
+  if (!el) return;
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= logs.length) { clearInterval(interval); return; }
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    const time = new Date().toTimeString().slice(0, 8);
+    line.innerHTML = `<span class="log-time">${time}</span> <span class="log-msg">${logs[i]}</span>`;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+    i++;
+  }, 600 + Math.random() * 400);
+}
+
+// Start initial output
+setTimeout(() => {
+  Object.keys(agentLogs).forEach((id, idx) => {
+    setTimeout(() => simulateAgentOutput(id, agentLogs[id]), idx * 800);
+  });
+}, 1000);
+
+// ===== RUN BRIEFING =====
+let briefingsRun = 0;
+let isRunning = false;
+
+function runBriefing() {
+  if (isRunning) return;
+  isRunning = true;
+
+  const btn = document.getElementById('runBtn');
+  btn.textContent = '⟳ ASSEMBLING...';
+  btn.classList.add('running');
+
+  const globalDot = document.getElementById('globalStatus');
+  const globalText = document.getElementById('globalStatusText');
+  globalDot.className = 'status-dot scanning';
+  globalText.textContent = 'ASSEMBLING';
+
+  // Light up agents sequentially
+  const agents = ['ironman', 'captain', 'scarlet', 'thor', 'widow', 'hawkeye', 'fury'];
+  const statuses = ['scanning', 'scanning', 'scanning', 'scanning', 'scanning', 'scanning', 'scanning'];
+
+  agents.forEach((agent, idx) => {
+    setTimeout(() => {
+      const card = document.getElementById(`card-${agent === 'captain' ? 'captain' : agent === 'scarlet' ? 'scarlet' : agent === 'widow' ? 'widow' : agent}`);
+      const badge = document.getElementById(`status-${agent === 'captain' ? 'captain' : agent === 'scarlet' ? 'scarlet' : agent === 'widow' ? 'widow' : agent}`);
+      if (card) card.classList.add('active');
+      if (badge) { badge.textContent = 'SCANNING'; badge.className = 'agent-status-badge scanning'; }
+
+      // Clear and replay logs
+      const outputEl = document.getElementById(`output-${agent}`);
+      if (outputEl) outputEl.innerHTML = '';
+      simulateAgentOutput(agent, agentLogs[agent]);
+
+      // Add activity
+      addActivity();
+    }, idx * 1200);
+  });
+
+  // Finish
+  setTimeout(() => {
+    agents.forEach(agent => {
+      const card = document.getElementById(`card-${agent === 'captain' ? 'captain' : agent === 'scarlet' ? 'scarlet' : agent === 'widow' ? 'widow' : agent}`);
+      const badge = document.getElementById(`status-${agent === 'captain' ? 'captain' : agent === 'scarlet' ? 'scarlet' : agent === 'widow' ? 'widow' : agent}`);
+      if (card) card.classList.remove('active');
+      if (badge) { badge.textContent = 'ONLINE'; badge.className = 'agent-status-badge online'; }
+    });
+
+    btn.textContent = '▶ ASSEMBLE';
+    btn.classList.remove('running');
+    globalDot.className = 'status-dot';
+    globalText.textContent = 'SYSTEMS ONLINE';
+    isRunning = false;
+    briefingsRun++;
+    document.getElementById('briefingsRun').textContent = briefingsRun;
+    document.getElementById('lastBriefing').textContent = new Date().toTimeString().slice(0, 8) + ' UTC';
+
+    // Update dynamic values
+    document.getElementById('fgi-value').textContent = '72 Greed';
+    document.getElementById('fgi-value').classList.add('positive');
+    document.getElementById('momentum-value').textContent = 'Bullish';
+    document.getElementById('momentum-value').classList.add('positive');
+    document.getElementById('dxy-value').textContent = 'Bearish';
+    document.getElementById('dxy-value').classList.add('negative');
+    document.getElementById('ideas-value').textContent = '3 Active';
+    document.getElementById('ideas-value').classList.add('positive');
+    document.getElementById('signals-value').textContent = Math.floor(Math.random() * 5);
+    document.getElementById('signalsToday').textContent = Math.floor(Math.random() * 12);
+  }, agents.length * 1200 + 2000);
+}
+
+// ===== BRIEFING MODAL =====
+function closeBriefing() {
+  document.getElementById('briefingOverlay').classList.remove('visible');
+}
+
+// ===== UPTIME =====
+const startTime = Date.now();
+function updateUptime() {
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+  const s = (elapsed % 60).toString().padStart(2, '0');
+  document.getElementById('uptime').textContent = `${m}:${s}`;
+}
+setInterval(updateUptime, 1000);
+
+// ===== AUTO-RUN on load =====
+setTimeout(() => runBriefing(), 2000);
+</script>
+
+</body>
+</html>

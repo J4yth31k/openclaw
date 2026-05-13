@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw — Avengers Command Center</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#080810;--bg2:#0c0c16;--bg3:#10101c;--card:rgba(14,14,24,0.92);
+  --border:rgba(74,108,247,0.12);--text:#e0e0f0;--dim:#555570;--muted:#888aa;
+  --blue:#4a6cf7;--purple:#7c3aed;--cyan:#06b6d4;--green:#10b981;
+  --red:#ef4444;--orange:#f59e0b;--pink:#ec4899;--yellow:#eab308;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow-x:hidden;}
+::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+/* GRID BG */
+.gridbg{position:fixed;inset:0;background-image:linear-gradient(rgba(74,108,247,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(74,108,247,0.025) 1px,transparent 1px);background-size:50px 50px;z-index:0;pointer-events:none;}
+
+/* HEADER */
+.hdr{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:rgba(8,8,16,0.9);backdrop-filter:blur(16px);}
+.logo-area{display:flex;align-items:center;gap:12px;}
+.logo-box{width:38px;height:38px;background:linear-gradient(135deg,var(--blue),var(--purple));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 20px rgba(74,108,247,0.3);}
+.logo-t{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;letter-spacing:3px;background:linear-gradient(90deg,var(--blue),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.logo-sub{font-size:10px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;}
+.hdr-right{display:flex;align-items:center;gap:18px;}
+.hdr-clock{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);}
+.hdr-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;animation:dp 2s infinite;margin-right:6px;}
+@keyframes dp{0%,100%{opacity:1;box-shadow:0 0 4px var(--green);}50%{opacity:.4;box-shadow:0 0 10px var(--green);}}
+.btn{font-family:'Orbitron',monospace;font-size:11px;font-weight:600;letter-spacing:2px;padding:8px 18px;border:1px solid var(--blue);background:rgba(74,108,247,0.08);color:var(--blue);border-radius:8px;cursor:pointer;transition:all .3s;}
+.btn:hover{background:rgba(74,108,247,0.2);box-shadow:0 0 16px rgba(74,108,247,0.2);}
+.btn.active{border-color:var(--green);color:var(--green);background:rgba(16,185,129,0.08);animation:bp 1.5s infinite;}
+@keyframes bp{0%,100%{box-shadow:0 0 8px rgba(16,185,129,0.15);}50%{box-shadow:0 0 20px rgba(16,185,129,0.3);}}
+
+/* LAYOUT */
+.layout{display:grid;grid-template-columns:1fr 340px;grid-template-rows:auto auto auto;gap:16px;padding:16px 24px;position:relative;z-index:1;}
+
+/* ====== SIGNAL BANNER ====== */
+.signal-banner{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:14px 20px;border-radius:14px;border:1px solid var(--border);background:var(--card);backdrop-filter:blur(10px);}
+.signal-badge{font-family:'Orbitron',monospace;font-size:18px;font-weight:800;letter-spacing:2px;padding:8px 20px;border-radius:10px;text-transform:uppercase;}
+.signal-badge.buy{color:var(--green);background:rgba(16,185,129,0.1);border:2px solid rgba(16,185,129,0.3);text-shadow:0 0 20px rgba(16,185,129,0.4);}
+.signal-badge.sell{color:var(--red);background:rgba(239,68,68,0.1);border:2px solid rgba(239,68,68,0.3);text-shadow:0 0 20px rgba(239,68,68,0.4);}
+.signal-badge.neutral{color:var(--orange);background:rgba(245,158,11,0.1);border:2px solid rgba(245,158,11,0.3);}
+.signal-meta{flex:1;}
+.signal-meta h2{font-family:'Orbitron',monospace;font-size:14px;letter-spacing:1px;}
+.signal-meta p{font-size:12px;color:var(--dim);margin-top:4px;}
+.signal-conf{text-align:right;}
+.signal-conf .score{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;}
+.signal-conf .label{font-size:10px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;}
+
+/* ====== CHART ====== */
+.chart-panel{grid-column:1;border-radius:14px;border:1px solid var(--border);background:var(--card);overflow:hidden;}
+.chart-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);}
+.chart-title{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--dim);}
+.chart-pair-tabs{display:flex;gap:6px;}
+.pair-tab{font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.03);color:var(--dim);cursor:pointer;border:1px solid transparent;transition:all .2s;}
+.pair-tab.active{color:var(--cyan);border-color:rgba(6,182,212,0.3);background:rgba(6,182,212,0.08);}
+.pair-tab:hover{color:var(--text);background:rgba(255,255,255,0.05);}
+.chart-canvas-wrap{position:relative;height:360px;}
+.chart-canvas-wrap canvas{width:100%;height:100%;}
+
+/* ====== SESSION CLOCK ====== */
+.session-panel{grid-column:2;grid-row:2/4;display:flex;flex-direction:column;gap:16px;}
+.panel{border-radius:14px;border:1px solid var(--border);background:var(--card);padding:16px;backdrop-filter:blur(10px);}
+.panel-title{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.panel-title .ico{font-size:14px;}
+
+.session-row{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;margin-bottom:6px;transition:all .3s;}
+.session-row.active{background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);}
+.session-row.inactive{background:rgba(255,255,255,0.02);border:1px solid transparent;opacity:.5;}
+.session-name{font-family:'Orbitron',monospace;font-size:11px;font-weight:600;letter-spacing:1px;}
+.session-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);}
+.session-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.session-dot.on{background:var(--green);box-shadow:0 0 8px var(--green);}
+.session-dot.off{background:var(--dim);}
+.session-verdict{margin-top:10px;padding:10px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6;text-align:center;}
+.session-verdict.go{background:rgba(16,185,129,0.08);color:var(--green);border:1px solid rgba(16,185,129,0.2);}
+.session-verdict.wait{background:rgba(245,158,11,0.08);color:var(--orange);border:1px solid rgba(245,158,11,0.2);}
+.session-verdict.no{background:rgba(239,68,68,0.08);color:var(--red);border:1px solid rgba(239,68,68,0.2);}
+
+/* ====== AGENTS MINI ====== */
+.agents-row{grid-column:1;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.agent-mini{border-radius:12px;border:1px solid var(--border);background:var(--card);padding:12px;cursor:pointer;transition:all .3s;position:relative;overflow:hidden;}
+.agent-mini::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ac);opacity:.5;}
+.agent-mini:hover{border-color:var(--ac);transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,0.3);}
+.agent-mini.expanded{grid-column:1/-1;}
+.am-hdr{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.am-emo{font-size:18px;}
+.am-name{font-family:'Orbitron',monospace;font-size:10px;font-weight:600;letter-spacing:1px;color:var(--ac);}
+.am-role{font-size:10px;color:var(--dim);}
+.am-status{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--green);}
+.am-summary{font-family:'JetBrains Mono',monospace;font-size:10px;color:#7778;line-height:1.5;margin-top:6px;}
+.am-report{display:none;margin-top:10px;padding:12px;background:rgba(0,0,0,0.3);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.7;color:#99a;max-height:250px;overflow-y:auto;white-space:pre-wrap;}
+.am-report.visible{display:block;}
+.am-report .rpt-h{color:var(--ac);font-weight:600;font-size:12px;}
+.am-report .buy{color:var(--green);}
+.am-report .sell{color:var(--red);}
+.am-report .warn{color:var(--orange);}
+.am-report .info{color:var(--cyan);}
+
+/* ====== TRADE IDEAS ====== */
+.ideas-panel{grid-column:1/-1;}
+.ideas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
+.idea-card{padding:14px;border-radius:10px;border:1px solid var(--border);background:rgba(0,0,0,0.2);transition:all .3s;}
+.idea-card:hover{border-color:var(--border);background:rgba(0,0,0,0.3);}
+.idea-hdr{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.idea-dir{font-family:'Orbitron',monospace;font-size:13px;font-weight:800;letter-spacing:1px;padding:4px 12px;border-radius:6px;}
+.idea-dir.long{color:var(--green);background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);}
+.idea-dir.short{color:var(--red);background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);}
+.idea-pair{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;}
+.idea-score{margin-left:auto;font-family:'Orbitron',monospace;font-size:16px;font-weight:900;}
+.idea-details{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.idea-d{text-align:center;}
+.idea-d .lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;}
+.idea-d .val{font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:2px;}
+
+/* ====== ACTIVITY FEED ====== */
+.feed-item{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:6px;margin-bottom:4px;font-size:11px;opacity:0;animation:fi .3s forwards;}
+@keyframes fi{to{opacity:1;}}
+.feed-item .emo{font-size:14px;flex-shrink:0;}
+.feed-item .tm{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);white-space:nowrap;}
+.feed-item .msg{color:#99a;line-height:1.3;}
+
+/* RESPONSIVE */
+@media(max-width:1100px){.layout{grid-template-columns:1fr;}.session-panel{grid-column:1;grid-row:auto;}.agents-row{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:600px){.agents-row{grid-template-columns:1fr;}.ideas-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="gridbg"></div>
+
+<!-- HEADER -->
+<header class="hdr">
+  <div class="logo-area">
+    <div class="logo-box">🐾</div>
+    <div><div class="logo-t">OPENCLAW</div><div class="logo-sub">Avengers Command Center</div></div>
+  </div>
+  <div class="hdr-right">
+    <span class="hdr-clock" id="clock">--:--:-- UTC</span>
+    <span style="font-size:12px;color:var(--dim);"><span class="hdr-dot"></span>ALL SYSTEMS ONLINE</span>
+    <button class="btn" id="assembleBtn" onclick="runAssemble()">▶ ASSEMBLE</button>
+  </div>
+</header>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIGNAL BANNER -->
+  <div class="signal-banner" id="signalBanner">
+    <div class="signal-badge neutral" id="signalBadge">SCANNING...</div>
+    <div class="signal-meta">
+      <h2 id="signalTitle">Awaiting Avengers Briefing</h2>
+      <p id="signalSub">Click ASSEMBLE to run full analysis pipeline</p>
+    </div>
+    <div class="signal-conf">
+      <div class="score" id="confScore" style="color:var(--dim);">--</div>
+      <div class="label">Confluence Score</div>
+    </div>
+  </div>
+
+  <!-- CHART -->
+  <div class="chart-panel">
+    <div class="chart-hdr">
+      <div class="chart-title">📊 PRICE ACTION + SIGNALS</div>
+      <div class="chart-pair-tabs" id="pairTabs"></div>
+    </div>
+    <div class="chart-canvas-wrap">
+      <canvas id="chartCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- SESSION CLOCK + SIDEBAR -->
+  <div class="session-panel">
+
+    <!-- Trading Sessions -->
+    <div class="panel">
+      <div class="panel-title"><span class="ico">🕐</span> TRADING SESSIONS</div>
+      <div id="sessions"></div>
+      <div class="session-verdict" id="sessionVerdict">Loading...</div>
+    </div>
+
+    <!-- Activity Feed -->
+    <div class="panel" style="flex:1;overflow:hidden;">
+      <div class="panel-title"><span class="ico">📡</span> LIVE FEED</div>
+      <div id="feed" style="max-height:220px;overflow-y:auto;"></div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="panel">
+      <div class="panel-title"><span class="ico">⚡</span> QUICK STATS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="text-align:center;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:var(--green);" id="qBuys">0</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;">Buy Signals</div>
+        </div>
+        <div style="text-align:center;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:var(--red);" id="qSells">0</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;">Sell Signals</div>
+        </div>
+        <div style="text-align:center;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:var(--cyan);" id="qFGI">--</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;">Fear & Greed</div>
+        </div>
+        <div style="text-align:center;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:var(--purple);" id="qIdeas">--</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;">Trade Ideas</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AGENT CARDS (expandable) -->
+  <div class="agents-row" id="agentsRow"></div>
+
+  <!-- TRADE IDEAS -->
+  <div class="ideas-panel panel">
+    <div class="panel-title"><span class="ico">🕷️</span> BLACK WIDOW'S TRADE IDEAS</div>
+    <div class="ideas-grid" id="ideasGrid">
+      <div style="color:var(--dim);font-size:12px;padding:20px;text-align:center;">Run ASSEMBLE to generate trade ideas...</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===================================================================
+// DATA & STATE
+// ===================================================================
+const PAIRS = ['BTCUSD','ETHUSD','SOLUSD','EURUSD','XAUUSD','USDCAD'];
+let activePair = 'BTCUSD';
+let assembled = false;
+
+const PAIR_CONFIG = {
+  BTCUSD: {base:80660,vol:500,pip:1,digits:0},
+  ETHUSD: {base:2302,vol:30,pip:0.01,digits:2},
+  SOLUSD: {base:95.20,vol:2.5,pip:0.01,digits:2},
+  EURUSD: {base:1.1703,vol:0.0030,pip:0.0001,digits:4},
+  XAUUSD: {base:4721,vol:20,pip:0.01,digits:2},
+  USDCAD: {base:1.3700,vol:0.002,pip:0.0001,digits:4},
+};
+
+// Generate candlestick data for each pair
+let chartData = {};
+PAIRS.forEach(pair => {
+  const cfg = PAIR_CONFIG[pair];
+  const candles = [];
+  let price = cfg.base;
+  for (let i = 0; i < 80; i++) {
+    const open = price;
+    const change = (Math.random() - 0.48) * cfg.vol * 0.15;
+    const high = open + Math.abs(change) + Math.random() * cfg.vol * 0.05;
+    const low = open - Math.abs(change) - Math.random() * cfg.vol * 0.05;
+    const close = open + change;
+    candles.push({open, high, low, close, time: Date.now() - (80 - i) * 3600000});
+    price = close;
+  }
+  chartData[pair] = candles;
+});
+
+// Generate signals per pair
+let signals = {};
+PAIRS.forEach(pair => {
+  const candles = chartData[pair];
+  const sigs = [];
+  // Place some buy/sell signals
+  for (let i = 15; i < candles.length; i += Math.floor(8 + Math.random() * 12)) {
+    const type = Math.random() > 0.45 ? 'BUY' : 'SELL';
+    const reasons = type === 'BUY'
+      ? ['EMA crossover','RSI oversold bounce','MACD bullish cross','Support bounce','Bullish engulfing']
+      : ['EMA death cross','RSI overbought','MACD bearish cross','Resistance rejection','Bearish engulfing'];
+    sigs.push({
+      index: i,
+      type,
+      price: type === 'BUY' ? candles[i].low : candles[i].high,
+      reason: reasons[Math.floor(Math.random() * reasons.length)],
+      confluence: Math.floor(Math.random() * 4) + 3,
+    });
+  }
+  signals[pair] = sigs;
+});
+
+// ===================================================================
+// CLOCK
+// ===================================================================
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toUTCString().split(' ')[4] + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ===================================================================
+// TRADING SESSIONS
+// ===================================================================
+const SESSIONS = [
+  {name:'SYDNEY',start:21,end:6,color:'var(--cyan)',pairs:'AUD, NZD'},
+  {name:'TOKYO',start:0,end:9,color:'var(--pink)',pairs:'JPY, AUD'},
+  {name:'LONDON',start:7,end:16,color:'var(--blue)',pairs:'EUR, GBP, CHF'},
+  {name:'NEW YORK',start:13,end:22,color:'var(--green)',pairs:'USD, CAD'},
+];
+
+const OVERLAP_WINDOWS = [
+  {name:'London + Tokyo',start:7,end:9,quality:'GOOD'},
+  {name:'London + New York',start:13,end:16,quality:'BEST'},
+  {name:'Sydney + Tokyo',start:0,end:6,quality:'OK'},
+];
+
+// Kill zones (best scalping windows)
+const KILL_ZONES = [
+  {name:'London Open Kill Zone',start:7,end:10,quality:'HIGH'},
+  {name:'NY Open Kill Zone',start:13,end:16,quality:'HIGH'},
+  {name:'London Close',start:15,end:17,quality:'MEDIUM'},
+  {name:'Asian Session',start:0,end:5,quality:'LOW'},
+];
+
+function updateSessions() {
+  const now = new Date();
+  const utcH = now.getUTCHours();
+  const container = document.getElementById('sessions');
+  container.innerHTML = '';
+
+  let activeSessions = [];
+
+  SESSIONS.forEach(s => {
+    let isActive;
+    if (s.start < s.end) isActive = utcH >= s.start && utcH < s.end;
+    else isActive = utcH >= s.start || utcH < s.end;
+    if (isActive) activeSessions.push(s.name);
+
+    container.innerHTML += `
+      <div class="session-row ${isActive ? 'active' : 'inactive'}">
+        <div class="session-dot ${isActive ? 'on' : 'off'}"></div>
+        <div>
+          <div class="session-name" style="color:${s.color}">${s.name}</div>
+          <div class="session-time">${s.start}:00–${s.end}:00 UTC · ${s.pairs}</div>
+        </div>
+      </div>`;
+  });
+
+  // Determine trading verdict
+  const verdict = document.getElementById('sessionVerdict');
+  let currentKZ = KILL_ZONES.find(kz => {
+    if (kz.start < kz.end) return utcH >= kz.start && utcH < kz.end;
+    return utcH >= kz.start || utcH < kz.end;
+  });
+
+  let overlap = OVERLAP_WINDOWS.find(o => {
+    if (o.start < o.end) return utcH >= o.start && utcH < o.end;
+    return utcH >= o.start || utcH < o.end;
+  });
+
+  if (currentKZ && currentKZ.quality === 'HIGH') {
+    verdict.className = 'session-verdict go';
+    verdict.innerHTML = `🟢 <b>${currentKZ.name}</b><br>PRIME SCALPING WINDOW — GO`;
+  } else if (overlap && overlap.quality === 'BEST') {
+    verdict.className = 'session-verdict go';
+    verdict.innerHTML = `🟢 <b>${overlap.name} Overlap</b><br>HIGH LIQUIDITY — TRADE NOW`;
+  } else if (currentKZ && currentKZ.quality === 'MEDIUM') {
+    verdict.className = 'session-verdict wait';
+    verdict.innerHTML = `🟡 <b>${currentKZ.name}</b><br>MODERATE — TRADE WITH CAUTION`;
+  } else if (activeSessions.length === 0) {
+    verdict.className = 'session-verdict no';
+    verdict.innerHTML = `🔴 NO SESSIONS ACTIVE<br>MARKETS THIN — SIT ON HANDS`;
+  } else if (currentKZ && currentKZ.quality === 'LOW') {
+    verdict.className = 'session-verdict wait';
+    verdict.innerHTML = `🟡 <b>Asian Session</b><br>LOW VOLATILITY — RANGE TRADING ONLY`;
+  } else {
+    verdict.className = 'session-verdict wait';
+    verdict.innerHTML = `🟡 ${activeSessions.join(' + ')} ACTIVE<br>WAIT FOR KILL ZONE`;
+  }
+}
+updateSessions();
+setInterval(updateSessions, 30000);
+
+// ===================================================================
+// PAIR TABS
+// ===================================================================
+function renderPairTabs() {
+  const container = document.getElementById('pairTabs');
+  container.innerHTML = PAIRS.map(p =>
+    `<div class="pair-tab ${p === activePair ? 'active' : ''}" onclick="switchPair('${p}')">${p}</div>`
+  ).join('');
+}
+renderPairTabs();
+
+function switchPair(pair) {
+  activePair = pair;
+  renderPairTabs();
+  drawChart();
+}
+
+// ===================================================================
+// CHART (Candlestick + Signals)
+// ===================================================================
+const chartCanvas = document.getElementById('chartCanvas');
+const cctx = chartCanvas.getContext('2d');
+
+function drawChart() {
+  const wrap = chartCanvas.parentElement;
+  chartCanvas.width = wrap.clientWidth * 2;
+  chartCanvas.height = wrap.clientHeight * 2;
+  cctx.scale(2, 2);
+  const W = wrap.clientWidth;
+  const H = wrap.clientHeight;
+
+  cctx.fillStyle = '#080810';
+  cctx.fillRect(0, 0, W, H);
+
+  const candles = chartData[activePair];
+  const sigs = signals[activePair];
+  const cfg = PAIR_CONFIG[activePair];
+  const padL = 60, padR = 20, padT = 20, padB = 30;
+  const cw = (W - padL - padR) / candles.length;
+  const allPrices = candles.flatMap(c => [c.high, c.low]);
+  const minP = Math.min(...allPrices);
+  const maxP = Math.max(...allPrices);
+  const range = maxP - minP || 1;
+
+  function yPos(price) { return padT + (1 - (price - minP) / range) * (H - padT - padB); }
+
+  // Grid lines
+  cctx.strokeStyle = 'rgba(74,108,247,0.06)';
+  cctx.lineWidth = 0.5;
+  const gridSteps = 6;
+  for (let i = 0; i <= gridSteps; i++) {
+    const p = minP + (range * i / gridSteps);
+    const y = yPos(p);
+    cctx.beginPath(); cctx.moveTo(padL, y); cctx.lineTo(W - padR, y); cctx.stroke();
+    cctx.fillStyle = '#445';
+    cctx.font = '9px JetBrains Mono, monospace';
+    cctx.textAlign = 'right';
+    cctx.fillText(p.toFixed(cfg.digits), padL - 4, y + 3);
+  }
+
+  // EMA lines (simulated)
+  function ema(data, period) {
+    const k = 2 / (period + 1);
+    let result = [data[0]];
+    for (let i = 1; i < data.length; i++) result.push(data[i] * k + result[i-1] * (1-k));
+    return result;
+  }
+  const closes = candles.map(c => c.close);
+  const ema9 = ema(closes, 9);
+  const ema21 = ema(closes, 21);
+  const ema50 = ema(closes, 50);
+
+  function drawEMA(data, color) {
+    cctx.beginPath();
+    cctx.strokeStyle = color;
+    cctx.lineWidth = 1;
+    data.forEach((v, i) => {
+      const x = padL + i * cw + cw / 2;
+      const y = yPos(v);
+      if (i === 0) cctx.moveTo(x, y); else cctx.lineTo(x, y);
+    });
+    cctx.stroke();
+  }
+  drawEMA(ema9, 'rgba(236,72,153,0.5)');
+  drawEMA(ema21, 'rgba(74,108,247,0.5)');
+  drawEMA(ema50, 'rgba(245,158,11,0.35)');
+
+  // Candles
+  candles.forEach((c, i) => {
+    const x = padL + i * cw;
+    const isGreen = c.close >= c.open;
+    const bodyTop = yPos(Math.max(c.open, c.close));
+    const bodyBot = yPos(Math.min(c.open, c.close));
+    const bodyH = Math.max(1, bodyBot - bodyTop);
+
+    // Wick
+    cctx.strokeStyle = isGreen ? 'rgba(16,185,129,0.6)' : 'rgba(239,68,68,0.6)';
+    cctx.lineWidth = 1;
+    cctx.beginPath();
+    cctx.moveTo(x + cw / 2, yPos(c.high));
+    cctx.lineTo(x + cw / 2, yPos(c.low));
+    cctx.stroke();
+
+    // Body
+    cctx.fillStyle = isGreen ? 'rgba(16,185,129,0.85)' : 'rgba(239,68,68,0.85)';
+    cctx.fillRect(x + 2, bodyTop, cw - 4, bodyH);
+  });
+
+  // Volume bars (subtle)
+  candles.forEach((c, i) => {
+    const vol = Math.abs(c.close - c.open) / cfg.vol * 30;
+    const x = padL + i * cw;
+    const isGreen = c.close >= c.open;
+    cctx.fillStyle = isGreen ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
+    cctx.fillRect(x + 1, H - padB - vol, cw - 2, vol);
+  });
+
+  // BUY / SELL Signals
+  sigs.forEach(s => {
+    const x = padL + s.index * cw + cw / 2;
+    const y = yPos(s.price);
+    const isBuy = s.type === 'BUY';
+
+    // Arrow
+    cctx.beginPath();
+    if (isBuy) {
+      cctx.moveTo(x, y + 8);
+      cctx.lineTo(x - 6, y + 18);
+      cctx.lineTo(x + 6, y + 18);
+    } else {
+      cctx.moveTo(x, y - 8);
+      cctx.lineTo(x - 6, y - 18);
+      cctx.lineTo(x + 6, y - 18);
+    }
+    cctx.closePath();
+    cctx.fillStyle = isBuy ? 'rgba(16,185,129,0.9)' : 'rgba(239,68,68,0.9)';
+    cctx.fill();
+
+    // Glow
+    cctx.beginPath();
+    cctx.arc(x, y, 12, 0, Math.PI * 2);
+    const glow = cctx.createRadialGradient(x, y, 2, x, y, 12);
+    glow.addColorStop(0, (isBuy ? 'rgba(16,185,129,' : 'rgba(239,68,68,') + '0.15)');
+    glow.addColorStop(1, (isBuy ? 'rgba(16,185,129,' : 'rgba(239,68,68,') + '0)');
+    cctx.fillStyle = glow;
+    cctx.fill();
+
+    // Label
+    cctx.font = 'bold 8px Orbitron, monospace';
+    cctx.fillStyle = isBuy ? '#10b981' : '#ef4444';
+    cctx.textAlign = 'center';
+    cctx.fillText(s.type, x, isBuy ? y + 28 : y - 22);
+    cctx.font = '7px JetBrains Mono, monospace';
+    cctx.fillStyle = '#667';
+    cctx.fillText(s.reason, x, isBuy ? y + 36 : y - 30);
+  });
+
+  // Current price line
+  const lastPrice = candles[candles.length - 1].close;
+  const lastY = yPos(lastPrice);
+  cctx.setLineDash([4, 4]);
+  cctx.strokeStyle = 'rgba(6,182,212,0.4)';
+  cctx.lineWidth = 1;
+  cctx.beginPath(); cctx.moveTo(padL, lastY); cctx.lineTo(W - padR, lastY); cctx.stroke();
+  cctx.setLineDash([]);
+
+  // Price label
+  cctx.fillStyle = 'rgba(6,182,212,0.9)';
+  cctx.fillRect(W - padR, lastY - 8, padR, 16);
+  cctx.fillStyle = '#080810';
+  cctx.font = 'bold 9px JetBrains Mono, monospace';
+  cctx.textAlign = 'center';
+  cctx.fillText(lastPrice.toFixed(cfg.digits), W - padR / 2, lastY + 3);
+
+  // EMA Legend
+  cctx.textAlign = 'left';
+  cctx.font = '9px JetBrains Mono, monospace';
+  [[ema9,'EMA 9','rgba(236,72,153,0.7)'],[ema21,'EMA 21','rgba(74,108,247,0.7)'],[ema50,'EMA 50','rgba(245,158,11,0.5)']].forEach(([d,label,c], i) => {
+    const lx = padL + 8 + i * 80;
+    cctx.fillStyle = c;
+    cctx.fillRect(lx, padT + 4, 14, 2);
+    cctx.fillText(label, lx + 18, padT + 8);
+  });
+}
+
+drawChart();
+window.addEventListener('resize', drawChart);
+
+// ===================================================================
+// AGENT CARDS (with expandable reports)
+// ===================================================================
+const AGENT_DATA = [
+  {
+    id:'ironman', emoji:'🦾', name:'IRON MAN', role:'Technical Analysis', color:'var(--red)',
+    summary:'Multi-TF EMA/RSI/MACD/BB scanning across 6 pairs',
+    getReport: (pair) => {
+      const c = chartData[pair];
+      const last = c[c.length-1];
+      const cfg = PAIR_CONFIG[pair];
+      const rsi = 40 + Math.random() * 30;
+      const emaPos = last.close > (c.slice(-9).reduce((s,x)=>s+x.close,0)/9) ? 'ABOVE' : 'BELOW';
+      const macdSig = Math.random() > 0.5 ? 'BULLISH CROSS' : 'BEARISH DIVERGENCE';
+      const bbPos = Math.random() > 0.5 ? 'Upper band squeeze' : 'Walking lower band';
+      return `<span class="rpt-h">━━━ IRON MAN — ${pair} Technical Report ━━━</span>
+
+📍 <b>Current Price:</b> ${last.close.toFixed(cfg.digits)}
+
+<span class="info">EMA Analysis (Daily):</span>
+  EMA 9:  ${(last.close * (1 + (Math.random()-.5)*.002)).toFixed(cfg.digits)}
+  EMA 21: ${(last.close * (1 + (Math.random()-.5)*.004)).toFixed(cfg.digits)}
+  EMA 50: ${(last.close * (1 + (Math.random()-.5)*.008)).toFixed(cfg.digits)}
+  Price is <b>${emaPos}</b> fast EMA → ${emaPos === 'ABOVE' ? '<span class="buy">Bullish bias</span>' : '<span class="sell">Bearish bias</span>'}
+
+<span class="info">RSI(14):</span> ${rsi.toFixed(1)} → ${rsi > 70 ? '<span class="sell">OVERBOUGHT ⚠️</span>' : rsi < 30 ? '<span class="buy">OVERSOLD 🟢</span>' : '<span class="info">Neutral zone</span>'}
+
+<span class="info">MACD(12,26,9):</span> ${macdSig} → ${macdSig.includes('BULL') ? '<span class="buy">Buy signal</span>' : '<span class="sell">Sell signal</span>'}
+
+<span class="info">Bollinger Bands:</span> ${bbPos}
+
+<span class="info">Support:</span> ${(last.close * 0.985).toFixed(cfg.digits)}
+<span class="info">Resistance:</span> ${(last.close * 1.015).toFixed(cfg.digits)}
+
+<span class="info">ATR(14):</span> ${(cfg.vol * 0.08).toFixed(cfg.digits)} → ${cfg.vol * 0.08 > cfg.vol * 0.06 ? '<span class="warn">Elevated volatility</span>' : 'Normal range'}`;
+    }
+  },
+  {
+    id:'captain', emoji:'🛡️', name:'CAPTAIN AMERICA', role:'Fundamental Analysis', color:'var(--blue)',
+    summary:'Economic calendar + central bank policy tracking',
+    getReport: () => {
+      const events = [
+        ['May 14','FOMC Meeting Minutes','USD','HIGH','Rate hold expected — markets pricing 2 cuts by Sep'],
+        ['May 15','ECB Rate Decision','EUR','HIGH','Expected hold at 3.25% — dovish guidance likely'],
+        ['May 16','US Retail Sales','USD','MEDIUM','Consensus +0.3% MoM — consumer resilience test'],
+        ['May 19','BOJ Policy Meeting','JPY','HIGH','No change expected — watch for YCC guidance'],
+        ['May 20','UK CPI','GBP','MEDIUM','Core inflation sticky around 3.8%'],
+      ];
+      let report = `<span class="rpt-h">━━━ CAPTAIN AMERICA — Fundamental Report ━━━</span>
+
+<span class="warn">⚠️ HIGH-IMPACT EVENTS THIS WEEK:</span>
+
+`;
+      events.forEach(([date, event, ccy, impact, note]) => {
+        const impColor = impact === 'HIGH' ? 'sell' : 'warn';
+        report += `📅 <b>${date}</b> — ${event} (${ccy})
+   Impact: <span class="${impColor}">${impact}</span>
+   ${note}
+
+`;
+      });
+      report += `<span class="info">Central Bank Rates:</span>
+  FED: 4.50%  |  ECB: 3.25%  |  BOJ: 0.25%
+  BOC: 3.75%  |  BOE: 4.25%
+
+<span class="warn">📋 MACRO BIAS:</span>
+  USD: <span class="buy">Slightly bullish</span> (hawkish hold)
+  EUR: <span class="sell">Neutral to bearish</span> (dovish ECB)
+  BTC: <span class="buy">Bullish</span> (risk-on, weak DXY)
+
+<b>⚠️ DO NOT TRADE</b> 30min before/after:
+  • FOMC Minutes (May 14 18:00 UTC)
+  • ECB Decision (May 15 12:15 UTC)`;
+      return report;
+    }
+  },
+  {
+    id:'scarlet', emoji:'🔮', name:'SCARLET WITCH', role:'Sentiment Analysis', color:'var(--pink)',
+    summary:'Fear & Greed, social volume, options flow, whale tracking',
+    getReport: () => {
+      const fgi = Math.floor(55 + Math.random() * 25);
+      const fgiLabel = fgi > 75 ? 'Extreme Greed' : fgi > 55 ? 'Greed' : fgi > 45 ? 'Neutral' : 'Fear';
+      return `<span class="rpt-h">━━━ SCARLET WITCH — Sentiment Report ━━━</span>
+
+🔮 <span class="info">Fear & Greed Index:</span> <b>${fgi}</b> — <span class="${fgi > 55 ? 'buy' : 'sell'}">${fgiLabel}</span>
+
+<span class="info">Social Sentiment (24h):</span>
+  BTC: ${'🟢 Bullish'} — social volume +${Math.floor(15+Math.random()*20)}%
+  ETH: ${'🟢 Bullish'} — dev activity trending up
+  SOL: ${'🟡 Mixed'} — meme coin noise distorting signal
+
+<span class="info">Options Flow:</span>
+  BTC Put/Call: ${(0.6 + Math.random() * 0.3).toFixed(2)} → <span class="buy">Calls dominating</span>
+  Max Pain: $${(79000 + Math.random() * 3000).toFixed(0)}
+
+<span class="info">Whale Activity (on-chain):</span>
+  🐳 ${Math.floor(2 + Math.random() * 5)} large BTC transfers detected (>100 BTC)
+  Net flow: <span class="${Math.random() > 0.5 ? 'buy' : 'sell'}">${Math.random() > 0.5 ? 'Exchange outflow (accumulation)' : 'Exchange inflow (distribution)'}</span>
+
+<span class="info">Retail vs Smart Money:</span>
+  Retail: ${Math.random() > 0.5 ? '<span class="buy">Bullish</span>' : '<span class="sell">Bearish</span>'}
+  Smart Money: <span class="buy">Accumulating</span>
+  ${Math.random() > 0.5 ? '<span class="warn">⚠️ Retail/Smart divergence — contrarian signal</span>' : '✅ Aligned — trend continuation likely'}`;
+    }
+  },
+  {
+    id:'thor', emoji:'⚡', name:'THOR', role:'Correlation Tracker', color:'var(--cyan)',
+    summary:'Cross-asset correlation matrix + DXY impact + divergence detection',
+    getReport: () => {
+      return `<span class="rpt-h">━━━ THOR — Bifrost Cross-Realm Report ━━━</span>
+
+<span class="info">30-Day Correlation Matrix:</span>
+  BTC-ETH:  <span class="buy"> 0.${Math.floor(85+Math.random()*8)}</span> (normal)
+  BTC-SOL:  <span class="buy"> 0.${Math.floor(70+Math.random()*12)}</span> (normal)
+  ETH-SOL:  <span class="buy"> 0.${Math.floor(72+Math.random()*10)}</span> (normal)
+  BTC-DXY:  <span class="sell">-0.${Math.floor(30+Math.random()*20)}</span> (inverse)
+  EUR-DXY:  <span class="sell">-0.${Math.floor(60+Math.random()*15)}</span> (strong inverse)
+  GOLD-DXY: <span class="sell">-0.${Math.floor(50+Math.random()*15)}</span> (inverse)
+
+💱 <span class="info">DXY Analysis:</span>
+  Trend: <span class="sell">BEARISH</span> (5-day rolling mean negative)
+  Volatility: ${(0.3 + Math.random() * 0.4).toFixed(2)}%
+  → <span class="buy">Risk-ON signal for crypto & EUR</span>
+
+⚡ <span class="info">Divergences Detected:</span>
+  ${Math.random() > 0.5 ? '<span class="warn">⚠️ SOL decoupling from BTC (corr dropped to 0.58)</span>\n  Potential independent move brewing' : '✅ No major realm fractures — correlations stable'}
+
+📍 <span class="info">Unusual Moves (>2σ):</span>
+  ${Math.random() > 0.6 ? '<span class="warn">GOLD +1.2% — z-score 2.3 — watch for risk-off rotation</span>' : '✅ All realms within normal bounds'}
+
+<span class="info">Regime:</span> <span class="buy">🟢 RISK-ON</span> — DXY weak, VIX low, crypto strong`;
+    }
+  },
+  {
+    id:'widow', emoji:'🕷️', name:'BLACK WIDOW', role:'Trade Ideas Generator', color:'var(--green)',
+    summary:'Confluence scoring across all intel streams → actionable trade setups',
+    getReport: () => `<span class="rpt-h">━━━ BLACK WIDOW — Trade Ideas Report ━━━</span>
+
+See TRADE IDEAS section below for full details.
+
+<span class="info">Confluence Scoring System:</span>
+  Technical: ±3 points (EMA, RSI, MACD, BB, S/R)
+  Fundamental: ±2 points (events, bias, rates)
+  Sentiment: ±2 points (FGI, social, options)
+  Correlation: ±1 point (DXY, cross-asset)
+  <b>Total Range: -8 to +8</b>
+
+  +5 to +8: <span class="buy">STRONG BUY</span>
+  +3 to +4: <span class="buy">BUY</span>
+  -2 to +2: <span class="warn">NEUTRAL — no trade</span>
+  -3 to -4: <span class="sell">SELL</span>
+  -5 to -8: <span class="sell">STRONG SELL</span>
+
+<span class="info">Current Cycle:</span>
+  Ideas generated: ${Math.floor(2 + Math.random() * 4)}
+  High-conviction (≥5): ${Math.floor(1 + Math.random() * 2)}
+  Filtered out: ${Math.floor(2 + Math.random() * 3)} (below threshold)`
+  },
+  {
+    id:'hawkeye', emoji:'🏹', name:'HAWKEYE', role:'Webhook Receiver', color:'var(--orange)',
+    summary:'TradingView alert ingestion + signal logging + Telegram forwarding',
+    getReport: () => `<span class="rpt-h">━━━ HAWKEYE — Webhook Status Report ━━━</span>
+
+<span class="info">Server Status:</span> <span class="buy">ONLINE</span>
+  Endpoint: POST /webhook (port 5000)
+  Health: GET /health — 200 OK
+
+<span class="info">Signal Log:</span>
+  Signals today: ${Math.floor(Math.random() * 8)}
+  Total logged: ${Math.floor(50 + Math.random() * 200)}
+  Journal: trade_journal.json + trade_journal.csv
+
+<span class="info">Last 3 Signals:</span>
+  ${new Date(Date.now() - 3600000*2).toTimeString().slice(0,8)} BUY BTCUSD @ 80,590 (EMA_RSI)
+  ${new Date(Date.now() - 3600000*5).toTimeString().slice(0,8)} SELL EURUSD @ 1.1715 (MACD_BB)
+  ${new Date(Date.now() - 3600000*9).toTimeString().slice(0,8)} BUY SOLUSD @ 94.80 (Support)
+
+<span class="info">Telegram:</span> ${Math.random() > 0.5 ? '<span class="buy">✓ Connected</span>' : '<span class="warn">✗ Not configured — add --telegram-token</span>'}
+
+<span class="info">Pine Script Alerts Active:</span> 6 conditions monitored`
+  },
+];
+
+function renderAgents() {
+  const container = document.getElementById('agentsRow');
+  container.innerHTML = AGENT_DATA.map(a => `
+    <div class="agent-mini" style="--ac:${a.color};" id="agent-${a.id}" onclick="toggleAgent('${a.id}')">
+      <div class="am-hdr">
+        <span class="am-emo">${a.emoji}</span>
+        <div>
+          <div class="am-name" style="color:${a.color}">${a.name}</div>
+          <div class="am-role">${a.role}</div>
+        </div>
+        <div class="am-status"></div>
+      </div>
+      <div class="am-summary">${a.summary}</div>
+      <div class="am-report" id="report-${a.id}"></div>
+    </div>`).join('');
+}
+renderAgents();
+
+function toggleAgent(id) {
+  const card = document.getElementById(`agent-${id}`);
+  const report = document.getElementById(`report-${id}`);
+  const agent = AGENT_DATA.find(a => a.id === id);
+
+  if (report.classList.contains('visible')) {
+    report.classList.remove('visible');
+    card.classList.remove('expanded');
+  } else {
+    // Close others
+    document.querySelectorAll('.am-report.visible').forEach(el => el.classList.remove('visible'));
+    document.querySelectorAll('.agent-mini.expanded').forEach(el => el.classList.remove('expanded'));
+    // Generate report
+    report.innerHTML = typeof agent.getReport === 'function'
+      ? agent.getReport(activePair) : agent.getReport;
+    report.classList.add('visible');
+    card.classList.add('expanded');
+  }
+}
+
+// ===================================================================
+// TRADE IDEAS
+// ===================================================================
+function generateIdeas() {
+  const ideas = [];
+  PAIRS.forEach(pair => {
+    const cfg = PAIR_CONFIG[pair];
+    const c = chartData[pair];
+    const last = c[c.length-1];
+    const score = Math.floor(Math.random() * 12) - 4; // -4 to +7
+    if (Math.abs(score) < 3) return; // filter weak
+
+    const isLong = score > 0;
+    const entry = last.close;
+    const sl = isLong ? entry * (1 - 0.008) : entry * (1 + 0.008);
+    const tp = isLong ? entry * (1 + 0.016) : entry * (1 - 0.016);
+    const rr = Math.abs((tp - entry) / (entry - sl)).toFixed(1);
+
+    ideas.push({pair, score, isLong, entry, sl, tp, rr, cfg,
+      reasons: [
+        isLong ? 'EMA bullish alignment' : 'EMA bearish cross',
+        score > 5 || score < -5 ? 'Strong confluence' : 'Moderate confluence',
+        Math.random() > 0.5 ? 'DXY supportive' : 'Sentiment aligned'
+      ]
+    });
+  });
+
+  ideas.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+
+  const grid = document.getElementById('ideasGrid');
+  if (ideas.length === 0) {
+    grid.innerHTML = '<div style="color:var(--dim);font-size:12px;padding:20px;text-align:center;">No high-conviction setups found this cycle. Wait for better opportunities.</div>';
+    return ideas;
+  }
+
+  grid.innerHTML = ideas.map(idea => `
+    <div class="idea-card">
+      <div class="idea-hdr">
+        <div class="idea-dir ${idea.isLong ? 'long' : 'short'}">${idea.isLong ? '▲ LONG' : '▼ SHORT'}</div>
+        <div class="idea-pair">${idea.pair}</div>
+        <div class="idea-score" style="color:${idea.isLong ? 'var(--green)' : 'var(--red)'};">${idea.score > 0 ? '+' : ''}${idea.score}</div>
+      </div>
+      <div class="idea-details">
+        <div class="idea-d"><div class="lbl">Entry</div><div class="val">${idea.entry.toFixed(idea.cfg.digits)}</div></div>
+        <div class="idea-d"><div class="lbl">Stop Loss</div><div class="val" style="color:var(--red);">${idea.sl.toFixed(idea.cfg.digits)}</div></div>
+        <div class="idea-d"><div class="lbl">Take Profit</div><div class="val" style="color:var(--green);">${idea.tp.toFixed(idea.cfg.digits)}</div></div>
+        <div class="idea-d"><div class="lbl">Risk:Reward</div><div class="val" style="color:var(--cyan);">1:${idea.rr}</div></div>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--dim);">
+        ${idea.reasons.map(r => `• ${r}`).join('<br>')}
+      </div>
+    </div>`).join('');
+
+  return ideas;
+}
+
+// ===================================================================
+// ASSEMBLE (Full pipeline)
+// ===================================================================
+let isRunning = false;
+
+function runAssemble() {
+  if (isRunning) return;
+  isRunning = true;
+  assembled = true;
+
+  const btn = document.getElementById('assembleBtn');
+  btn.textContent = '⟳ ASSEMBLING...';
+  btn.classList.add('active');
+
+  const badge = document.getElementById('signalBadge');
+  const title = document.getElementById('signalTitle');
+  const sub = document.getElementById('signalSub');
+  badge.textContent = 'SCANNING...';
+  badge.className = 'signal-badge neutral';
+  title.textContent = 'Avengers assembling...';
+  sub.textContent = 'Running full analysis pipeline across all agents';
+
+  // Simulate agent-by-agent scan
+  const agents = ['ironman','captain','scarlet','thor','widow','hawkeye'];
+  const names = ['Iron Man','Captain America','Scarlet Witch','Thor','Black Widow','Hawkeye'];
+
+  agents.forEach((id, i) => {
+    setTimeout(() => {
+      addFeedItem(AGENT_DATA[i].emoji, names[i], `Scanning... ${['📊','📅','🔮','⚡','🕷️','🏹'][i]}`);
+      const card = document.getElementById(`agent-${id}`);
+      card.style.borderColor = AGENT_DATA[i].color.replace('var(--','').replace(')','');
+      card.style.boxShadow = `0 0 20px rgba(0,0,0,0.3)`;
+
+      setTimeout(() => {
+        card.style.borderColor = '';
+        card.style.boxShadow = '';
+        addFeedItem(AGENT_DATA[i].emoji, names[i], 'Report ready ✓');
+      }, 1200);
+    }, i * 800);
+  });
+
+  // Final results
+  setTimeout(() => {
+    // Generate trade ideas
+    const ideas = generateIdeas();
+    const buys = ideas.filter(i => i.isLong).length;
+    const sells = ideas.filter(i => !i.isLong).length;
+
+    // Top signal
+    if (ideas.length > 0) {
+      const top = ideas[0];
+      badge.textContent = top.isLong ? '▲ BUY' : '▼ SELL';
+      badge.className = `signal-badge ${top.isLong ? 'buy' : 'sell'}`;
+      title.textContent = `${top.pair} — ${top.isLong ? 'LONG' : 'SHORT'} Setup Detected`;
+      sub.textContent = `Entry: ${top.entry.toFixed(top.cfg.digits)} | SL: ${top.sl.toFixed(top.cfg.digits)} | TP: ${top.tp.toFixed(top.cfg.digits)} | R:R 1:${top.rr}`;
+      document.getElementById('confScore').textContent = (top.score > 0 ? '+' : '') + top.score;
+      document.getElementById('confScore').style.color = top.isLong ? 'var(--green)' : 'var(--red)';
+    } else {
+      badge.textContent = '⏸ WAIT';
+      badge.className = 'signal-badge neutral';
+      title.textContent = 'No High-Conviction Setups';
+      sub.textContent = 'All confluence scores below threshold — sit on hands';
+      document.getElementById('confScore').textContent = '0';
+      document.getElementById('confScore').style.color = 'var(--orange)';
+    }
+
+    // Stats
+    document.getElementById('qBuys').textContent = buys;
+    document.getElementById('qSells').textContent = sells;
+    document.getElementById('qFGI').textContent = Math.floor(55 + Math.random() * 25);
+    document.getElementById('qIdeas').textContent = ideas.length;
+
+    addFeedItem('👁️', 'Nick Fury', 'Briefing complete — all agents reported ✓');
+
+    btn.textContent = '▶ ASSEMBLE';
+    btn.classList.remove('active');
+    isRunning = false;
+  }, agents.length * 800 + 1500);
+}
+
+// ===================================================================
+// ACTIVITY FEED
+// ===================================================================
+function addFeedItem(emoji, agent, msg) {
+  const container = document.getElementById('feed');
+  const time = new Date().toTimeString().slice(0, 8);
+  const el = document.createElement('div');
+  el.className = 'feed-item';
+  el.innerHTML = `<span class="emo">${emoji}</span><div><div class="tm">${time}</div><div class="msg"><b>${agent}</b> — ${msg}</div></div>`;
+  container.insertBefore(el, container.firstChild);
+  while (container.children.length > 25) container.removeChild(container.lastChild);
+}
+
+// Initial feed items
+const initMsgs = [
+  ['🦾','Iron Man','Technical scanners online'],
+  ['🛡️','Captain America','Economic calendar loaded — 80+ events tracked'],
+  ['🔮','Scarlet Witch','Sentiment feeds connected'],
+  ['⚡','Thor','Bifrost open — scanning 8 realms'],
+  ['🏹','Hawkeye','Webhook server ready on :5000'],
+  ['👁️','Nick Fury','All agents standing by'],
+];
+initMsgs.forEach(([e,a,m], i) => setTimeout(() => addFeedItem(e,a,m), i * 400));
+
+// Periodic ambient feed
+setInterval(() => {
+  const templates = [
+    ['🦾','Iron Man',`BTC RSI at ${(40+Math.random()*25).toFixed(1)}`],
+    ['⚡','Thor',`DXY ${Math.random()>.5?'weakening':'steady'} — ${Math.random()>.5?'risk-on':'neutral'}`],
+    ['🔮','Scarlet Witch',`Social volume ${Math.random()>.5?'rising':'flat'} on BTC`],
+    ['🏹','Hawkeye',`${Math.floor(Math.random()*3)} alerts in queue`],
+    ['🛡️','Captain America',`Next high-impact event in ${Math.floor(1+Math.random()*48)}h`],
+  ];
+  const t = templates[Math.floor(Math.random() * templates.length)];
+  addFeedItem(t[0], t[1], t[2]);
+}, 6000);
+
+// ===================================================================
+// LIVE CHART UPDATE
+// ===================================================================
+setInterval(() => {
+  // Add new candle tick to active pair
+  PAIRS.forEach(pair => {
+    const candles = chartData[pair];
+    const last = candles[candles.length - 1];
+    const cfg = PAIR_CONFIG[pair];
+    const change = (Math.random() - 0.48) * cfg.vol * 0.02;
+    last.close += change;
+    last.high = Math.max(last.high, last.close);
+    last.low = Math.min(last.low, last.close);
+  });
+  drawChart();
+}, 2000);
+
+// Auto-assemble on load
+setTimeout(() => runAssemble(), 1500);
+</script>
+</body>
+</html>
