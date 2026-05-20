@@ -24,9 +24,13 @@ body{background:var(--bg);color:var(--txt);font-family:'Inter',sans-serif;overfl
 .tb-clock{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);}
 .tb-dot{width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block;margin-right:4px;animation:dp 2s infinite;}
 @keyframes dp{0%,100%{opacity:1;}50%{opacity:.3;}}
+@keyframes assemble-pulse{0%,100%{box-shadow:0 0 6px rgba(245,158,11,0.2);}50%{box-shadow:0 0 18px rgba(245,158,11,0.5);}}
 .tb-right{display:flex;align-items:center;gap:8px;}
 .tb-session{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 8px;border-radius:4px;border:1px solid var(--bdr);}
 .tb-fps{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim);}
+.tb-assemble{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;letter-spacing:1px;padding:2px 10px;border-radius:4px;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);color:#f59e0b;cursor:pointer;transition:all .2s;text-transform:uppercase;}
+.tb-assemble:hover{background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.6);box-shadow:0 0 12px rgba(245,158,11,0.2);}
+.tb-assemble.active{background:rgba(245,158,11,0.25);border-color:#f59e0b;color:#fbbf24;animation:assemble-pulse 1s infinite;}
 .tb-prices{display:flex;gap:10px;font-family:'JetBrains Mono',monospace;font-size:9px;}
 .tb-price{display:flex;align-items:center;gap:3px;}
 .tb-price .sym{color:var(--dim);}
@@ -172,6 +176,8 @@ body{background:var(--bg);color:var(--txt);font-family:'Inter',sans-serif;overfl
   </div>
   <div class="tb-right">
     <div class="tb-prices" id="topPrices"></div>
+    <div class="tb-sep"></div>
+    <button class="tb-assemble" id="assembleBtn" onclick="toggleAssemble()">⚡ ASSEMBLE</button>
     <div class="tb-sep"></div>
     <span class="tb-fps" id="fpsCounter">-- FPS</span>
   </div>
@@ -401,7 +407,25 @@ const ROOM_LAYOUT = [
 // Room rendering state
 let hoveredRoom = -1;
 let selectedRoom = -1;
-const agentPositions = AVENGERS.map(() => ({x:0, y:0, targetX:0, targetY:0, bobPhase:Math.random()*Math.PI*2}));
+let assembleMode = false;  // when true, all agents walk to Fury's bridge
+let assembleTimer = 0;
+const ASSEMBLE_DURATION = 600; // frames to stay assembled
+
+const agentPositions = AVENGERS.map((a, i) => ({
+  x: 0, y: 0,
+  targetX: 0, targetY: 0,
+  homeX: 0, homeY: 0,      // center of own room
+  bobPhase: Math.random() * Math.PI * 2,
+  walkPhase: Math.random() * Math.PI * 2,
+  walkSpeed: 0.3 + Math.random() * 0.4,
+  wanderTimer: Math.random() * 200,  // time until next wander target
+  wanderX: 0, wanderY: 0,   // current wander offset from home
+  state: 'idle',  // idle, walking, working, assembling
+  stateTimer: 0,
+  facing: 1,  // 1=right, -1=left
+  actionEmoji: '',  // shows above head when working
+  actionTimer: 0,
+}));
 
 // Particle pools
 const particles = [];
@@ -417,6 +441,169 @@ const COS = new Float32Array(360);
 for(let i=0;i<360;i++){SIN[i]=Math.sin(i*Math.PI/180);COS[i]=Math.cos(i*Math.PI/180);}
 function fsin(a){return SIN[((a%360)+360)%360|0];}
 function fcos(a){return COS[((a%360)+360)%360|0];}
+
+// ============================================================
+// AGENT MOVEMENT SYSTEM
+// ============================================================
+const ACTION_EMOJIS = {
+  tech_lab: ['💻','📊','🔬','⚙️'],
+  command_room: ['📋','🗺️','⭐','📡'],
+  mystic_chamber: ['✨','🔮','💫','🌙'],
+  asgard_hall: ['⚡','🔨','🌩️','⚔️'],
+  data_core: ['📈','🧮','💾','🔢'],
+  web_den: ['🕸️','📰','🔍','🚨'],
+  intel_room: ['🎯','📊','🗂️','🔗'],
+  sanctum: ['🛡️','⏳','🌀','📐'],
+  reinforced_lab: ['🧪','📉','🔄','💪'],
+  arsenal: ['📝','📓','🔫','💣'],
+  sniper_nest: ['🏹','📡','🎯','👁️'],
+  bridge: ['🏴','📢','⚙️','🌐'],
+};
+
+function toggleAssemble(){
+  assembleMode = !assembleMode;
+  const btn = document.getElementById('assembleBtn');
+  if(assembleMode){
+    btn.classList.add('active');
+    btn.textContent = '🔥 ASSEMBLED';
+    assembleTimer = ASSEMBLE_DURATION;
+    // Set all agents to assembling state
+    agentPositions.forEach(pos => {
+      pos.state = 'assembling';
+      pos.stateTimer = 0;
+      pos.actionEmoji = '';
+      pos.actionTimer = 0;
+    });
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = '⚡ ASSEMBLE';
+    // Send everyone home
+    agentPositions.forEach(pos => {
+      pos.state = 'walking';
+      pos.stateTimer = 0;
+    });
+  }
+}
+
+function updateAgentMovement(time){
+  const furyRoomIdx = ROOM_LAYOUT.findIndex(r => r.agent === 11); // Nick Fury = index 11
+  const furyRect = getRoomRect(furyRoomIdx);
+  const bridgeCX = furyRect.x + furyRect.w / 2;
+  const bridgeCY = furyRect.y + furyRect.h / 2 + 8;
+
+  // Handle assemble timer countdown
+  if(assembleMode){
+    assembleTimer--;
+    if(assembleTimer <= 0){
+      assembleMode = false;
+      document.getElementById('assembleBtn').classList.remove('active');
+      document.getElementById('assembleBtn').textContent = '⚡ ASSEMBLE';
+      agentPositions.forEach(pos => {
+        pos.state = 'walking';
+        pos.stateTimer = 0;
+      });
+    }
+  }
+
+  agentPositions.forEach((pos, i) => {
+    const roomIdx = ROOM_LAYOUT.findIndex(r => r.agent === i);
+    const rect = getRoomRect(roomIdx);
+    const a = AVENGERS[i];
+    // Walkable bounds (padded inside room)
+    const padX = rect.w * 0.18;
+    const padY = rect.h * 0.22;
+    const minX = rect.x + padX;
+    const maxX = rect.x + rect.w - padX;
+    const minY = rect.y + padY + 10; // extra top pad for labels
+    const maxY = rect.y + rect.h - padY - 6; // pad for bar
+    const homeCX = rect.x + rect.w / 2;
+    const homeCY = rect.y + rect.h / 2 + 8;
+
+    // Initialize home position
+    if(pos.homeX === 0 && pos.homeY === 0){
+      pos.homeX = homeCX;
+      pos.homeY = homeCY;
+      pos.x = homeCX;
+      pos.y = homeCY;
+      pos.targetX = homeCX;
+      pos.targetY = homeCY;
+    }
+
+    // ---- ASSEMBLING MODE ----
+    if(pos.state === 'assembling'){
+      // All agents walk toward Fury's bridge, arranged in a semicircle
+      const angle = (i / AVENGERS.length) * Math.PI + Math.PI; // semicircle
+      const radius = Math.min(furyRect.w, furyRect.h) * 0.28;
+      const assembleX = bridgeCX + Math.cos(angle) * radius;
+      const assembleY = bridgeCY + Math.sin(angle) * radius * 0.6;
+      pos.targetX = assembleX;
+      pos.targetY = assembleY;
+      // Move toward target
+      const dx = pos.targetX - pos.x;
+      const dy = pos.targetY - pos.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist > 2){
+        const speed = 1.2;
+        pos.x += (dx / dist) * speed;
+        pos.y += (dy / dist) * speed;
+        pos.facing = dx > 0 ? 1 : -1;
+        pos.walkPhase += 0.12;
+      }
+      return;
+    }
+
+    // ---- NORMAL ROOM BEHAVIOR (idle / walking / working) ----
+    pos.stateTimer--;
+
+    if(pos.state === 'idle'){
+      if(pos.stateTimer <= 0){
+        // Transition: pick a new wander target or start working
+        if(Math.random() < 0.35){
+          // Start working (stay in place, show emoji)
+          pos.state = 'working';
+          pos.stateTimer = 80 + Math.random() * 160;
+          const emojis = ACTION_EMOJIS[a.roomTheme] || ['💭'];
+          pos.actionEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+          pos.actionTimer = pos.stateTimer;
+        } else {
+          // Walk to a new spot in the room
+          pos.state = 'walking';
+          pos.targetX = minX + Math.random() * (maxX - minX);
+          pos.targetY = minY + Math.random() * (maxY - minY);
+          pos.stateTimer = 300; // max walk time before giving up
+        }
+      }
+    } else if(pos.state === 'walking'){
+      const dx = pos.targetX - pos.x;
+      const dy = pos.targetY - pos.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist < 2 || pos.stateTimer <= 0){
+        // Arrived or timed out — go idle
+        pos.state = 'idle';
+        pos.stateTimer = 40 + Math.random() * 120;
+      } else {
+        const speed = pos.walkSpeed;
+        pos.x += (dx / dist) * speed;
+        pos.y += (dy / dist) * speed;
+        pos.facing = dx > 0 ? 1 : -1;
+        pos.walkPhase += 0.1;
+      }
+    } else if(pos.state === 'working'){
+      pos.actionTimer--;
+      if(pos.stateTimer <= 0){
+        // Done working, go idle
+        pos.state = 'idle';
+        pos.stateTimer = 30 + Math.random() * 80;
+        pos.actionEmoji = '';
+        pos.actionTimer = 0;
+      }
+    }
+
+    // Clamp to room bounds
+    pos.x = Math.max(minX, Math.min(maxX, pos.x));
+    pos.y = Math.max(minY, Math.min(maxY, pos.y));
+  });
+}
 
 function resizeColony(){
   const rect = colCanvas.parentElement.getBoundingClientRect();
@@ -475,33 +662,111 @@ function drawRoom(ctx, idx, t){
   // Room-specific decorations
   drawRoomTheme(ctx, a, x, y, w, h, t);
 
-  // Agent character (animated)
+  // Agent character (animated with movement)
   const ai = ROOM_LAYOUT[idx].agent;
   const pos = agentPositions[ai];
-  pos.targetX = x + w/2;
-  pos.targetY = y + h/2 + 8;
-  pos.x += (pos.targetX - pos.x) * 0.05;
-  pos.y += (pos.targetY - pos.y) * 0.05;
-  const bob = Math.sin(pos.bobPhase + t * 2) * 3;
+
+  // Skip in-room rendering if agent is assembling (drawn separately on top layer)
+  if(pos.state === 'assembling'){
+    // Still draw name/role/grade/bar even when agent is away
+    ctx.font = "bold 8px 'Orbitron', monospace";
+    ctx.fillStyle = hexToRGBA(a.color, 0.4);
+    ctx.textAlign = 'center';
+    ctx.fillText(a.name, x + w/2, y + 12);
+    ctx.font = "7px 'JetBrains Mono', monospace";
+    ctx.fillStyle = '#2a2a4a';
+    ctx.fillText('[ on bridge ]', x + w/2, y + h/2);
+    const barY = y + h - 8, barW = w - 16;
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(x+8, barY, barW, 3);
+    ctx.fillStyle = hexToRGBA(gradeColor(a.grade), 0.3);
+    ctx.fillRect(x+8, barY, barW * (a.score / 100), 3);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(74,108,247,0.1)';
+    ctx.lineWidth = 1;
+    const rr = 6;
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);ctx.lineTo(x+w-rr,y);ctx.quadraticCurveTo(x+w,y,x+w,y+rr);
+    ctx.lineTo(x+w,y+h-rr);ctx.quadraticCurveTo(x+w,y+h,x+w-rr,y+h);
+    ctx.lineTo(x+rr,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-rr);
+    ctx.lineTo(x,y+rr);ctx.quadraticCurveTo(x,y,x+rr,y);
+    ctx.closePath();
+    ctx.stroke();
+    return;
+  }
+
+  const isWalking = pos.state === 'walking';
+  const isWorking = pos.state === 'working';
+
+  // Bob is gentler when walking, more pronounced when idle/working
+  const bobAmp = isWalking ? 1.5 : 3;
+  const bobSpeed = isWalking ? 4 : 2;
+  const bob = Math.sin(pos.bobPhase + t * bobSpeed) * bobAmp;
   pos.bobPhase += 0.02;
 
+  // Walk animation: side-to-side sway when moving
+  const walkSway = isWalking ? Math.sin(pos.walkPhase) * 1.5 : 0;
+
+  // Render position (use pos.x/pos.y which are updated by updateAgentMovement)
+  const renderX = pos.x + walkSway;
+  const renderY = pos.y + bob;
+
+  // Shadow under character
+  ctx.globalAlpha = 0.15;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(renderX, pos.y + 10, 8, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
   // Character glow
-  const glowR = 20 + Math.sin(t*3 + ai)*5;
-  const charGlow = ctx.createRadialGradient(pos.x, pos.y+bob, 0, pos.x, pos.y+bob, glowR);
-  charGlow.addColorStop(0, hexToRGBA(a.color, 0.2));
+  const glowR = 18 + Math.sin(t*3 + ai)*4;
+  const charGlow = ctx.createRadialGradient(renderX, renderY, 0, renderX, renderY, glowR);
+  charGlow.addColorStop(0, hexToRGBA(a.color, isWorking ? 0.3 : 0.2));
   charGlow.addColorStop(1, 'transparent');
   ctx.fillStyle = charGlow;
-  ctx.fillRect(pos.x-glowR, pos.y+bob-glowR, glowR*2, glowR*2);
+  ctx.fillRect(renderX-glowR, renderY-glowR, glowR*2, glowR*2);
 
-  // Emoji character
-  ctx.font = `${Math.min(w,h)*0.22}px serif`;
+  // Emoji character (flipped based on facing)
+  const emojiSize = Math.min(w,h)*0.22;
+  ctx.save();
+  ctx.translate(renderX, renderY);
+  if(pos.facing === -1) ctx.scale(-1, 1);
+  ctx.font = `${emojiSize}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(a.emoji, pos.x, pos.y + bob);
+  ctx.fillText(a.emoji, 0, 0);
+  ctx.restore();
+
+  // Walk "dust" particles when moving
+  if(isWalking && Math.random() < 0.08){
+    spawnParticle(renderX + (Math.random()-0.5)*6, pos.y + 8, '#4a4a6a', 20);
+  }
+
+  // Action emoji above head when working
+  if(isWorking && pos.actionEmoji){
+    const floatY = -emojiSize * 0.6 - 4 + Math.sin(t * 3) * 2;
+    ctx.globalAlpha = Math.min(1, pos.actionTimer / 20); // fade in/out
+    ctx.font = `${emojiSize * 0.55}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(pos.actionEmoji, renderX, renderY + floatY);
+    ctx.globalAlpha = 1;
+  }
+
+  // Speech bubble for working state (small thought bubble dots)
+  if(isWorking && pos.actionTimer > 10){
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = a.color;
+    const bubY = renderY - emojiSize * 0.5;
+    ctx.beginPath(); ctx.arc(renderX + 6, bubY - 2, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(renderX + 9, bubY - 6, 2, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 
   // Spawn themed particles occasionally
   if(Math.random() < 0.03){
-    spawnParticle(pos.x + (Math.random()-0.5)*30, pos.y + bob + (Math.random()-0.5)*20, a.color);
+    spawnParticle(renderX + (Math.random()-0.5)*30, renderY + (Math.random()-0.5)*20, a.color);
   }
 
   // Name label
@@ -709,6 +974,90 @@ function drawRoomTheme(ctx, agent, x, y, w, h, t){
   ctx.globalAlpha = 1;
 }
 
+// Draw agents that are assembled in Fury's bridge (unclipped, on top of everything)
+function drawAssemblingAgents(ctx, t){
+  agentPositions.forEach((pos, i) => {
+    if(pos.state !== 'assembling') return;
+    const a = AVENGERS[i];
+    const isWalking = true;
+    const walkSway = Math.sin(pos.walkPhase) * 1.5;
+    const bob = Math.sin(pos.bobPhase + t * 4) * 1.5;
+    const renderX = pos.x + walkSway;
+    const renderY = pos.y + bob;
+
+    // Trail effect while moving
+    const dx = pos.targetX - pos.x;
+    const dy = pos.targetY - pos.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > 5){
+      // Motion trail
+      ctx.globalAlpha = 0.1;
+      ctx.fillStyle = a.color;
+      for(let tr=1; tr<=3; tr++){
+        ctx.beginPath();
+        ctx.arc(renderX - dx/dist*tr*4, renderY - dy/dist*tr*4, 6-tr, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Shadow
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(renderX, pos.y + 10, 8, 3, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Glow (brighter when assembled)
+    const glowR = 22;
+    const glow = ctx.createRadialGradient(renderX, renderY, 0, renderX, renderY, glowR);
+    glow.addColorStop(0, hexToRGBA(a.color, 0.35));
+    glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow;
+    ctx.fillRect(renderX-glowR, renderY-glowR, glowR*2, glowR*2);
+
+    // Character
+    const emojiSize = 18;
+    ctx.save();
+    ctx.translate(renderX, renderY);
+    if(pos.facing === -1) ctx.scale(-1, 1);
+    ctx.font = `${emojiSize}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(a.emoji, 0, 0);
+    ctx.restore();
+
+    // Name tag below when close to target
+    if(dist < 10){
+      ctx.font = "bold 6px 'Orbitron', monospace";
+      ctx.fillStyle = a.color;
+      ctx.textAlign = 'center';
+      ctx.globalAlpha = 0.8;
+      ctx.fillText(a.name, renderX, renderY + 14);
+      ctx.globalAlpha = 1;
+    }
+  });
+
+  // "ASSEMBLED" banner when everyone is in position
+  const allInPlace = agentPositions.every(p => {
+    if(p.state !== 'assembling') return true;
+    const dx = p.targetX - p.x;
+    const dy = p.targetY - p.y;
+    return Math.sqrt(dx*dx + dy*dy) < 5;
+  });
+  if(allInPlace && assembleMode){
+    const furyIdx = ROOM_LAYOUT.findIndex(r => r.agent === 11);
+    const fr = getRoomRect(furyIdx);
+    ctx.font = "bold 10px 'Orbitron', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f59e0b';
+    ctx.globalAlpha = 0.6 + Math.sin(t * 4) * 0.4;
+    ctx.fillText('⚡ AVENGERS ASSEMBLED ⚡', fr.x + fr.w/2, fr.y + 14);
+    ctx.globalAlpha = 1;
+  }
+}
+
 // Corridor connections between rooms
 function drawCorridors(ctx){
   ctx.strokeStyle = 'rgba(74,108,247,0.06)';
@@ -744,6 +1093,10 @@ function drawParticles(ctx, t){
 let frameCount = 0, lastFpsTime = performance.now(), fps = 0;
 function renderColony(t){
   const time = t / 1000;
+
+  // Update agent movement each frame
+  updateAgentMovement(time);
+
   offCtx.clearRect(0, 0, colW, colH);
 
   // Background
@@ -756,6 +1109,11 @@ function renderColony(t){
   // Rooms
   for(let i=0;i<ROOM_LAYOUT.length;i++){
     drawRoom(offCtx, i, time);
+  }
+
+  // Draw assembling agents ON TOP of rooms (not clipped)
+  if(assembleMode || agentPositions.some(p => p.state === 'assembling')){
+    drawAssemblingAgents(offCtx, time);
   }
 
   // Particles
