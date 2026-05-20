@@ -1,27 +1,262 @@
+# ============================================================
+# FuturesFlow Scalper Bot - Master Configuration
+# ============================================================
+
+# ----------------------------------------------------------
+# Covered Markets
+# ----------------------------------------------------------
 pairs:
-- XAUUSD
-- EURUSD
-- CADUSD
-- BTCUSD
-- ETHUSD
-- SOLUSD
+  # Forex Majors
+  - EURUSD
+  - GBPUSD
+  - USDJPY
+  - USDCHF
+  - AUDUSD
+  - NZDUSD
+  - USDCAD
+  # Forex Minors
+  - EURGBP
+  - EURJPY
+  - GBPJPY
+  - AUDJPY
+  - CADJPY
+  - CHFJPY
+  - EURAUD
+  - EURCHF
+  - EURCAD
+  - GBPAUD
+  - GBPCAD
+  - GBPCHF
+  - AUDCAD
+  - AUDCHF
+  - AUDNZD
+  - NZDCAD
+  - NZDCHF
+  - NZDJPY
+  # Forex Exotics
+  - USDZAR
+  - USDMXN
+  - USDSEK
+  - USDNOK
+  - USDDKK
+  - USDSGD
+  - USDTRY
+  - USDHKD
+  - USDCNH
+  - EURNOK
+  - EURSEK
+  - GBPNZD
+  # Futures - Indices
+  - ES
+  - NQ
+  - YM
+  - RTY
+  - DAX
+  - FTSE
+  - NIKKEI
+  - HSI
+  # Futures - Commodities
+  - GC
+  - SI
+  - CL
+  - NG
+  - HG
+  - PL
+  # Futures - Bonds
+  - ZB
+  - ZN
+  - ZF
+  - ZT
+  # Futures - Currencies
+  - 6E
+  - 6B
+  - 6J
+  - 6A
+  - 6C
+  - 6S
+  # Futures - Softs/Ags
+  - ZC
+  - ZW
+  - ZS
+  - CT
+  - KC
+  - SB
+  # Crypto
+  - BTCUSD
+  - ETHUSD
+  - SOLUSD
+  # Legacy / Precious Metals
+  - XAUUSD
+
+# ----------------------------------------------------------
+# General Settings
+# ----------------------------------------------------------
 bar_minutes: 1
 session_timezone: Europe/London
 trade_sessions:
-- start: 07:00
-  end: '11:30'
-- start: '13:00'
-  end: '16:00'
+  - start: "07:00"
+    end: "11:30"
+  - start: "13:00"
+    end: "16:00"
 initial_equity: 10000.0
 output_dir: ./output
+seed: 42
+
+# ----------------------------------------------------------
+# Risk Management
+# ----------------------------------------------------------
 risk:
   risk_per_trade: 0.003
   daily_loss_limit: 0.02
   max_trades_per_day: 20
+
+# ----------------------------------------------------------
+# Account Types
+# ----------------------------------------------------------
+account_types:
+  micro:
+    min_balance: 0
+    max_balance: 999
+    max_risk_per_trade_pct: 1.0
+    max_positions: 2
+    daily_drawdown_limit_pct: 5.0
+    weekly_drawdown_limit_pct: 10.0
+  mini:
+    min_balance: 1000
+    max_balance: 9999
+    max_risk_per_trade_pct: 2.0
+    max_positions: 3
+    daily_drawdown_limit_pct: 5.0
+    weekly_drawdown_limit_pct: 10.0
+  standard:
+    min_balance: 10000
+    max_balance: 49999
+    max_risk_per_trade_pct: 2.0
+    max_positions: 5
+    daily_drawdown_limit_pct: 5.0
+    weekly_drawdown_limit_pct: 10.0
+  professional:
+    min_balance: 50000
+    max_balance: 249999
+    max_risk_per_trade_pct: 1.0
+    max_positions: 10
+    daily_drawdown_limit_pct: 5.0
+    weekly_drawdown_limit_pct: 10.0
+  institutional:
+    min_balance: 250000
+    max_balance: null
+    max_risk_per_trade_pct: 0.5
+    max_positions: 15
+    daily_drawdown_limit_pct: 5.0
+    weekly_drawdown_limit_pct: 10.0
+
+# ----------------------------------------------------------
+# Trading Sessions
+# ----------------------------------------------------------
+sessions:
+  asian:
+    start_utc: "00:00"
+    end_utc: "09:00"
+    best_pairs: [USDJPY, AUDUSD, NZDUSD, AUDJPY, NZDJPY]
+    best_futures: [NIKKEI, HSI, GC]
+    notes: "Range-bound, fade ranges unless HTF confirms"
+  london:
+    start_utc: "08:00"
+    end_utc: "17:00"
+    best_pairs: [GBPUSD, EURUSD, EURGBP, GBPJPY, EURJPY]
+    best_futures: [DAX, FTSE, GC]
+    notes: "Highest forex liquidity, expect trend initiation"
+  new_york:
+    start_utc: "13:00"
+    end_utc: "22:00"
+    best_pairs: [EURUSD, GBPUSD, USDCAD, USDCHF]
+    best_futures: [ES, NQ, YM, CL, GC, ZB, ZN]
+    notes: "Highest volatility, watch for news reversals"
+  overlap:
+    start_utc: "13:00"
+    end_utc: "17:00"
+    best_pairs: [EURUSD, GBPUSD]
+    best_futures: [ES, NQ, GC]
+    notes: "Highest confluence window, prioritize signals here"
+
+# ----------------------------------------------------------
+# Confluence Scoring
+# ----------------------------------------------------------
+confluence_scoring:
+  timeframe_agreement: 10
+  confirming_indicator: 10
+  htf_level_alignment: 15
+  market_structure_confirm: 15
+  session_bias_alignment: 10
+  correlated_instruments: 10
+  minimum_score: 50
+  high_conviction_score: 75
+
+confluence_risk_scaling:
+  - score_min: 50
+    score_max: 64
+    risk_multiplier: 0.50
+  - score_min: 65
+    score_max: 74
+    risk_multiplier: 0.75
+  - score_min: 75
+    score_max: 89
+    risk_multiplier: 1.00
+  - score_min: 90
+    score_max: 100
+    risk_multiplier: 1.00
+    requires_approval: true
+
+# ----------------------------------------------------------
+# Drawdown Lockout Rules
+# ----------------------------------------------------------
+drawdown_lockouts:
+  - trigger_pct: 3.0
+    period: daily
+    action: reduce_size_50
+  - trigger_pct: 5.0
+    period: daily
+    action: halt_session
+  - trigger_pct: 7.0
+    period: weekly
+    action: reduce_size_50
+  - trigger_pct: 10.0
+    period: weekly
+    action: halt_week
+
+# ----------------------------------------------------------
+# Indicator Defaults
+# ----------------------------------------------------------
+indicators:
+  rsi:
+    period: 14
+    overbought: 70
+    oversold: 30
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+  bollinger:
+    period: 20
+    std_dev: 2
+  atr:
+    period: 14
+    min_stop_multiplier: 1.0
+  stochastic:
+    k_period: 14
+    d_period: 3
+    smooth: 3
+    overbought: 80
+    oversold: 20
+
+# ----------------------------------------------------------
+# Costs
+# ----------------------------------------------------------
 costs_default:
   spread_pips: 1.0
   commission_per_million: 7.0
   slippage_pips: 0.2
+
 costs_overrides:
   EURUSD:
     spread_pips: 0.8
@@ -47,6 +282,10 @@ costs_overrides:
     spread_pips: 0.2
     slippage_pips: 0.2
     commission_per_million: 10.0
+
+# ----------------------------------------------------------
+# Strategy Parameters
+# ----------------------------------------------------------
 strategy:
   ema_fast: 9
   ema_slow: 21
@@ -57,39 +296,47 @@ strategy:
   rsi_sell_max: 55
   tp_pips: 8
   sl_pips: 6
+
+# ----------------------------------------------------------
+# Walk-Forward Optimization
+# ----------------------------------------------------------
 walk_forward:
   train_days: 60
   test_days: 15
   ema_fast_grid:
-  - 6
-  - 9
-  - 12
+    - 6
+    - 9
+    - 12
   ema_slow_grid:
-  - 18
-  - 21
-  - 26
+    - 18
+    - 21
+    - 26
   tp_grid:
-  - 6
-  - 8
-  - 10
+    - 6
+    - 8
+    - 10
   sl_grid:
-  - 5
-  - 6
-  - 8
+    - 5
+    - 6
+    - 8
   rsi_buy_min_grid:
-  - 40
-  - 45
-  - 50
+    - 40
+    - 45
+    - 50
   rsi_buy_max_grid:
-  - 65
-  - 70
+    - 65
+    - 70
   rsi_sell_min_grid:
-  - 30
-  - 35
-  - 40
+    - 30
+    - 35
+    - 40
   rsi_sell_max_grid:
-  - 50
-  - 55
+    - 50
+    - 55
+
+# ----------------------------------------------------------
+# Notifications
+# ----------------------------------------------------------
 notifications:
   discord:
     enabled: false
@@ -101,4 +348,3 @@ notifications:
   n8n:
     enabled: false
     webhook_url: "https://your-n8n-instance.com/webhook/YOUR_WEBHOOK_PATH"
-seed: 42

@@ -17,6 +17,9 @@ from .doctor_strange import DoctorStrange
 # Phase 4: Backtesting
 from .hulk import Hulk
 
+# Trade Journaling
+from .war_machine import WarMachine
+
 # Webhook Receiver
 from .hawkeye import Hawkeye
 

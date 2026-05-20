@@ -4,13 +4,19 @@ Nick Fury - Master Orchestrator / Avengers Commander
 Assembles the Avengers. Runs all analysis agents in sequence, compiles
 the Avengers Market Intelligence Briefing, and handles Telegram delivery
 and scheduling.
+
+Extended capabilities:
+  - Session Management (Asian/London/NY/Overlap with pair affinity)
+  - News Event Protocol (suspend/clear/normal around high-impact releases)
+  - Agent & Team Grading System (5-category rubric, weekly reports)
+  - Account Configuration (auto-detect type from balance)
 """
 
 import logging
 import argparse
 import textwrap
-from typing import Optional
-from datetime import datetime
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone, timedelta
 import requests
 
 # Import Avenger modules
@@ -28,6 +34,280 @@ logger = logging.getLogger('nick_fury')
 
 PERSONA = "Avengers, assemble! Time to see what the world looks like today."
 
+# ======================================================================
+# Session Definitions
+# ======================================================================
+
+SESSION_CONFIG: Dict[str, Dict[str, Any]] = {
+    'Asian': {
+        'start_utc': 0,
+        'end_utc': 9,
+        'best_pairs': ['USDJPY', 'AUDUSD', 'NZDUSD', 'AUDJPY', 'NZDJPY'],
+        'description': 'Range-bound, JPY/AUD driven',
+    },
+    'London': {
+        'start_utc': 8,
+        'end_utc': 17,
+        'best_pairs': ['GBPUSD', 'EURUSD', 'EURGBP', 'GBPJPY', 'EURJPY'],
+        'description': 'Trend initiation, EUR/GBP driven',
+    },
+    'New York': {
+        'start_utc': 13,
+        'end_utc': 22,
+        'best_pairs': ['EURUSD', 'GBPUSD', 'USDCAD', 'USDCHF'],
+        'description': 'Continuation/reversal, USD driven',
+    },
+    'Overlap': {
+        'start_utc': 13,
+        'end_utc': 17,
+        'best_pairs': ['EURUSD', 'GBPUSD', 'USDCAD', 'USDCHF',
+                        'GBPJPY', 'EURJPY'],
+        'description': 'London-NY overlap, highest confluence window',
+    },
+}
+
+# ======================================================================
+# Account Type Definitions (mirrors DoctorStrange for convenience)
+# ======================================================================
+
+ACCOUNT_TYPES: List[Dict[str, Any]] = [
+    {'name': 'Micro',         'min_balance': 0,        'max_balance': 999.99,
+     'max_risk_pct': 1.0, 'max_positions': 2},
+    {'name': 'Mini',          'min_balance': 1_000,    'max_balance': 9_999.99,
+     'max_risk_pct': 2.0, 'max_positions': 3},
+    {'name': 'Standard',      'min_balance': 10_000,   'max_balance': 49_999.99,
+     'max_risk_pct': 2.0, 'max_positions': 5},
+    {'name': 'Professional',  'min_balance': 50_000,   'max_balance': 249_999.99,
+     'max_risk_pct': 1.0, 'max_positions': 10},
+    {'name': 'Institutional', 'min_balance': 250_000,  'max_balance': float('inf'),
+     'max_risk_pct': 0.5, 'max_positions': 15},
+]
+
+# ======================================================================
+# High-Impact News Events
+# ======================================================================
+
+HIGH_IMPACT_EVENTS = {
+    'NFP', 'CPI', 'FOMC', 'ECB', 'BOE', 'BOJ', 'RBA', 'RBNZ', 'BOC',
+    'Non-Farm Payrolls', 'Consumer Price Index',
+    'Federal Open Market Committee', 'Central Bank Rate Decision',
+    'Interest Rate Decision', 'GDP', 'Retail Sales',
+}
+
+
+# ======================================================================
+# Agent Grading System
+# ======================================================================
+
+class AgentGrader:
+    """Grades individual agents on a 100-point rubric across 5 categories."""
+
+    GRADE_SCALE = [
+        (95, 'S'), (85, 'A'), (75, 'B'), (65, 'C'), (50, 'D'),
+    ]
+
+    # ── helpers ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _clamp(value: float, lo: float = 0.0, hi: float = 20.0) -> float:
+        return max(lo, min(hi, value))
+
+    @classmethod
+    def letter_grade(cls, score: float) -> str:
+        for threshold, letter in cls.GRADE_SCALE:
+            if score >= threshold:
+                return letter
+        return 'F'
+
+    # ── category scorers ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _score_rule_compliance(data: dict) -> float:
+        """Category 1 -- Rule Compliance (20 pts).
+
+        Expected keys:
+          rules_followed_pct (0-100), format_correct (bool), clean_handoffs (bool)
+        """
+        score = 0.0
+        # Followed all rules without exception (10 pts)
+        rules_pct = data.get('rules_followed_pct', 0)
+        score += (rules_pct / 100.0) * 10.0
+        # Correct structured format (5 pts)
+        if data.get('format_correct', False):
+            score += 5.0
+        # Clean handoffs (5 pts)
+        if data.get('clean_handoffs', False):
+            score += 5.0
+        return score
+
+    @staticmethod
+    def _score_signal_quality(data: dict) -> float:
+        """Category 2 -- Signal Quality (20 pts).
+
+        Expected keys:
+          avg_confluence (0-100), win_rate_pct (0-100)
+        """
+        score = 0.0
+        # Avg confluence score: 90+=10, 75-89=8, 65-74=6, 50-64=4, <50=0
+        ac = data.get('avg_confluence', 0)
+        if ac >= 90:
+            score += 10
+        elif ac >= 75:
+            score += 8
+        elif ac >= 65:
+            score += 6
+        elif ac >= 50:
+            score += 4
+        # Win rate: 70%+=10, 60-69=8, 50-59=6, 40-49=4, <40=0
+        wr = data.get('win_rate_pct', 0)
+        if wr >= 70:
+            score += 10
+        elif wr >= 60:
+            score += 8
+        elif wr >= 50:
+            score += 6
+        elif wr >= 40:
+            score += 4
+        return score
+
+    @staticmethod
+    def _score_risk_management(data: dict) -> float:
+        """Category 3 -- Risk Management (20 pts).
+
+        Expected keys:
+          risk_thresholds_respected (bool), position_sizes_correct (bool),
+          drawdown_lockouts_respected (bool)
+        """
+        score = 0.0
+        if data.get('risk_thresholds_respected', False):
+            score += 10.0
+        if data.get('position_sizes_correct', False):
+            score += 5.0
+        if data.get('drawdown_lockouts_respected', False):
+            score += 5.0
+        return score
+
+    @staticmethod
+    def _score_timeliness(data: dict) -> float:
+        """Category 4 -- Timeliness (20 pts).
+
+        Expected keys:
+          signals_in_session (bool), handoffs_on_time (bool),
+          journal_immediate (bool), escalations_prompt (bool)
+        """
+        score = 0.0
+        if data.get('signals_in_session', False):
+            score += 5.0
+        if data.get('handoffs_on_time', False):
+            score += 5.0
+        if data.get('journal_immediate', False):
+            score += 5.0
+        if data.get('escalations_prompt', False):
+            score += 5.0
+        return score
+
+    @staticmethod
+    def _score_adaptability(data: dict) -> float:
+        """Category 5 -- Adaptability (20 pts).
+
+        Expected keys:
+          adjusted_htf_bias (bool), responded_news (bool),
+          updated_tf_shifts (bool), used_handoff_data (bool)
+        """
+        score = 0.0
+        if data.get('adjusted_htf_bias', False):
+            score += 5.0
+        if data.get('responded_news', False):
+            score += 5.0
+        if data.get('updated_tf_shifts', False):
+            score += 5.0
+        if data.get('used_handoff_data', False):
+            score += 5.0
+        return score
+
+    # ── public API ───────────────────────────────────────────────────────
+
+    def grade_agent(self, agent_name: str, journal_data: dict) -> dict:
+        """Grade a single agent across all 5 categories.
+
+        Args:
+            agent_name: Display name / role of the agent.
+            journal_data: Dict with sub-dicts keyed by category name:
+                {
+                  'rule_compliance': { ... },
+                  'signal_quality': { ... },
+                  'risk_management': { ... },
+                  'timeliness': { ... },
+                  'adaptability': { ... },
+                }
+
+        Returns:
+            {
+              'agent': str,
+              'categories': {cat_name: score, ...},
+              'total': float,
+              'grade': str,
+            }
+        """
+        cats = {
+            'rule_compliance': self._clamp(
+                self._score_rule_compliance(
+                    journal_data.get('rule_compliance', {}))),
+            'signal_quality': self._clamp(
+                self._score_signal_quality(
+                    journal_data.get('signal_quality', {}))),
+            'risk_management': self._clamp(
+                self._score_risk_management(
+                    journal_data.get('risk_management', {}))),
+            'timeliness': self._clamp(
+                self._score_timeliness(
+                    journal_data.get('timeliness', {}))),
+            'adaptability': self._clamp(
+                self._score_adaptability(
+                    journal_data.get('adaptability', {}))),
+        }
+        total = sum(cats.values())
+        return {
+            'agent': agent_name,
+            'categories': cats,
+            'total': round(total, 2),
+            'grade': self.letter_grade(total),
+        }
+
+
+# ======================================================================
+# WarMachine stub (trade journal) -- lightweight in-memory journal so
+# NickFury can log signals without requiring a separate module file.
+# Replace with a real WarMachine import when the module is available.
+# ======================================================================
+
+class _WarMachineStub:
+    """Minimal in-memory trade journal used when war_machine module is absent."""
+
+    def __init__(self):
+        self.entries: List[dict] = []
+
+    def log_signal(self, signal: dict) -> None:
+        entry = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            **signal,
+        }
+        self.entries.append(entry)
+        logger.info(f"WarMachine journal logged signal: {signal.get('pair', 'N/A')}")
+
+    def get_entries(self) -> List[dict]:
+        return list(self.entries)
+
+
+def _get_war_machine():
+    """Try to import real WarMachine; fall back to stub."""
+    try:
+        from war_machine import WarMachine  # type: ignore
+        return WarMachine()
+    except ImportError:
+        logger.warning("war_machine module not found -- using in-memory journal stub")
+        return _WarMachineStub()
+
 
 class NickFury:
     """Nick Fury - master orchestrator for the Avengers Market Intelligence Briefing."""
@@ -37,7 +317,8 @@ class NickFury:
 
     def __init__(self, pairs: Optional[list[str]] = None,
                  run_backtest: bool = False,
-                 account_size: float = 10000.0):
+                 account_size: float = 10000.0,
+                 account_balance: Optional[float] = None):
         """
         Initialize Nick Fury with the Avengers team.
 
@@ -45,6 +326,8 @@ class NickFury:
             pairs: List of trading pairs to analyze
             run_backtest: Whether to run Hulk's backtesting phase
             account_size: Account size for DoctorStrange risk management
+            account_balance: If provided, used by configure_account() to set
+                             risk parameters.  Falls back to *account_size*.
         """
         self.pairs = pairs or [
             'BTCUSD', 'ETHUSD', 'SOLUSD',
@@ -64,6 +347,457 @@ class NickFury:
         self.risk_mgr = DoctorStrange()            # Doctor Strange - risk
         self.backtester = Hulk()                   # Hulk - backtesting
 
+        # New subsystems
+        self.journal = _get_war_machine()          # WarMachine - trade journal
+        self.grader = AgentGrader()                # Agent grading system
+
+        # Account configuration
+        balance = account_balance if account_balance is not None else account_size
+        self.account_config = self.configure_account(balance)
+
+        # Session state
+        self._previous_grades: Dict[str, float] = {}  # agent -> last total
+
+    # ==================================================================
+    # Session Management System
+    # ==================================================================
+
+    @staticmethod
+    def get_current_session(now_utc: Optional[datetime] = None) -> dict:
+        """Determine which trading session(s) are active based on UTC time.
+
+        Args:
+            now_utc: Override for current UTC time (useful for testing).
+
+        Returns:
+            {
+              'active_sessions': [str, ...],
+              'is_overlap': bool,
+              'best_pairs': [str, ...],
+              'current_utc': str (ISO),
+            }
+        """
+        if now_utc is None:
+            now_utc = datetime.now(timezone.utc)
+        hour = now_utc.hour
+
+        active: List[str] = []
+        best_pairs: List[str] = []
+
+        for name, cfg in SESSION_CONFIG.items():
+            if cfg['start_utc'] <= hour < cfg['end_utc']:
+                active.append(name)
+                for p in cfg['best_pairs']:
+                    if p not in best_pairs:
+                        best_pairs.append(p)
+
+        is_overlap = 'Overlap' in active
+
+        return {
+            'active_sessions': active,
+            'is_overlap': is_overlap,
+            'best_pairs': best_pairs,
+            'current_utc': now_utc.isoformat(),
+        }
+
+    def set_session_bias(self, session_info: dict,
+                         htf_trend: Optional[dict] = None,
+                         key_levels: Optional[dict] = None,
+                         pending_news: Optional[list] = None,
+                         correlated_markets: Optional[dict] = None) -> dict:
+        """Assess bias at session start from HTF trend, levels, news, correlations.
+
+        Args:
+            session_info: Output of get_current_session().
+            htf_trend: Per-pair trend dict, e.g. {'EURUSD': 'bullish', ...}.
+            key_levels: Per-pair support/resistance levels.
+            pending_news: List of upcoming news event dicts.
+            correlated_markets: Correlation snapshot from Thor.
+
+        Returns:
+            Bias dict suitable for passing into BlackWidow.
+        """
+        bias: Dict[str, Any] = {
+            'sessions': session_info.get('active_sessions', []),
+            'is_overlap': session_info.get('is_overlap', False),
+            'best_pairs': session_info.get('best_pairs', []),
+            'htf_trend': htf_trend or {},
+            'key_levels': key_levels or {},
+            'pending_news': pending_news or [],
+            'correlated_markets': correlated_markets or {},
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        }
+
+        # Determine directional bias per best pair from HTF trend
+        pair_biases: Dict[str, str] = {}
+        for pair in bias['best_pairs']:
+            trend = (htf_trend or {}).get(pair, 'neutral')
+            pair_biases[pair] = trend
+        bias['pair_biases'] = pair_biases
+
+        logger.info(
+            f"Session bias set: sessions={bias['sessions']}, "
+            f"overlap={bias['is_overlap']}, pairs={len(pair_biases)}"
+        )
+        return bias
+
+    def handle_session_handoff(self, outgoing_session: str,
+                               incoming_session: str,
+                               active_signals: Optional[list] = None,
+                               key_levels: Optional[dict] = None,
+                               bias: Optional[dict] = None,
+                               invalidated_signals: Optional[list] = None) -> dict:
+        """Transfer state from one session to the next.
+
+        Args:
+            outgoing_session: Name of session ending (e.g. 'London').
+            incoming_session: Name of session starting (e.g. 'New York').
+            active_signals: Still-valid signals to carry over.
+            key_levels: Key S/R levels to carry over.
+            bias: Current bias dict.
+            invalidated_signals: Signals that should NOT carry over.
+
+        Returns:
+            Handoff packet for the incoming session.
+        """
+        handoff = {
+            'outgoing_session': outgoing_session,
+            'incoming_session': incoming_session,
+            'active_signals': active_signals or [],
+            'key_levels': key_levels or {},
+            'bias': bias or {},
+            'invalidated_signals': invalidated_signals or [],
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        }
+        logger.info(
+            f"Session handoff: {outgoing_session} -> {incoming_session}, "
+            f"{len(handoff['active_signals'])} active signals carried over, "
+            f"{len(handoff['invalidated_signals'])} invalidated"
+        )
+        return handoff
+
+    # ==================================================================
+    # News Event Protocol
+    # ==================================================================
+
+    @staticmethod
+    def check_news_events(upcoming_events: List[dict],
+                          now_utc: Optional[datetime] = None) -> dict:
+        """Evaluate upcoming news events and return action recommendation.
+
+        Each event dict should have at minimum:
+          {'name': str, 'time_utc': datetime or ISO str, 'impact': str|int}
+
+        Rules:
+          - High-impact event within 15 min -> suspend all signals
+          - After event, wait 5 min for stabilization
+          - Then re-score confluence before re-entering
+
+        Returns:
+            {
+              'action': 'suspend' | 'clear' | 'normal',
+              'event': str | None,
+              'minutes_until': int | None,
+            }
+        """
+        if now_utc is None:
+            now_utc = datetime.now(timezone.utc)
+
+        for ev in upcoming_events:
+            # Parse event time
+            ev_time = ev.get('time_utc')
+            if isinstance(ev_time, str):
+                try:
+                    ev_time = datetime.fromisoformat(ev_time)
+                except (ValueError, TypeError):
+                    continue
+            if ev_time is None:
+                continue
+            if ev_time.tzinfo is None:
+                ev_time = ev_time.replace(tzinfo=timezone.utc)
+
+            # Determine impact level
+            impact = ev.get('impact', '')
+            is_high = False
+            if isinstance(impact, int) and impact >= 4:
+                is_high = True
+            elif isinstance(impact, str):
+                if impact.lower() in ('high', 'critical'):
+                    is_high = True
+                elif ev.get('name', '').upper() in {e.upper() for e in HIGH_IMPACT_EVENTS}:
+                    is_high = True
+
+            if not is_high:
+                continue
+
+            delta = ev_time - now_utc
+            minutes_until = delta.total_seconds() / 60.0
+
+            if -5.0 <= minutes_until <= 0:
+                # Event just happened within last 5 min -- stabilization window
+                return {
+                    'action': 'clear',
+                    'event': ev.get('name', 'Unknown'),
+                    'minutes_until': int(minutes_until),
+                }
+            elif 0 < minutes_until <= 15:
+                # High-impact event imminent -- suspend
+                return {
+                    'action': 'suspend',
+                    'event': ev.get('name', 'Unknown'),
+                    'minutes_until': int(minutes_until),
+                }
+
+        return {'action': 'normal', 'event': None, 'minutes_until': None}
+
+    # ==================================================================
+    # Account Configuration
+    # ==================================================================
+
+    @staticmethod
+    def configure_account(balance: float) -> dict:
+        """Determine account type and risk parameters from balance.
+
+        Args:
+            balance: Current account balance in USD.
+
+        Returns:
+            Account configuration dict with type, limits, and initial
+            dollar risk per trade.
+        """
+        acct_type = ACCOUNT_TYPES[-1]  # default to Institutional
+        for at in ACCOUNT_TYPES:
+            if at['min_balance'] <= balance <= at['max_balance']:
+                acct_type = at
+                break
+
+        dollar_risk = round(balance * (acct_type['max_risk_pct'] / 100.0), 2)
+
+        config = {
+            'balance': balance,
+            'account_type': acct_type['name'],
+            'max_risk_pct': acct_type['max_risk_pct'],
+            'max_positions': acct_type['max_positions'],
+            'dollar_risk_per_trade': dollar_risk,
+        }
+        logger.info(
+            f"Account configured: type={config['account_type']}, "
+            f"balance=${balance:,.2f}, risk/trade=${dollar_risk:,.2f}"
+        )
+        return config
+
+    # ==================================================================
+    # Team Grading
+    # ==================================================================
+
+    def grade_team(self, agent_grades: List[dict],
+                   weekly_pnl_pct: float,
+                   weekly_drawdown_pct: float) -> dict:
+        """Compute a weighted team grade.
+
+        Weights:
+          60% -- average of individual agent scores
+          20% -- weekly P&L performance
+          20% -- drawdown discipline
+
+        Args:
+            agent_grades: List of dicts from AgentGrader.grade_agent().
+            weekly_pnl_pct: Net P&L for the week as a percentage.
+            weekly_drawdown_pct: Max drawdown during the week as a percentage.
+
+        Returns:
+            Team grade dict.
+        """
+        # Individual average (60%)
+        if agent_grades:
+            avg_individual = sum(g['total'] for g in agent_grades) / len(agent_grades)
+        else:
+            avg_individual = 0.0
+
+        # Weekly P&L score (0-20)
+        if weekly_pnl_pct >= 2.0:
+            pnl_score = 20
+        elif weekly_pnl_pct >= 1.0:
+            pnl_score = 16
+        elif weekly_pnl_pct >= 0.0:
+            pnl_score = 12
+        elif weekly_pnl_pct >= -3.0:
+            pnl_score = 8
+        else:
+            pnl_score = 0
+
+        # Drawdown discipline score (0-20)
+        if weekly_drawdown_pct <= 2.0:
+            dd_score = 20
+        elif weekly_drawdown_pct <= 5.0:
+            dd_score = 15
+        elif weekly_drawdown_pct <= 7.0:
+            dd_score = 10
+        elif weekly_drawdown_pct <= 10.0:
+            dd_score = 5
+        else:
+            dd_score = 0  # lockout territory
+
+        team_score = round(
+            (avg_individual * 0.60) + (pnl_score * 1.0) + (dd_score * 1.0), 2
+        )
+        team_grade = AgentGrader.letter_grade(team_score)
+
+        return {
+            'avg_individual_score': round(avg_individual, 2),
+            'pnl_score': pnl_score,
+            'drawdown_score': dd_score,
+            'team_score': team_score,
+            'team_grade': team_grade,
+            'agent_grades': agent_grades,
+        }
+
+    # ==================================================================
+    # Weekly Grade Report
+    # ==================================================================
+
+    def format_weekly_grade_report(self,
+                                   team_result: dict,
+                                   week_start: Optional[str] = None,
+                                   week_end: Optional[str] = None,
+                                   account_growth_usd: float = 0.0,
+                                   account_growth_pct: float = 0.0) -> str:
+        """Produce a formatted weekly grade report string.
+
+        Args:
+            team_result: Output of grade_team().
+            week_start: Start date string (e.g. '2025-05-12').
+            week_end: End date string (e.g. '2025-05-18').
+            account_growth_usd: Dollar growth over the week.
+            account_growth_pct: Percentage growth over the week.
+
+        Returns:
+            Multi-line formatted report.
+        """
+        now = datetime.now(timezone.utc)
+        if not week_start:
+            ws = now - timedelta(days=now.weekday())
+            week_start = ws.strftime('%Y-%m-%d')
+        if not week_end:
+            we = now - timedelta(days=now.weekday()) + timedelta(days=6)
+            week_end = we.strftime('%Y-%m-%d')
+
+        agent_grades: List[dict] = team_result.get('agent_grades', [])
+
+        lines = [f"Week of: {week_start} - {week_end}"]
+        lines.append("Individual Agent Grades:")
+
+        lowest = None
+        highest = None
+        category_totals: Dict[str, float] = {}
+        category_counts: Dict[str, int] = {}
+
+        for ag in agent_grades:
+            agent_name = ag['agent']
+            total = ag['total']
+            grade = ag['grade']
+
+            # Determine trend vs previous grades
+            prev = self._previous_grades.get(agent_name)
+            if prev is not None:
+                if total > prev + 2:
+                    trend = '↑'
+                elif total < prev - 2:
+                    trend = '↓'
+                else:
+                    trend = '→'
+            else:
+                trend = '→'
+            self._previous_grades[agent_name] = total
+
+            lines.append(
+                f"  {agent_name} -> Score: {total}/100 -> "
+                f"Grade: {grade} -> Trend: {trend}"
+            )
+
+            # Track lowest / highest
+            if lowest is None or total < lowest['total']:
+                lowest = ag
+            if highest is None or total > highest['total']:
+                highest = ag
+
+            # Accumulate category averages
+            for cat, score in ag.get('categories', {}).items():
+                category_totals[cat] = category_totals.get(cat, 0.0) + score
+                category_counts[cat] = category_counts.get(cat, 0) + 1
+
+        # Team overall
+        team_score = team_result['team_score']
+        team_grade = team_result['team_grade']
+        team_prev = self._previous_grades.get('__team__')
+        if team_prev is not None:
+            if team_score > team_prev + 2:
+                team_trend = '↑'
+            elif team_score < team_prev - 2:
+                team_trend = '↓'
+            else:
+                team_trend = '→'
+        else:
+            team_trend = '→'
+        self._previous_grades['__team__'] = team_score
+
+        lines.append(f"Team Overall Score: {team_score}/100")
+        lines.append(f"Team Grade: {team_grade}")
+        lines.append(f"Team Trend: {team_trend}")
+
+        # Lowest / highest agents
+        if lowest:
+            lowest_cats = lowest.get('categories', {})
+            weakest_cat = min(lowest_cats, key=lowest_cats.get) if lowest_cats else 'N/A'
+            lines.append(
+                f"Lowest scoring agent: {lowest['agent']} -- "
+                f"flagged for: {weakest_cat}"
+            )
+        if highest:
+            highest_cats = highest.get('categories', {})
+            best_cat = max(highest_cats, key=highest_cats.get) if highest_cats else 'N/A'
+            lines.append(
+                f"Highest scoring agent: {highest['agent']} -- "
+                f"standout: {best_cat}"
+            )
+
+        # Key weakness across team
+        if category_totals and category_counts:
+            cat_avgs = {
+                cat: category_totals[cat] / category_counts[cat]
+                for cat in category_totals
+            }
+            key_weakness = min(cat_avgs, key=cat_avgs.get)
+            lines.append(f"Key weakness: {key_weakness}")
+
+            # Recommended action
+            action_map = {
+                'rule_compliance': 'Reinforce rule-following protocols and review checklists',
+                'signal_quality': 'Raise confluence threshold or review indicator alignment',
+                'risk_management': 'Audit position sizing and drawdown lockout adherence',
+                'timeliness': 'Tighten signal and journal latency requirements',
+                'adaptability': 'Improve responsiveness to HTF bias shifts and news events',
+            }
+            lines.append(
+                f"Recommended action: {action_map.get(key_weakness, 'Review overall process')}"
+            )
+        else:
+            lines.append("Key weakness: N/A")
+            lines.append("Recommended action: N/A")
+
+        # Account growth
+        sign = '+' if account_growth_usd >= 0 else ''
+        lines.append(
+            f"Account growth: {sign}${account_growth_usd:,.2f} "
+            f"({sign}{account_growth_pct:.2f}%)"
+        )
+
+        return "\n".join(lines)
+
+    # ==================================================================
+    # Pipeline
+    # ==================================================================
+
     def _run_all_agents(self) -> dict:
         """
         Assemble the Avengers and run all agents in sequence.
@@ -79,6 +813,14 @@ class NickFury:
             Dictionary with all agent results keyed by role name.
         """
         logger.info("Avengers, assemble! Running all agents...")
+
+        # ── Phase 0: Session Context ────────────────────────────────────
+
+        session_info = self.get_current_session()
+        logger.info(
+            f"Active sessions: {session_info['active_sessions']}, "
+            f"overlap={session_info['is_overlap']}"
+        )
 
         # ── Phase 1: Data Gathering ──────────────────────────────────────
 
@@ -137,14 +879,34 @@ class NickFury:
             logger.error(f"Spider-Man agent failed: {e}", exc_info=True)
             news_result = {'status': 'error', 'error': str(e)}
 
+        # ── Phase 1.5: Session Bias ──────────────────────────────────────
+
+        session_bias = self.set_session_bias(
+            session_info=session_info,
+            htf_trend=tech_result.get('pairs', {}) if tech_result.get('status') == 'success' else None,
+            key_levels=None,
+            pending_news=news_result.get('headlines', []) if news_result.get('status') == 'success' else None,
+            correlated_markets=corr_result if corr_result.get('status') == 'success' else None,
+        )
+
         # ── Phase 2: Signal Generation ───────────────────────────────────
 
-        # Black Widow - Trade ideas generation
+        # Black Widow - Trade ideas generation (with session context)
         logger.info("Romanoff, compile the intel...")
         try:
             ideas_result = self.trade_ideas_gen.generate(
-                tech_result, fund_result, sent_result, corr_result
+                tech_result, fund_result, sent_result, corr_result,
+                session_info=session_info,
             )
+        except TypeError:
+            # Fallback if BlackWidow.generate() doesn't accept session_info yet
+            try:
+                ideas_result = self.trade_ideas_gen.generate(
+                    tech_result, fund_result, sent_result, corr_result
+                )
+            except Exception as e:
+                logger.error(f"Black Widow agent failed: {e}", exc_info=True)
+                ideas_result = {'status': 'error', 'error': str(e), 'trade_ideas': []}
         except Exception as e:
             logger.error(f"Black Widow agent failed: {e}", exc_info=True)
             ideas_result = {'status': 'error', 'error': str(e), 'trade_ideas': []}
@@ -152,6 +914,7 @@ class NickFury:
         # ── Phase 3: Risk Validation ─────────────────────────────────────
 
         # Doctor Strange - Risk management check on trade ideas
+        # Pass each signal through with confluence-scaled risk
         logger.info("Strange, consult the timelines...")
         try:
             risk_result = self.risk_mgr.analyze(
@@ -163,6 +926,27 @@ class NickFury:
         except Exception as e:
             logger.error(f"Doctor Strange agent failed: {e}", exc_info=True)
             risk_result = {'status': 'error', 'error': str(e)}
+
+        # ── Phase 3.5: Journal Logging ───────────────────────────────────
+
+        # Log every approved signal to WarMachine journal
+        approved_trades = []
+        if risk_result.get('status') == 'success':
+            approved_trades = risk_result.get(
+                'approved_trades', risk_result.get('approved', [])
+            )
+            if isinstance(approved_trades, list):
+                for trade in approved_trades:
+                    self.journal.log_signal({
+                        'pair': trade.get('pair', 'Unknown'),
+                        'direction': trade.get('direction', 'N/A'),
+                        'confluence': trade.get('confluence_score',
+                                                trade.get('confidence', 0)),
+                        'session': session_info.get('active_sessions', []),
+                        'risk_pct': trade.get('risk_pct',
+                                              self.account_config.get(
+                                                  'max_risk_pct', 0)),
+                    })
 
         # ── Phase 4: Optional Backtesting ────────────────────────────────
 
@@ -188,6 +972,8 @@ class NickFury:
             'trade_ideas': ideas_result,
             'risk': risk_result,
             'backtest': backtest_result,
+            'session': session_info,
+            'session_bias': session_bias,
         }
 
     def _compile_briefing(self, results: dict) -> dict:

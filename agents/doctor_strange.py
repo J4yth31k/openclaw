@@ -12,8 +12,9 @@ reality.
 
 import logging
 import math
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 import numpy as np
 
@@ -23,6 +24,141 @@ PERSONA = (
     "I've seen 14 million futures... and there's only one way to manage this risk. "
     "The math doesn't lie, and neither do I."
 )
+
+# ======================================================================
+# Futures Contract Specifications
+# ======================================================================
+
+FUTURES_SPECS: Dict[str, Dict[str, float]] = {
+    'ES': {'tick_value': 12.50, 'description': 'E-mini S&P 500'},
+    'NQ': {'tick_value': 5.00, 'description': 'E-mini Nasdaq 100'},
+    'YM': {'tick_value': 5.00, 'description': 'E-mini Dow'},
+    'GC': {'tick_value': 10.00, 'description': 'Gold'},
+    'SI': {'tick_value': 25.00, 'description': 'Silver'},
+    'CL': {'tick_value': 10.00, 'description': 'Crude Oil'},
+    'NG': {'tick_value': 10.00, 'description': 'Natural Gas'},
+    'ZB': {'tick_value': 31.25, 'description': '30-Year Treasury Bond'},
+    'ZN': {'tick_value': 15.625, 'description': '10-Year Treasury Note'},
+}
+
+# ======================================================================
+# Account Type Definitions
+# ======================================================================
+
+ACCOUNT_TYPES: List[Dict] = [
+    {'name': 'Micro',         'min_balance': 0,       'max_balance': 999.99,    'max_risk_pct': 1.0, 'max_positions': 2},
+    {'name': 'Mini',          'min_balance': 1_000,    'max_balance': 9_999.99,  'max_risk_pct': 2.0, 'max_positions': 3},
+    {'name': 'Standard',      'min_balance': 10_000,   'max_balance': 49_999.99, 'max_risk_pct': 2.0, 'max_positions': 5},
+    {'name': 'Professional',  'min_balance': 50_000,   'max_balance': 249_999.99,'max_risk_pct': 1.0, 'max_positions': 10},
+    {'name': 'Institutional', 'min_balance': 250_000,  'max_balance': float('inf'), 'max_risk_pct': 0.5, 'max_positions': 15},
+]
+
+
+# ======================================================================
+# Account State Tracking
+# ======================================================================
+
+class AccountState:
+    """Tracks running account state including P&L, drawdown, and streak info."""
+
+    def __init__(self, starting_balance: float):
+        self.starting_balance: float = starting_balance
+        self.current_balance: float = starting_balance
+
+        self.daily_pnl: float = 0.0
+        self.weekly_pnl: float = 0.0
+
+        self.daily_high: float = starting_balance
+        self.weekly_high: float = starting_balance
+
+        self.open_positions: int = 0
+        self.consecutive_losses: int = 0
+
+        self._loss_streak_risk_multiplier: float = 1.0
+
+    # --- derived drawdown percentages ---
+
+    @property
+    def daily_drawdown_pct(self) -> float:
+        if self.daily_high <= 0:
+            return 0.0
+        return max(0.0, (self.daily_high - self.current_balance) / self.daily_high * 100)
+
+    @property
+    def weekly_drawdown_pct(self) -> float:
+        if self.weekly_high <= 0:
+            return 0.0
+        return max(0.0, (self.weekly_high - self.current_balance) / self.weekly_high * 100)
+
+    @property
+    def risk_multiplier(self) -> float:
+        """Current risk multiplier accounting for losing streaks."""
+        return self._loss_streak_risk_multiplier
+
+    # --- mutators ---
+
+    def update_after_trade(self, pnl: float) -> None:
+        """Update state after a closed trade.
+
+        Args:
+            pnl: Profit (positive) or loss (negative) in USD.
+        """
+        self.current_balance += pnl
+        self.daily_pnl += pnl
+        self.weekly_pnl += pnl
+
+        # Track highs for drawdown calculation
+        if self.current_balance > self.daily_high:
+            self.daily_high = self.current_balance
+        if self.current_balance > self.weekly_high:
+            self.weekly_high = self.current_balance
+
+        # Consecutive loss tracking
+        if pnl < 0:
+            self.consecutive_losses += 1
+            if self.consecutive_losses >= 3:
+                self._loss_streak_risk_multiplier = 0.5
+                logger.warning(
+                    "AccountState: %d consecutive losses -- risk reduced to 50%%",
+                    self.consecutive_losses,
+                )
+        else:
+            self.consecutive_losses = 0
+            self._loss_streak_risk_multiplier = 1.0
+
+        logger.info(
+            "AccountState update: pnl=%.2f, balance=%.2f, daily_dd=%.2f%%, consec_losses=%d",
+            pnl, self.current_balance, self.daily_drawdown_pct, self.consecutive_losses,
+        )
+
+    def reset_daily(self) -> None:
+        """Reset daily tracking counters (call at start of each trading day)."""
+        self.daily_pnl = 0.0
+        self.daily_high = self.current_balance
+        logger.info("AccountState: daily counters reset, balance=%.2f", self.current_balance)
+
+    def reset_weekly(self) -> None:
+        """Reset weekly tracking counters (call at start of each trading week)."""
+        self.weekly_pnl = 0.0
+        self.weekly_high = self.current_balance
+        logger.info("AccountState: weekly counters reset, balance=%.2f", self.current_balance)
+
+    def calculate_dollar_risk(self, risk_pct: float) -> float:
+        """Recalculate dollar risk based on current balance and risk percentage."""
+        return self.current_balance * (risk_pct / 100.0)
+
+    def to_dict(self) -> dict:
+        return {
+            'starting_balance': self.starting_balance,
+            'current_balance': self.current_balance,
+            'daily_pnl': round(self.daily_pnl, 2),
+            'weekly_pnl': round(self.weekly_pnl, 2),
+            'daily_drawdown_pct': round(self.daily_drawdown_pct, 2),
+            'weekly_drawdown_pct': round(self.weekly_drawdown_pct, 2),
+            'open_positions': self.open_positions,
+            'consecutive_losses': self.consecutive_losses,
+            'risk_multiplier': self._loss_streak_risk_multiplier,
+        }
 
 
 class DoctorStrange:
@@ -49,9 +185,13 @@ class DoctorStrange:
         """
         self.config = {**self.DEFAULT_CONFIG, **(config or {})}
         self.account_size = account_size or self.config['default_account_size']
+        self.account_state = AccountState(self.account_size)
+        self.account_type_info = self.determine_account_type(self.account_size)
         logger.info(
-            "Doctor Strange initialized -- account_size=%.2f, max_risk_per_trade=%.1f%%",
-            self.account_size, self.config['max_risk_per_trade_pct'],
+            "Doctor Strange initialized -- account_size=%.2f, account_type=%s, "
+            "max_risk_per_trade=%.1f%%",
+            self.account_size, self.account_type_info['account_type'],
+            self.config['max_risk_per_trade_pct'],
         )
 
     # ------------------------------------------------------------------
@@ -804,6 +944,584 @@ class DoctorStrange:
         lines.append(f"95th pctl return: {self._esc(conf_str)}%")
 
         return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # Account Type System
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def determine_account_type(balance: float) -> dict:
+        """
+        Determine the account type and associated risk parameters based
+        on current balance.
+
+        Args:
+            balance: Current account balance in USD.
+
+        Returns:
+            dict with account_type, max_risk_pct, and max_positions.
+        """
+        for acct in ACCOUNT_TYPES:
+            if acct['min_balance'] <= balance <= acct['max_balance']:
+                return {
+                    'account_type': acct['name'],
+                    'max_risk_pct': acct['max_risk_pct'],
+                    'max_positions': acct['max_positions'],
+                }
+        # Fallback (should never hit due to inf upper bound)
+        return {
+            'account_type': 'Micro',
+            'max_risk_pct': 1.0,
+            'max_positions': 2,
+        }
+
+    # ------------------------------------------------------------------
+    # Drawdown Lockout System
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def check_lockouts(account_state: 'AccountState') -> Optional[dict]:
+        """
+        Enforce drawdown-based lockout rules.  Returns the most severe
+        lockout action triggered, or None if no lockout applies.
+
+        Lockout thresholds (checked most-severe first):
+            - Weekly DD >= 10%  -> halt_week
+            - Daily  DD >=  5% -> halt_session
+            - Weekly DD >=  7% -> reduce_size_50_week
+            - Daily  DD >=  3% -> reduce_size_50
+
+        Lockouts cannot be overridden without orchestrator approval.
+
+        Args:
+            account_state: Current AccountState instance.
+
+        Returns:
+            dict with 'action', 'reason', and 'requires_orchestrator_override'
+            or None when no lockout is active.
+        """
+        daily_dd = account_state.daily_drawdown_pct
+        weekly_dd = account_state.weekly_drawdown_pct
+
+        # Check most severe first so the caller gets the right directive
+        if weekly_dd >= 10:
+            return {
+                'action': 'halt_week',
+                'reason': f'Weekly drawdown {weekly_dd:.2f}% hit 10% limit -- trading halted for the week',
+                'requires_orchestrator_override': True,
+            }
+        if daily_dd >= 5:
+            return {
+                'action': 'halt_session',
+                'reason': f'Daily drawdown {daily_dd:.2f}% hit 5% limit -- session halted',
+                'requires_orchestrator_override': True,
+            }
+        if weekly_dd >= 7:
+            return {
+                'action': 'reduce_size_50_week',
+                'reason': f'Weekly drawdown {weekly_dd:.2f}% hit 7% -- position sizes reduced 50% for the week',
+                'requires_orchestrator_override': True,
+            }
+        if daily_dd >= 3:
+            return {
+                'action': 'reduce_size_50',
+                'reason': f'Daily drawdown {daily_dd:.2f}% hit 3% -- position sizes reduced 50%',
+                'requires_orchestrator_override': True,
+            }
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Confluence-Scaled Risk
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def scale_risk_by_confluence(base_risk_pct: float, confluence_score: float) -> dict:
+        """
+        Scale the base risk percentage according to the confluence score
+        produced by the signal/strategy layer.
+
+        Scaling rules:
+            50-64  -> 50% of base risk
+            65-74  -> 75% of base risk
+            75-89  -> 100% of base risk
+            90+    -> 100% of base risk, flagged for orchestrator approval
+
+        Args:
+            base_risk_pct: The unscaled risk percentage (e.g. 1.0 for 1%).
+            confluence_score: Numeric score from 0-100.
+
+        Returns:
+            dict with scaled_risk_pct, scale_factor, and
+            requires_orchestrator_approval flag.
+        """
+        if confluence_score >= 90:
+            scale_factor = 1.0
+            requires_approval = True
+        elif confluence_score >= 75:
+            scale_factor = 1.0
+            requires_approval = False
+        elif confluence_score >= 65:
+            scale_factor = 0.75
+            requires_approval = False
+        elif confluence_score >= 50:
+            scale_factor = 0.50
+            requires_approval = False
+        else:
+            # Below 50 -- no trade should be taken
+            scale_factor = 0.0
+            requires_approval = False
+
+        return {
+            'scaled_risk_pct': round(base_risk_pct * scale_factor, 4),
+            'scale_factor': scale_factor,
+            'confluence_score': confluence_score,
+            'requires_orchestrator_approval': requires_approval,
+        }
+
+    # ------------------------------------------------------------------
+    # Enhanced Position Sizing (Futures support)
+    # ------------------------------------------------------------------
+
+    def calculate_position_size_futures(
+        self,
+        account_size: float,
+        risk_pct: float,
+        symbol: str,
+        stop_loss_ticks: float,
+        margin_per_contract: float = None,
+    ) -> dict:
+        """
+        Calculate position size for futures contracts.
+
+        Contracts = Dollar risk / (Stop loss in ticks x Tick value)
+        Always rounds DOWN.  Rejects if required margin > 110% of account.
+
+        Args:
+            account_size: Current account balance in USD.
+            risk_pct: Percentage of account to risk.
+            symbol: Futures symbol (e.g. 'ES', 'NQ').
+            stop_loss_ticks: Stop loss distance in ticks.
+            margin_per_contract: Margin required per contract (optional).
+
+        Returns:
+            dict with contracts, dollar_risk, tick_value, and margin info.
+        """
+        try:
+            spec = FUTURES_SPECS.get(symbol.upper())
+            if spec is None:
+                return {
+                    'contracts': 0,
+                    'dollar_risk': 0,
+                    'tick_value': 0,
+                    'error': f"Unknown futures symbol: {symbol}",
+                }
+
+            if stop_loss_ticks <= 0:
+                return {
+                    'contracts': 0,
+                    'dollar_risk': 0,
+                    'tick_value': spec['tick_value'],
+                    'error': 'stop_loss_ticks must be > 0',
+                }
+
+            tick_value = spec['tick_value']
+            dollar_risk = account_size * (risk_pct / 100.0)
+            raw_contracts = dollar_risk / (stop_loss_ticks * tick_value)
+            contracts = math.floor(raw_contracts)
+
+            # Margin check
+            margin_ok = True
+            margin_warning = None
+            if margin_per_contract is not None and margin_per_contract > 0:
+                required_margin = contracts * margin_per_contract
+                margin_limit = account_size * 1.10  # 110% of account
+                if required_margin > margin_limit:
+                    margin_ok = False
+                    margin_warning = (
+                        f"Required margin ${required_margin:,.2f} exceeds "
+                        f"110% of account (${margin_limit:,.2f})"
+                    )
+                    # Reduce contracts until within margin
+                    while contracts > 0 and (contracts * margin_per_contract) > margin_limit:
+                        contracts -= 1
+
+            return {
+                'contracts': contracts,
+                'dollar_risk': round(dollar_risk, 2),
+                'tick_value': tick_value,
+                'stop_loss_ticks': stop_loss_ticks,
+                'risk_per_contract': round(stop_loss_ticks * tick_value, 2),
+                'total_risk': round(contracts * stop_loss_ticks * tick_value, 2),
+                'margin_ok': margin_ok,
+                'margin_warning': margin_warning,
+                'symbol': symbol.upper(),
+            }
+        except Exception as exc:
+            logger.error("Futures position sizing error: %s", exc)
+            return {
+                'contracts': 0,
+                'dollar_risk': 0,
+                'tick_value': 0,
+                'error': str(exc),
+            }
+
+    def calculate_position_size_forex(
+        self,
+        account_size: float,
+        risk_pct: float,
+        stop_loss_pips: float,
+        pip_value: float = 10.0,
+        margin_per_lot: float = None,
+    ) -> dict:
+        """
+        Calculate forex position size using pip-based math.
+
+        Lot size = Dollar risk / (Stop loss in pips x Pip value)
+        Always rounds DOWN to nearest micro-lot (0.01).
+
+        Args:
+            account_size: Current account balance in USD.
+            risk_pct: Percentage of account to risk.
+            stop_loss_pips: Stop distance in pips.
+            pip_value: Value per pip per standard lot (default $10 for most USD pairs).
+            margin_per_lot: Margin required per standard lot (optional).
+
+        Returns:
+            dict with lot_size, dollar_risk, pip info, and margin check.
+        """
+        try:
+            if stop_loss_pips <= 0:
+                return {
+                    'lot_size': 0.0,
+                    'dollar_risk': 0,
+                    'error': 'stop_loss_pips must be > 0',
+                }
+
+            dollar_risk = account_size * (risk_pct / 100.0)
+            raw_lots = dollar_risk / (stop_loss_pips * pip_value)
+            lot_size = math.floor(raw_lots * 100) / 100.0  # round down to 0.01
+
+            margin_ok = True
+            margin_warning = None
+            if margin_per_lot is not None and margin_per_lot > 0:
+                required_margin = lot_size * margin_per_lot
+                margin_limit = account_size * 1.10
+                if required_margin > margin_limit:
+                    margin_ok = False
+                    margin_warning = (
+                        f"Required margin ${required_margin:,.2f} exceeds "
+                        f"110% of account (${margin_limit:,.2f})"
+                    )
+                    while lot_size > 0 and (lot_size * margin_per_lot) > margin_limit:
+                        lot_size = round(lot_size - 0.01, 2)
+
+            return {
+                'lot_size': lot_size,
+                'dollar_risk': round(dollar_risk, 2),
+                'stop_loss_pips': stop_loss_pips,
+                'pip_value': pip_value,
+                'total_risk': round(lot_size * stop_loss_pips * pip_value, 2),
+                'margin_ok': margin_ok,
+                'margin_warning': margin_warning,
+            }
+        except Exception as exc:
+            logger.error("Forex position sizing error: %s", exc)
+            return {
+                'lot_size': 0.0,
+                'dollar_risk': 0,
+                'error': str(exc),
+            }
+
+    # ------------------------------------------------------------------
+    # Full Trade Validation Gate
+    # ------------------------------------------------------------------
+
+    def validate_trade_full(
+        self,
+        trade_idea: dict,
+        account_state: 'AccountState' = None,
+        open_positions: List[dict] = None,
+        correlation_data: Dict[str, Dict[str, float]] = None,
+    ) -> dict:
+        """
+        Comprehensive trade validation gate that checks ALL risk rules:
+
+        1. Account type risk limits respected
+        2. Drawdown lockouts not triggered
+        3. Confluence score >= 50
+        4. Risk scaled by confluence
+        5. Position size within margin limits
+        6. Max positions not exceeded
+        7. Consecutive loss adjustment applied
+
+        Returns:
+            dict with verdict (APPROVED / MODIFIED / VETOED),
+            reasons, position_size, dollar_risk, risk_reward,
+            modifications, and lockout info.
+        """
+        account_state = account_state or self.account_state
+        open_positions = open_positions or []
+        reasons: List[str] = []
+        modifications: Dict = {}
+        verdict = 'APPROVED'
+
+        try:
+            pair = trade_idea.get('pair', 'UNKNOWN')
+            entry = trade_idea.get('entry', 0)
+            stop_loss = trade_idea.get('stop_loss', 0)
+            take_profit = trade_idea.get('take_profit', 0)
+            direction = trade_idea.get('direction', 'LONG')
+            confidence = trade_idea.get('confidence', 'MEDIUM')
+            confluence_score = trade_idea.get('confluence_score', 0)
+
+            balance = account_state.current_balance
+
+            # --- 1. Account type risk limits ---
+            acct_info = self.determine_account_type(balance)
+            max_risk_pct = acct_info['max_risk_pct']
+            max_positions = acct_info['max_positions']
+
+            # --- 2. Drawdown lockouts ---
+            lockout = self.check_lockouts(account_state)
+            if lockout is not None:
+                action = lockout['action']
+                if action in ('halt_session', 'halt_week'):
+                    return {
+                        'pair': pair,
+                        'direction': direction,
+                        'original_confidence': confidence,
+                        'verdict': 'VETOED',
+                        'position_size': 0,
+                        'dollar_risk': 0,
+                        'risk_reward': 0,
+                        'reasons': [lockout['reason']],
+                        'modifications': None,
+                        'lockout': lockout,
+                        'account_type': acct_info['account_type'],
+                    }
+                elif action in ('reduce_size_50', 'reduce_size_50_week'):
+                    # Halve the allowed risk
+                    max_risk_pct *= 0.5
+                    verdict = 'MODIFIED'
+                    modifications['lockout_risk_reduction'] = lockout['reason']
+                    reasons.append(lockout['reason'])
+
+            # --- 3. Confluence score >= 50 ---
+            if confluence_score < 50:
+                return {
+                    'pair': pair,
+                    'direction': direction,
+                    'original_confidence': confidence,
+                    'verdict': 'VETOED',
+                    'position_size': 0,
+                    'dollar_risk': 0,
+                    'risk_reward': 0,
+                    'reasons': [f'Confluence score {confluence_score} below minimum 50'],
+                    'modifications': None,
+                    'lockout': lockout,
+                    'account_type': acct_info['account_type'],
+                }
+
+            # --- 4. Scale risk by confluence ---
+            conf_risk = self._confidence_to_risk_pct(confidence)
+            base_risk_pct = min(conf_risk, max_risk_pct)
+            scaled = self.scale_risk_by_confluence(base_risk_pct, confluence_score)
+            effective_risk_pct = scaled['scaled_risk_pct']
+
+            if scaled['requires_orchestrator_approval']:
+                modifications['requires_orchestrator_approval'] = True
+                reasons.append(
+                    f'Confluence {confluence_score} >= 90 -- requires orchestrator approval'
+                )
+
+            # --- 7. Consecutive loss adjustment ---
+            effective_risk_pct *= account_state.risk_multiplier
+            if account_state.risk_multiplier < 1.0:
+                if verdict == 'APPROVED':
+                    verdict = 'MODIFIED'
+                modifications['consecutive_loss_adjustment'] = (
+                    f'Risk reduced to {account_state.risk_multiplier:.0%} '
+                    f'after {account_state.consecutive_losses} consecutive losses'
+                )
+                reasons.append(modifications['consecutive_loss_adjustment'])
+
+            # --- Risk:Reward ratio ---
+            risk_distance = abs(entry - stop_loss)
+            reward_distance = abs(take_profit - entry)
+
+            if risk_distance == 0:
+                return {
+                    'pair': pair,
+                    'direction': direction,
+                    'original_confidence': confidence,
+                    'verdict': 'VETOED',
+                    'position_size': 0,
+                    'dollar_risk': 0,
+                    'risk_reward': 0,
+                    'reasons': ['Invalid entry/stop_loss -- zero risk distance'],
+                    'modifications': None,
+                    'lockout': lockout,
+                    'account_type': acct_info['account_type'],
+                }
+
+            risk_reward = reward_distance / risk_distance
+            if risk_reward < self.config['min_risk_reward']:
+                return {
+                    'pair': pair,
+                    'direction': direction,
+                    'original_confidence': confidence,
+                    'verdict': 'VETOED',
+                    'position_size': 0,
+                    'dollar_risk': 0,
+                    'risk_reward': round(risk_reward, 2),
+                    'reasons': [
+                        f"RR {risk_reward:.2f} below minimum {self.config['min_risk_reward']}"
+                    ],
+                    'modifications': None,
+                    'lockout': lockout,
+                    'account_type': acct_info['account_type'],
+                }
+
+            # --- 5. Position sizing (forex vs futures) ---
+            futures_symbol = trade_idea.get('futures_symbol')
+            if futures_symbol:
+                stop_loss_ticks = trade_idea.get('stop_loss_ticks', 0)
+                margin_per_contract = trade_idea.get('margin_per_contract')
+                sizing = self.calculate_position_size_futures(
+                    balance, effective_risk_pct, futures_symbol,
+                    stop_loss_ticks, margin_per_contract,
+                )
+                position_size = sizing.get('contracts', 0)
+                if not sizing.get('margin_ok', True):
+                    if verdict == 'APPROVED':
+                        verdict = 'MODIFIED'
+                    modifications['margin_warning'] = sizing.get('margin_warning', '')
+                    reasons.append(sizing.get('margin_warning', 'Margin limit exceeded'))
+            else:
+                sizing = self.calculate_position_size(
+                    balance, effective_risk_pct, entry, stop_loss,
+                    atr=trade_idea.get('atr'),
+                )
+                position_size = sizing.get('position_size_units', 0)
+
+            dollar_risk = sizing.get('dollar_risk', 0)
+
+            if sizing.get('error'):
+                return {
+                    'pair': pair,
+                    'direction': direction,
+                    'original_confidence': confidence,
+                    'verdict': 'VETOED',
+                    'position_size': 0,
+                    'dollar_risk': 0,
+                    'risk_reward': round(risk_reward, 2),
+                    'reasons': [f"Sizing error: {sizing['error']}"],
+                    'modifications': None,
+                    'lockout': lockout,
+                    'account_type': acct_info['account_type'],
+                }
+
+            # --- 6. Max positions not exceeded ---
+            current_open = account_state.open_positions
+            if current_open >= max_positions:
+                return {
+                    'pair': pair,
+                    'direction': direction,
+                    'original_confidence': confidence,
+                    'verdict': 'VETOED',
+                    'position_size': 0,
+                    'dollar_risk': 0,
+                    'risk_reward': round(risk_reward, 2),
+                    'reasons': [
+                        f"Max positions ({max_positions}) for "
+                        f"{acct_info['account_type']} account reached "
+                        f"({current_open} open)"
+                    ],
+                    'modifications': None,
+                    'lockout': lockout,
+                    'account_type': acct_info['account_type'],
+                }
+
+            # --- Portfolio risk check (reuse existing method) ---
+            portfolio = self.assess_portfolio_risk(open_positions, correlation_data)
+            projected_total = portfolio['total_risk_pct'] + effective_risk_pct
+            if projected_total > self.config['max_portfolio_risk_pct']:
+                available_risk = self.config['max_portfolio_risk_pct'] - portfolio['total_risk_pct']
+                if available_risk > 0.2:
+                    if verdict == 'APPROVED':
+                        verdict = 'MODIFIED'
+                    effective_risk_pct = available_risk
+                    modifications['risk_pct_reduced'] = round(effective_risk_pct, 2)
+                    reasons.append(
+                        f"Risk reduced to {effective_risk_pct:.2f}% to stay within portfolio limit"
+                    )
+                    # Recalculate sizing with reduced risk
+                    if futures_symbol:
+                        sizing = self.calculate_position_size_futures(
+                            balance, effective_risk_pct, futures_symbol,
+                            trade_idea.get('stop_loss_ticks', 0),
+                            trade_idea.get('margin_per_contract'),
+                        )
+                        position_size = sizing.get('contracts', 0)
+                    else:
+                        sizing = self.calculate_position_size(
+                            balance, effective_risk_pct, entry, stop_loss,
+                            atr=trade_idea.get('atr'),
+                        )
+                        position_size = sizing.get('position_size_units', 0)
+                    dollar_risk = sizing.get('dollar_risk', 0)
+                else:
+                    return {
+                        'pair': pair,
+                        'direction': direction,
+                        'original_confidence': confidence,
+                        'verdict': 'VETOED',
+                        'position_size': 0,
+                        'dollar_risk': 0,
+                        'risk_reward': round(risk_reward, 2),
+                        'reasons': [
+                            f"Portfolio risk {projected_total:.1f}% would exceed "
+                            f"max {self.config['max_portfolio_risk_pct']}%"
+                        ],
+                        'modifications': None,
+                        'lockout': lockout,
+                        'account_type': acct_info['account_type'],
+                    }
+
+            if verdict == 'APPROVED' and not reasons:
+                reasons.append('All risk checks passed')
+
+            return {
+                'pair': pair,
+                'direction': direction,
+                'original_confidence': confidence,
+                'verdict': verdict,
+                'position_size': position_size,
+                'dollar_risk': round(dollar_risk, 2),
+                'risk_reward': round(risk_reward, 2),
+                'effective_risk_pct': round(effective_risk_pct, 4),
+                'confluence_score': confluence_score,
+                'reasons': reasons,
+                'modifications': modifications if modifications else None,
+                'lockout': lockout,
+                'account_type': acct_info['account_type'],
+            }
+        except Exception as exc:
+            logger.error("Full trade validation error for %s: %s", trade_idea.get('pair'), exc)
+            return {
+                'pair': trade_idea.get('pair', 'UNKNOWN'),
+                'direction': trade_idea.get('direction', ''),
+                'original_confidence': trade_idea.get('confidence', ''),
+                'verdict': 'VETOED',
+                'position_size': 0,
+                'dollar_risk': 0,
+                'risk_reward': 0,
+                'reasons': [f'Validation error: {exc}'],
+                'modifications': None,
+                'lockout': None,
+                'account_type': 'Unknown',
+            }
 
     # ------------------------------------------------------------------
     # Helpers
