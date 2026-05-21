@@ -74,15 +74,18 @@ body{
 .anode{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 2px;border-radius:4px;border:1px solid var(--bdr);background:rgba(0,0,0,.3);cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
 .anode:hover{border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.04);}
 .anode.working{border-color:rgba(0,255,136,.35);background:rgba(0,255,136,.04);}
+.anode.walking{border-color:rgba(245,158,11,.25);background:rgba(245,158,11,.03);}
 .anode.assembling{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.06);}
 .anode-emo{font-size:13px;line-height:1;position:relative;z-index:1;}
 .anode-pulse{position:absolute;top:2px;left:50%;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;border:1px solid transparent;transition:all .3s;pointer-events:none;}
 .anode.working .anode-pulse{border-color:rgba(0,255,136,.5);box-shadow:0 0 8px rgba(0,255,136,.3);animation:npulse 1.5s ease-in-out infinite;}
+.anode.walking .anode-pulse{border-color:rgba(245,158,11,.35);}
 .anode.idle .anode-pulse{border-color:rgba(0,212,255,.15);}
 @keyframes npulse{0%,100%{transform:translateX(-50%) scale(1);opacity:1;}50%{transform:translateX(-50%) scale(1.35);opacity:.4;}}
 .anode-name{font-family:'Orbitron',monospace;font-size:5px;letter-spacing:.3px;color:var(--mut);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50px;}
 .anode-state{font-size:5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;}
 .anode.working .anode-state{color:var(--green);}
+.anode.walking .anode-state{color:var(--amber);}
 .anode.assembling .anode-state{color:var(--gold);}
 
 /* NETWORK CANVAS */
@@ -316,7 +319,7 @@ body{
   <div class="right-panel">
     <div class="panel-hdr">
       <span class="panel-hdr-title">COMMAND CENTER</span>
-      <span class="panel-hdr-badge" id="signalCountBadge">9 SIGNALS</span>
+      <span class="panel-hdr-badge" id="signalCountBadge">-- SIGNALS</span>
     </div>
     <div class="agent-cards" id="agentCards"></div>
     <div class="dt-tabs" id="dtTabs">
@@ -362,10 +365,10 @@ body{
 <div class="bottombar">
   <div class="bb-feed" id="bbFeed">OpenClaw AI Command Center — all 12 agents operational</div>
   <div class="bb-stats">
-    <span>Agents<b id="bbAgents">12</b></span>
-    <span>Signals<b id="bbSignals">9</b></span>
-    <span>Confluence<b id="bbConfl">76</b></span>
-    <span>Grade<b id="bbTeamGrade">A</b></span>
+    <span>Agents<b id="bbAgents">--</b></span>
+    <span>Signals<b id="bbSignals">--</b></span>
+    <span>Confluence<b id="bbConfl">--</b></span>
+    <span>Grade<b id="bbTeamGrade">--</b></span>
   </div>
 </div>
 
@@ -374,18 +377,18 @@ body{
 // AVENGERS DATA
 // ============================================================
 const AVENGERS = [
-  {id:'ironman',name:'IRON MAN',hero:'Tony Stark',role:'Technical Analysis',emoji:'🦾',color:'#ef4444',accent:'#ff6b6b',roomTheme:'tech_lab',quote:'JARVIS, run the scan.',grade:'S',score:96},
-  {id:'captain',name:'CAPTAIN',hero:'Steve Rogers',role:'Fundamentals',emoji:'🛡️',color:'#3b82f6',accent:'#60a5fa',roomTheme:'command_room',quote:'I can do this all day.',grade:'A',score:89},
-  {id:'scarlet',name:'SCARLET',hero:'Wanda Maximoff',role:'Sentiment',emoji:'🔮',color:'#ec4899',accent:'#f472b6',roomTheme:'mystic_chamber',quote:'I read their minds.',grade:'A',score:87},
-  {id:'thor',name:'THOR',hero:'Thor Odinson',role:'Correlations',emoji:'⚡',color:'#eab308',accent:'#facc15',roomTheme:'asgard_hall',quote:'Bring me Thanos!',grade:'B',score:82},
-  {id:'vision',name:'VISION',hero:'Vision',role:'Order Flow',emoji:'👁️',color:'#10b981',accent:'#34d399',roomTheme:'data_core',quote:'I am processing.',grade:'A',score:91},
-  {id:'spiderman',name:'SPIDER-MAN',hero:'Peter Parker',role:'News & Events',emoji:'🕷️',color:'#ef4444',accent:'#f87171',roomTheme:'web_den',quote:'My spider-sense!',grade:'B',score:78},
-  {id:'widow',name:'BLACK WIDOW',hero:'Natasha Romanoff',role:'Trade Signals',emoji:'🕸️',color:'#8b5cf6',accent:'#a78bfa',roomTheme:'intel_room',quote:'Intel compiled.',grade:'S',score:95},
-  {id:'strange',name:'DR. STRANGE',hero:'Stephen Strange',role:'Risk Mgmt',emoji:'🌀',color:'#06b6d4',accent:'#22d3ee',roomTheme:'sanctum',quote:'14 million futures...',grade:'A',score:92},
-  {id:'hulk',name:'HULK',hero:'Bruce Banner',role:'Backtesting',emoji:'💪',color:'#22c55e',accent:'#4ade80',roomTheme:'reinforced_lab',quote:'HULK SMASH data!',grade:'B',score:80},
-  {id:'warmachine',name:'WAR MACHINE',hero:'James Rhodes',role:'Trade Journal',emoji:'🔫',color:'#6b7280',accent:'#9ca3af',roomTheme:'arsenal',quote:'Boom! Logged it.',grade:'A',score:88},
-  {id:'hawkeye',name:'HAWKEYE',hero:'Clint Barton',role:'Webhook Receiver',emoji:'🏹',color:'#a855f7',accent:'#c084fc',roomTheme:'sniper_nest',quote:'I never miss.',grade:'B',score:84},
-  {id:'fury',name:'NICK FURY',hero:'Nick Fury',role:'Orchestrator',emoji:'🏴',color:'#f59e0b',accent:'#fbbf24',roomTheme:'bridge',quote:'Avengers, assemble!',grade:'S',score:97},
+  {id:'ironman',  name:'IRON MAN',   short:'IRON MAN', hero:'Tony Stark',      role:'Technical Analysis', emoji:'🦾',color:'#ef4444',accent:'#ff6b6b',roomTheme:'tech_lab',       quote:'JARVIS, run the scan.',    grade:'S',score:96},
+  {id:'captain',  name:'CAPTAIN',    short:'CAPTAIN',  hero:'Steve Rogers',    role:'Fundamentals',       emoji:'🛡️',color:'#3b82f6',accent:'#60a5fa',roomTheme:'command_room',    quote:'I can do this all day.',   grade:'A',score:89},
+  {id:'scarlet',  name:'SCARLET',    short:'SCARLET',  hero:'Wanda Maximoff',  role:'Sentiment',          emoji:'🔮',color:'#ec4899',accent:'#f472b6',roomTheme:'mystic_chamber',  quote:'I read their minds.',      grade:'A',score:87},
+  {id:'thor',     name:'THOR',       short:'THOR',     hero:'Thor Odinson',    role:'Correlations',       emoji:'⚡',color:'#eab308',accent:'#facc15',roomTheme:'asgard_hall',     quote:'Bring me Thanos!',         grade:'B',score:82},
+  {id:'vision',   name:'VISION',     short:'VISION',   hero:'Vision',          role:'Order Flow',         emoji:'👁️',color:'#10b981',accent:'#34d399',roomTheme:'data_core',       quote:'I am processing.',         grade:'A',score:91},
+  {id:'spiderman',name:'SPIDER-MAN', short:'SPIDER',   hero:'Peter Parker',    role:'News & Events',      emoji:'🕷️',color:'#ef4444',accent:'#f87171',roomTheme:'web_den',         quote:'My spider-sense!',         grade:'B',score:78},
+  {id:'widow',    name:'BLACK WIDOW',short:'WIDOW',    hero:'Natasha Romanoff',role:'Trade Signals',      emoji:'🕸️',color:'#8b5cf6',accent:'#a78bfa',roomTheme:'intel_room',     quote:'Intel compiled.',          grade:'S',score:95},
+  {id:'strange',  name:'DR. STRANGE',short:'STRANGE',  hero:'Stephen Strange',  role:'Risk Mgmt',         emoji:'🌀',color:'#06b6d4',accent:'#22d3ee',roomTheme:'sanctum',         quote:'14 million futures...',    grade:'A',score:92},
+  {id:'hulk',     name:'HULK',       short:'HULK',     hero:'Bruce Banner',    role:'Backtesting',        emoji:'💪',color:'#22c55e',accent:'#4ade80',roomTheme:'reinforced_lab',  quote:'HULK SMASH data!',         grade:'B',score:80},
+  {id:'warmachine',name:'WAR MACHINE',short:'WAR MACH',hero:'James Rhodes',    role:'Trade Journal',      emoji:'🔫',color:'#6b7280',accent:'#9ca3af',roomTheme:'arsenal',         quote:'Boom! Logged it.',         grade:'A',score:88},
+  {id:'hawkeye',  name:'HAWKEYE',    short:'HAWKEYE',  hero:'Clint Barton',    role:'Webhook Receiver',   emoji:'🏹',color:'#a855f7',accent:'#c084fc',roomTheme:'sniper_nest',     quote:'I never miss.',            grade:'B',score:84},
+  {id:'fury',     name:'NICK FURY',  short:'FURY',     hero:'Nick Fury',       role:'Orchestrator',       emoji:'🏴',color:'#f59e0b',accent:'#fbbf24',roomTheme:'bridge',          quote:'Avengers, assemble!',      grade:'S',score:97},
 ];
 
 // ============================================================
@@ -488,6 +491,13 @@ const NEWS_ITEMS=[
 ];
 
 // ============================================================
+// UPCOMING EVENTS — single source of truth for timing shown in Discord + Alert Log
+// ============================================================
+const UPCOMING_EVENTS=[
+  {name:'Fed Chair speech',impact:'HIGH',assets:['ES','NQ','EURUSD'],hoursFromNow:4},
+];
+
+// ============================================================
 // SESSION DETECTION
 // ============================================================
 // ── Futures session specs (exchange-local times in minutes-since-midnight) ──
@@ -496,12 +506,19 @@ const FUTURES_SPECS={
   NQ: {tz:'America/Chicago', rth:[510,915], pre:[480,510], post:[915,960], desc:'E-mini Nasdaq-100'},
   YM: {tz:'America/Chicago', rth:[510,915], pre:[480,510], post:[915,960], desc:'E-mini Dow'},
   RTY:{tz:'America/Chicago', rth:[510,915], pre:[480,510], post:[915,960], desc:'E-mini Russell 2000'},
+  MES:{tz:'America/Chicago', rth:[510,915], pre:[480,510], post:[915,960], desc:'Micro E-mini S&P'},
+  MNQ:{tz:'America/Chicago', rth:[510,915], pre:[480,510], post:[915,960], desc:'Micro Nasdaq-100'},
   CL: {tz:'America/New_York',rth:[540,870], pre:[480,540], post:[870,1020],desc:'Crude Oil'},
   GC: {tz:'America/New_York',rth:[500,810], pre:[480,500], post:[810,1020],desc:'Gold'},
   NG: {tz:'America/New_York',rth:[540,870], pre:[480,540], post:[870,1020],desc:'Natural Gas'},
   ZB: {tz:'America/Chicago', rth:[440,840], pre:[420,440], post:[840,960], desc:'30-Yr T-Bond'},
   ZN: {tz:'America/Chicago', rth:[440,840], pre:[420,440], post:[840,960], desc:'10-Yr T-Note'},
 };
+function pairCat(k){
+  if(['BTCUSD','ETHUSD','SOLUSD'].includes(k))return'CRYPTO';
+  if(FUTURES_SPECS[k])return'FUTURES';
+  return'FOREX';
+}
 const FUTURES_SESSION_EMOJI={RTH:'🟢','PRE-MARKET':'🟡','POST-MARKET':'🟠',OVERNIGHT:'🌙',CLOSED:'🔴'};
 
 function getFuturesSession(sym){
@@ -1305,8 +1322,8 @@ colCanvas.addEventListener('mousemove',e=>{
 colCanvas.addEventListener('mouseleave',()=>{hoveredRoom=-1;document.getElementById('roomTooltip').classList.remove('visible');});
 colCanvas.addEventListener('click',e=>{
   const rect=colCanvas.getBoundingClientRect();const mx=e.clientX-rect.left,my=e.clientY-rect.top;
-  for(let i=0;i<ROOM_LAYOUT.length;i++){const r=getRoomRect(i);if(mx>=r.x&&mx<=r.x+r.w&&my>=r.y&&my<=r.y+r.h){selectedRoom=i;document.querySelectorAll('.ag-card').forEach((c,ci)=>c.classList.toggle('selected',ci===ROOM_LAYOUT[i].agent));return;}}
-  selectedRoom=-1;
+  for(let i=0;i<ROOM_LAYOUT.length;i++){const r=getRoomRect(i);if(mx>=r.x&&mx<=r.x+r.w&&my>=r.y&&my<=r.y+r.h){selectAgent(ROOM_LAYOUT[i].agent);return;}}
+  clearAgentSelection();
 });
 
 // ============================================================
@@ -1389,7 +1406,7 @@ function buildAgentCardsMini(){
     barFill.style.cssText=`width:${a.score}%;background:${gradeColor(a.grade)}`;
     barWrap.appendChild(barFill);
     card.appendChild(cv);card.appendChild(info);card.appendChild(barWrap);
-    card.addEventListener('click',()=>{document.querySelectorAll('.ag-card').forEach(c=>c.classList.remove('selected'));card.classList.add('selected');selectedRoom=ROOM_LAYOUT.findIndex(r=>r.agent===i);});
+    card.addEventListener('click',()=>selectAgent(i));
     container.appendChild(card);
     cardCanvases.push(cv);cardCtxs.push(cv.getContext('2d'));
   });
@@ -1420,10 +1437,22 @@ document.querySelectorAll('.dt-tab').forEach(tab=>{
 // ============================================================
 function buildPairSelector(){
   const container=document.getElementById('pairSelector');
-  Object.keys(PAIRS).forEach(k=>{
-    const btn=document.createElement('div');btn.className='pair-btn'+(k===activePair?' active':'');btn.textContent=k;
-    btn.addEventListener('click',()=>{activePair=k;document.querySelectorAll('.pair-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');});
-    container.appendChild(btn);
+  container.innerHTML='';
+  const groups={FUTURES:[],FOREX:[],CRYPTO:[]};
+  Object.keys(PAIRS).forEach(k=>groups[pairCat(k)].push(k));
+  const catLabel={FUTURES:'FUT',FOREX:'FX',CRYPTO:'CRYPTO'};
+  const catColor={FUTURES:'#f59e0b',FOREX:'#3b82f6',CRYPTO:'#8b5cf6'};
+  Object.entries(groups).forEach(([cat,keys])=>{
+    if(!keys.length)return;
+    const hdr=document.createElement('span');
+    hdr.style.cssText=`font-family:Orbitron,monospace;font-size:6px;color:${catColor[cat]};letter-spacing:1px;align-self:center;margin-right:2px;`;
+    hdr.textContent=catLabel[cat];container.appendChild(hdr);
+    keys.forEach(k=>{
+      const btn=document.createElement('div');btn.className='pair-btn'+(k===activePair?' active':'');btn.textContent=k;
+      btn.addEventListener('click',()=>{activePair=k;document.querySelectorAll('.pair-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');});
+      container.appendChild(btn);
+    });
+    const br=document.createElement('div');br.style.cssText='width:100%;height:0;flex-basis:100%;';container.appendChild(br);
   });
 }
 buildPairSelector();
@@ -1647,27 +1676,44 @@ function updateTopPrices(){
 // ============================================================
 // LEFT PANEL — AGENT NODES
 // ============================================================
+function selectAgent(agentIdx){
+  selectedRoom=ROOM_LAYOUT.findIndex(r=>r.agent===agentIdx);
+  document.querySelectorAll('.ag-card').forEach((c,ci)=>c.classList.toggle('selected',ci===agentIdx));
+  document.querySelectorAll('.anode').forEach((el,ei)=>el.classList.toggle('anode-selected',ei===agentIdx));
+  const a=AVENGERS[agentIdx];
+  document.getElementById('signalCountBadge').textContent=`${a.emoji} ${a.name} · ${a.role} · ${a.grade}`;
+}
+function clearAgentSelection(){
+  selectedRoom=-1;
+  document.querySelectorAll('.ag-card,.anode').forEach(el=>el.classList.remove('selected','anode-selected'));
+  document.getElementById('signalCountBadge').textContent=SIGNALS.length+' ACTIVE SIGNALS';
+}
+
 function buildAgentNodes(){
   const container=document.getElementById('agentNodes');container.innerHTML='';
   AVENGERS.forEach((a,i)=>{
     const el=document.createElement('div');el.className='anode idle';el.id='anode-'+i;
-    el.innerHTML=`<div class="anode-pulse"></div><span class="anode-emo">${a.emoji}</span><span class="anode-name">${a.name.split(' ')[0]}</span><span class="anode-state" id="anode-state-${i}">IDLE</span>`;
-    el.title=`${a.name} — ${a.role}`;
-    el.addEventListener('click',()=>{selectedRoom=ROOM_LAYOUT.findIndex(r=>r.agent===i);document.querySelectorAll('.ag-card').forEach((c,ci)=>c.classList.toggle('selected',ci===i));});
+    el.innerHTML=`<div class="anode-pulse"></div><span class="anode-emo">${a.emoji}</span><span class="anode-name">${a.short}</span><span class="anode-state" id="anode-state-${i}">IDLE</span>`;
+    el.title=`${a.name} — ${a.role} — Grade ${a.grade} (${a.score}/100)`;
+    el.addEventListener('click',()=>selectAgent(i));
     container.appendChild(el);
   });
 }
 buildAgentNodes();
+clearAgentSelection();
 
+function getActiveCount(){
+  return agentPositions.filter(p=>p.state==='working'||p.state==='walking').length;
+}
 function updateAgentNodes(){
   agentPositions.forEach((pos,i)=>{
     const el=document.getElementById('anode-'+i);
     const stateEl=document.getElementById('anode-state-'+i);
     if(!el)return;
     el.className='anode '+pos.state;
-    if(stateEl)stateEl.textContent=pos.state.toUpperCase();
+    if(stateEl)stateEl.textContent=pos.state==='working'?'WORKING':pos.state==='walking'?'MOVING':pos.state==='assembling'?'ASSEMBLE':'IDLE';
   });
-  document.getElementById('activeNodeCount').textContent=agentPositions.filter(p=>p.state==='working').length+' WORKING';
+  document.getElementById('activeNodeCount').textContent=getActiveCount()+' ACTIVE';
 }
 
 // ============================================================
@@ -1729,15 +1775,18 @@ renderNetworkCanvas();
 // SYSTEM METRICS
 // ============================================================
 function updateSysMetrics(){
+  const active=getActiveCount();
   const working=agentPositions.filter(p=>p.state==='working').length;
+  const nonAssemble=AVENGERS.length-agentPositions.filter(p=>p.state==='assembling').length;
+  const teamScore=Math.round(AVENGERS.reduce((s,a)=>s+a.score,0)/AVENGERS.length);
   const container=document.getElementById('sysMetrics');
   const metrics=[
-    {label:'Active Agents',val:`${12-agentPositions.filter(p=>p.state==='assembling').length}/12`,pct:100,color:'#00d4ff'},
-    {label:'Working Now',val:`${working}/12`,pct:(working/12)*100,color:'#00ff88'},
-    {label:'Signal Queue',val:'3',pct:60,color:'#7c3aed'},
-    {label:'Team Score',val:'88/100',pct:88,color:'#f59e0b'},
+    {label:'Active Agents',val:`${nonAssemble}/${AVENGERS.length}`,pct:(nonAssemble/AVENGERS.length)*100,color:'#00d4ff'},
+    {label:'Active Now',val:`${active}/${AVENGERS.length}`,pct:(active/AVENGERS.length)*100,color:'#00ff88'},
+    {label:'Working Now',val:`${working}/${AVENGERS.length}`,pct:(working/AVENGERS.length)*100,color:'#10b981'},
+    {label:'Signal Queue',val:`${SIGNALS.length}`,pct:(SIGNALS.length/15)*100,color:'#7c3aed'},
+    {label:'Team Score',val:`${teamScore}/100`,pct:teamScore,color:'#f59e0b'},
     {label:'Risk Used',val:'3.2%',pct:64,color:'#ff9500'},
-    {label:'Uptime',val:'99.8%',pct:99.8,color:'#00ff88'},
   ];
   container.innerHTML=metrics.map(m=>`<div class="sys-metric-row"><span class="sm-label">${m.label}</span><span class="sm-val">${m.val}</span></div><div class="sm-bar"><div class="sm-bar-fill" style="width:${m.pct}%;background:${m.color}"></div></div>`).join('');
 }
@@ -1751,10 +1800,10 @@ const DC_MESSAGES=[
   {user:'Nick Fury',avatar:'🏴',color:'#f59e0b',channel:'#daily-brief',msg:'Morning briefing live. 3 setups detected. Team grade: <span class="buy">A</span>'},
   {user:'Black Widow',avatar:'🕸️',color:'#8b5cf6',channel:'#signals-pro',msg:'Intel compiled. Signal #3 vetoed — confluence <span class="warn">55 below threshold</span>'},
   {user:'Iron Man',avatar:'🦾',color:'#ef4444',channel:'#analysis',msg:'JARVIS scan complete. BTCUSD trending on <span class="hl">3 timeframes</span>. Bullish structure intact.'},
-  {user:'OpenClaw Bot',avatar:'🤖',color:'#00d4ff',channel:'#alerts',msg:'<span class="warn">⚠ USD high-impact event in 4 hours</span> — Fed Chair speech. Tighten stops.'},
+  {user:'OpenClaw Bot',avatar:'🤖',color:'#00d4ff',channel:'#alerts',msg:`<span class="warn">⚠ USD ${UPCOMING_EVENTS[0].impact}-impact in ${UPCOMING_EVENTS[0].hoursFromNow}h</span> — ${UPCOMING_EVENTS[0].name}. Tighten stops.`},
   {user:'Dr. Strange',avatar:'🌀',color:'#06b6d4',channel:'#risk',msg:'14M futures analyzed. Portfolio exposure at <span class="hl">3.2%</span> / 5% max. All clear.'},
   {user:'War Machine',avatar:'🔫',color:'#6b7280',channel:'#journal',msg:'Trade logged: BTCUSD LONG <span class="buy">+$650</span> · 1:2.1 R:R · Win'},
-  {user:'Hawkeye',avatar:'🏹',color:'#a855f7',channel:'#webhooks',msg:'Webhook server healthy. <span class="hl">12 signals</span> processed today. 0 dropped.'},
+  {user:'Hawkeye',avatar:'🏹',color:'#a855f7',channel:'#webhooks',msg:`Webhook server healthy. <span class="hl">${SIGNALS.length} active signals</span> now · <span class="hl">12 processed today</span> · 0 dropped.`},
   {user:'Scarlet',avatar:'🔮',color:'#ec4899',channel:'#sentiment',msg:'Fear & Greed: <span class="buy">72 (Greed)</span>. Retail crowd leaning long BTC. Contrarian note logged.'},
   {user:'Thor',avatar:'⚡',color:'#eab308',channel:'#correlations',msg:'BTC/ETH correlation: <span class="hl">0.89</span> stable. DXY inverse: -0.76 confirming EUR/USD bias.'},
 ];
@@ -1777,9 +1826,9 @@ const ALERT_TEMPLATES=[
   {type:'signal',icon:'🎯',title:'High Confluence Signal',detail:'BTCUSD LONG · C:82 · SMC Entry on 4H'},
   {type:'urgent',icon:'🚨',title:'Urgent: BTC Breakout',detail:'Price crossing key resistance 107,400'},
   {type:'warn',icon:'⚠️',title:'Risk Threshold Warning',detail:'Portfolio exposure approaching 4.0% / 5%'},
-  {type:'info',icon:'📊',title:'Morning Briefing Ready',detail:'3 signals · Team Grade A · Nick Fury'},
+  {type:'info',icon:'📊',title:'Morning Briefing Ready',detail:`${SIGNALS.length} active signals · Team Grade A · Nick Fury`},
   {type:'signal',icon:'🕸️',title:'Black Widow: 2 Signals',detail:'LONG BTCUSD + LONG EURUSD passed gate'},
-  {type:'warn',icon:'📰',title:'News Event in 2h',detail:'Fed Chair speech — USD high-impact'},
+  {type:'warn',icon:'📰',title:`News Event in ${UPCOMING_EVENTS[0].hoursFromNow}h`,detail:`${UPCOMING_EVENTS[0].name} — USD ${UPCOMING_EVENTS[0].impact}-impact`},
   {type:'info',icon:'✅',title:'Dr. Strange: Approved',detail:'2 trades cleared · Risk 3.2% nominal'},
   {type:'urgent',icon:'🔴',title:'Session Overlap Active',detail:'London + NY overlap — max confluence window'},
 ];
@@ -1798,11 +1847,19 @@ cycleAlerts();setInterval(cycleAlerts,6800);
 // CLOCK + UPDATE LOOP
 // ============================================================
 function updateClock(){document.getElementById('clock').textContent=new Date().toISOString().slice(11,19)+' UTC';}
-function updateAll(){updateClock();updateTopPrices();renderChart();updateAgentNodes();}
+function updateAll(){
+  updateClock();updateTopPrices();renderChart();updateAgentNodes();
+  document.getElementById('bbAgents').textContent=AVENGERS.length;
+  document.getElementById('bbSignals').textContent=SIGNALS.length;
+  const maxConfl=SIGNALS.length?Math.max(...SIGNALS.map(s=>s.confluence)):0;
+  document.getElementById('bbConfl').textContent=maxConfl;
+  const ts=Math.round(AVENGERS.reduce((s,a)=>s+a.score,0)/AVENGERS.length);
+  document.getElementById('bbTeamGrade').textContent=ts>=95?'S':ts>=85?'A':ts>=75?'B':'C';
+}
 setInterval(updateAll,1000);updateAll();
 setInterval(renderSessions,30000);
 
-const FEED_MESSAGES=['OpenClaw AI Command Center — 12 agents operational','Iron Man: JARVIS scan complete — ES NQ trending, CL bearish','Black Widow: 9 signals generated, 6 passed confluence gate','Doctor Strange: Portfolio risk 3.2% — within tolerance','War Machine: 7 trades logged — 5W/2L — 71% win rate','Nick Fury: Team grade A (88/100) — strong week','Spider-Man: Fed speech in 4h — monitoring newsfeeds, ES/NQ watching','Thor: ES/BTC correlation elevated at 0.74 — risk-on regime','Hulk: Backtest Sharpe 1.8 on EMA crossover — ES MNQ NQ top performers','Vision: ES order flow 62% bid-side — institutional accumulation','Hawkeye: NQ RTH breakout alert — watching 21,250 liquidity level'];
+const FEED_MESSAGES=['OpenClaw AI Command Center — 12 agents operational','Iron Man: JARVIS scan complete — ES NQ trending, CL bearish','Black Widow: 9 signals generated, 6 passed confluence gate','Doctor Strange: Portfolio risk 3.2% — within tolerance','War Machine: 7 trades logged — 5W/2L — 71% win rate','Nick Fury: Team grade A (88/100) — strong week',`Spider-Man: ${UPCOMING_EVENTS[0].name} in ${UPCOMING_EVENTS[0].hoursFromNow}h — monitoring newsfeeds, ${UPCOMING_EVENTS[0].assets.join('/')} watching`,'Thor: ES/BTC correlation elevated at 0.74 — risk-on regime','Hulk: Backtest Sharpe 1.8 on EMA crossover — ES MNQ NQ top performers','Vision: ES order flow 62% bid-side — institutional accumulation','Hawkeye: NQ RTH breakout alert — watching 21,250 liquidity level'];
 let feedIdx=0;
 setInterval(()=>{document.getElementById('bbFeed').textContent=FEED_MESSAGES[feedIdx%FEED_MESSAGES.length];feedIdx++;},5000);
 
