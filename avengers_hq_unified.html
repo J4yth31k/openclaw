@@ -316,7 +316,7 @@ body{
   <div class="right-panel">
     <div class="panel-hdr">
       <span class="panel-hdr-title">COMMAND CENTER</span>
-      <span class="panel-hdr-badge" id="signalCountBadge">3 SIGNALS</span>
+      <span class="panel-hdr-badge" id="signalCountBadge">9 SIGNALS</span>
     </div>
     <div class="agent-cards" id="agentCards"></div>
     <div class="dt-tabs" id="dtTabs">
@@ -363,8 +363,8 @@ body{
   <div class="bb-feed" id="bbFeed">OpenClaw AI Command Center — all 12 agents operational</div>
   <div class="bb-stats">
     <span>Agents<b id="bbAgents">12</b></span>
-    <span>Signals<b id="bbSignals">3</b></span>
-    <span>Confluence<b id="bbConfl">82</b></span>
+    <span>Signals<b id="bbSignals">9</b></span>
+    <span>Confluence<b id="bbConfl">76</b></span>
     <span>Grade<b id="bbTeamGrade">A</b></span>
   </div>
 </div>
@@ -396,8 +396,19 @@ const PAIRS = {
   ETHUSD:{price:2540,prev:2520,ws:'ethusdt'},
   SOLUSD:{price:178,prev:175,ws:'solusdt'},
   EURUSD:{price:1.1285,prev:1.1270,ws:null},
-  XAUUSD:{price:3245,prev:3230,ws:null},
+  GBPUSD:{price:1.3412,prev:1.3388,ws:null},
+  USDJPY:{price:149.28,prev:149.85,ws:null},
+  XAUUSD:{price:3245, prev:3230, ws:null},
   USDCAD:{price:1.3685,prev:1.3700,ws:null},
+  ES:    {price:5918,  prev:5905,  ws:null},
+  NQ:    {price:21045, prev:20980, ws:null},
+  YM:    {price:43250, prev:43100, ws:null},
+  RTY:   {price:2108,  prev:2095,  ws:null},
+  MNQ:   {price:21045, prev:20980, ws:null},
+  MES:   {price:5918,  prev:5905,  ws:null},
+  CL:    {price:78.42, prev:79.85, ws:null},
+  NG:    {price:3.215, prev:3.180, ws:null},
+  GC:    {price:3245,  prev:3230,  ws:null},
 };
 let activePair = 'BTCUSD';
 const priceHistory = {};
@@ -421,6 +432,12 @@ const SIGNALS=[
   {pair:'BTCUSD',direction:'LONG',entry:107100,tp:108500,sl:106200,confluence:82,strategy:'SMC Entry',timeframe:'4H',invalidation:'Below 106000 on Daily'},
   {pair:'EURUSD',direction:'LONG',entry:1.1280,tp:1.1350,sl:1.1230,confluence:68,strategy:'Pullback',timeframe:'1H',invalidation:'Below 1.1220 on 4H'},
   {pair:'XAUUSD',direction:'SHORT',entry:3250,tp:3200,sl:3280,confluence:55,strategy:'Mean Reversion',timeframe:'4H',invalidation:'Above 3290 on Daily'},
+  {pair:'ES',    direction:'LONG', entry:5900, tp:5975, sl:5860, confluence:76,strategy:'Breakout Retest',timeframe:'1H',invalidation:'Below 5880 on 4H'},
+  {pair:'NQ',    direction:'LONG', entry:20950,tp:21250,sl:20780,confluence:73,strategy:'HTF Trend',    timeframe:'4H',invalidation:'Below 20700 on Daily'},
+  {pair:'MNQ',   direction:'LONG', entry:20950,tp:21250,sl:20780,confluence:73,strategy:'HTF Trend',    timeframe:'4H',invalidation:'Below 20700 on Daily'},
+  {pair:'CL',    direction:'SHORT',entry:79.50,tp:77.00,sl:80.80,confluence:64,strategy:'EIA Fade',     timeframe:'1H',invalidation:'Above 81.00 on Daily'},
+  {pair:'YM',    direction:'LONG', entry:43100,tp:43650,sl:42800,confluence:68,strategy:'Trend Follow', timeframe:'4H',invalidation:'Below 42600 on Daily'},
+  {pair:'RTY',   direction:'LONG', entry:2095, tp:2145, sl:2060, confluence:62,strategy:'Pullback',     timeframe:'1H',invalidation:'Below 2050 on 4H'},
 ];
 const NEWS_ITEMS=[
   {
@@ -1464,7 +1481,7 @@ function renderSessions(){
   });
 
   // Futures session strip
-  const futSyms=['ES','NQ','CL','GC'];
+  const futSyms=['ES','NQ','YM','RTY','MNQ','CL','GC','NG','ZB','ZN'];
   let futHtml='<div style="margin-top:6px;display:flex;flex-direction:column;gap:2px;">';
   futSyms.forEach(sym=>{
     const f=getFuturesSession(sym);
@@ -1488,7 +1505,20 @@ renderSessions();
 // ============================================================
 function renderFlow(){
   const container=document.getElementById('flowList');
-  const fd=[{pair:'BTCUSD',bidPct:58,askPct:42,oi:'$42.1B',oiChg:'+2.3%',liqUp:'$108,500',liqDn:'$105,200'},{pair:'ETHUSD',bidPct:52,askPct:48,oi:'$18.7B',oiChg:'-0.8%',liqUp:'$2,620',liqDn:'$2,440'},{pair:'SOLUSD',bidPct:61,askPct:39,oi:'$5.2B',oiChg:'+4.1%',liqUp:'$185',liqDn:'$168'}];
+  const fd=[
+    {pair:'ES',    bidPct:62,askPct:38,oi:'$284B', oiChg:'+1.4%',liqUp:'$5,975',liqDn:'$5,860'},
+    {pair:'NQ',    bidPct:65,askPct:35,oi:'$118B', oiChg:'+2.1%',liqUp:'$21,250',liqDn:'$20,780'},
+    {pair:'MNQ',   bidPct:65,askPct:35,oi:'$9.2B', oiChg:'+2.1%',liqUp:'$21,250',liqDn:'$20,780'},
+    {pair:'MES',   bidPct:62,askPct:38,oi:'$12.4B',oiChg:'+1.4%',liqUp:'$5,975', liqDn:'$5,860'},
+    {pair:'YM',    bidPct:60,askPct:40,oi:'$44.8B',oiChg:'+0.9%',liqUp:'$43,650',liqDn:'$42,800'},
+    {pair:'RTY',   bidPct:54,askPct:46,oi:'$22.1B',oiChg:'-0.5%',liqUp:'$2,145', liqDn:'$2,060'},
+    {pair:'CL',    bidPct:38,askPct:62,oi:'$31.5B',oiChg:'-3.2%',liqUp:'$80.80', liqDn:'$77.00'},
+    {pair:'NG',    bidPct:44,askPct:56,oi:'$8.4B', oiChg:'-1.1%',liqUp:'$3.40',  liqDn:'$3.00'},
+    {pair:'GC',    bidPct:57,askPct:43,oi:'$68.2B',oiChg:'+0.6%',liqUp:'$3,280', liqDn:'$3,200'},
+    {pair:'BTCUSD',bidPct:58,askPct:42,oi:'$42.1B',oiChg:'+2.3%',liqUp:'$108,500',liqDn:'$105,200'},
+    {pair:'ETHUSD',bidPct:52,askPct:48,oi:'$18.7B',oiChg:'-0.8%',liqUp:'$2,620', liqDn:'$2,440'},
+    {pair:'SOLUSD',bidPct:61,askPct:39,oi:'$5.2B', oiChg:'+4.1%',liqUp:'$185',   liqDn:'$168'},
+  ];
   container.innerHTML='';fd.forEach(f=>{container.innerHTML+=`<div class="flow-card"><div class="flow-title">${f.pair} ORDER FLOW</div><div class="flow-bar"><div class="flow-bid" style="width:${f.bidPct}%"></div><div class="flow-ask" style="width:${f.askPct}%"></div></div><div class="flow-row"><span>Bid/Ask</span><span class="val">${f.bidPct}% / ${f.askPct}%</span></div><div class="flow-row"><span>Open Interest</span><span class="val">${f.oi} (${f.oiChg})</span></div><div class="flow-row"><span>Liq. Above</span><span class="val" style="color:#ff006e">${f.liqUp}</span></div><div class="flow-row"><span>Liq. Below</span><span class="val" style="color:#00ff88">${f.liqDn}</span></div></div>`;});
 }
 renderFlow();
@@ -1550,7 +1580,15 @@ renderGrades();
 // ============================================================
 function renderJournal(){
   const container=document.getElementById('journalList');
-  const trades=[{id:'20260520-BTCUSD-001',pair:'BTCUSD',dir:'LONG',entry:106800,exit:107450,pnl:'+$650',pips:'+650',rr:'1:2.1',outcome:'Win',confluence:82},{id:'20260520-EURUSD-002',pair:'EURUSD',dir:'LONG',entry:1.1265,exit:1.1240,pnl:'-$125',pips:'-25',rr:'0.5:1',outcome:'Loss',confluence:55},{id:'20260520-XAUUSD-003',pair:'XAUUSD',dir:'SHORT',entry:3258,exit:3230,pnl:'+$280',pips:'+28',rr:'1:1.4',outcome:'Win',confluence:68}];
+  const trades=[
+    {id:'20260521-ES-001',   pair:'ES',    dir:'LONG', entry:5895, exit:5962,  pnl:'+$335', pips:'+67',  rr:'1:2.4',outcome:'Win', confluence:76},
+    {id:'20260521-NQ-002',   pair:'NQ',    dir:'LONG', entry:20940,exit:21185, pnl:'+$490', pips:'+245', rr:'1:2.1',outcome:'Win', confluence:73},
+    {id:'20260521-MNQ-003',  pair:'MNQ',   dir:'LONG', entry:20940,exit:21185, pnl:'+$49',  pips:'+245', rr:'1:2.1',outcome:'Win', confluence:73},
+    {id:'20260521-CL-004',   pair:'CL',    dir:'SHORT',entry:79.85,exit:77.90, pnl:'+$195', pips:'+195', rr:'1:1.8',outcome:'Win', confluence:64},
+    {id:'20260521-BTCUSD-005',pair:'BTCUSD',dir:'LONG',entry:106800,exit:107450,pnl:'+$650',pips:'+650', rr:'1:2.1',outcome:'Win', confluence:82},
+    {id:'20260521-EURUSD-006',pair:'EURUSD',dir:'LONG',entry:1.1265,exit:1.1240,pnl:'-$125',pips:'-25',  rr:'0.5:1',outcome:'Loss',confluence:55},
+    {id:'20260521-XAUUSD-007',pair:'XAUUSD',dir:'SHORT',entry:3258,exit:3230,  pnl:'+$280',pips:'+28',   rr:'1:1.4',outcome:'Win', confluence:68},
+  ];
   container.innerHTML='';trades.forEach(t=>{const iw=t.outcome==='Win';container.innerHTML+=`<div class="journal-entry"><div class="journal-id">${t.id}</div><div class="journal-row"><span>Direction</span><span class="val" style="color:${t.dir==='LONG'?'#00ff88':'#ff006e'}">${t.dir} ${t.pair}</span></div><div class="journal-row"><span>Entry → Exit</span><span class="val">${t.entry} → ${t.exit}</span></div><div class="journal-row"><span>P&L</span><span class="val" style="color:${iw?'#00ff88':'#ff006e'}">${t.pnl} (${t.pips} pips)</span></div><div class="journal-row"><span>R:R</span><span class="val">${t.rr}</span></div><div class="journal-row"><span>Confluence</span><span class="val">${t.confluence}</span></div><div class="journal-outcome" style="color:${iw?'#00ff88':'#ff006e'}">${iw?'✓':'✗'} ${t.outcome}</div></div>`;});
 }
 renderJournal();
@@ -1564,17 +1602,27 @@ function renderReport(){
 
 <span class="rh">📊 MARKET OVERVIEW</span>
 Regime: <span class="buy">RISK-ON</span>
-Key Moves: BTC <span class="buy">+2.1%</span>  ETH <span class="buy">+1.8%</span>  XAU <span class="sell">-0.3%</span>
+Key Moves: ES <span class="buy">+0.22%</span>  NQ <span class="buy">+0.31%</span>  CL <span class="sell">-1.79%</span>  BTC <span class="buy">+2.1%</span>  XAU <span class="sell">-0.3%</span>
 
-<span class="rh">🦾 STARK'S TACTICAL SCAN</span>
+<span class="rh">🦾 STARK'S TACTICAL SCAN — FUTURES</span>
+ES:     <span class="buy">Trending</span> — HTF bull, above 5900 structure
+NQ:     <span class="buy">Strong Uptrend</span> — 3 TFs aligned, liquidity sweep done
+YM:     <span class="buy">Uptrend</span> — HTF bullish, LTF consolidating
+RTY:    <span class="warn">Lagging</span> — Underperforming large caps
+CL:     <span class="sell">Bearish</span> — EIA build weighing on price
+
+<span class="rh">🦾 STARK'S TACTICAL SCAN — FOREX / CRYPTO</span>
 BTCUSD: <span class="buy">Strong Uptrend</span> — 3 TFs aligned
 EURUSD: <span class="buy">Uptrend</span> — HTF bullish, LTF consolidating
 XAUUSD: <span class="warn">Ranging</span> — Conflicting signals
 
 <span class="rh">🕸️ WIDOW'S TARGETS</span>
-1. <span class="buy">LONG BTCUSD</span> — Confluence: <span class="buy">82</span> — SMC Entry
-2. <span class="buy">LONG EURUSD</span> — Confluence: <span class="warn">68</span> — Pullback
-3. <span class="sell">SHORT XAUUSD</span> — Confluence: <span class="warn">55</span> — Mean Rev.
+1. <span class="buy">LONG ES</span>     — Confluence: <span class="buy">76</span> — Breakout Retest
+2. <span class="buy">LONG NQ</span>     — Confluence: <span class="buy">73</span> — HTF Trend
+3. <span class="sell">SHORT CL</span>    — Confluence: <span class="warn">64</span> — EIA Fade
+4. <span class="buy">LONG BTCUSD</span> — Confluence: <span class="buy">82</span> — SMC Entry
+5. <span class="buy">LONG EURUSD</span> — Confluence: <span class="warn">68</span> — Pullback
+6. <span class="sell">SHORT XAUUSD</span>— Confluence: <span class="warn">55</span> — Mean Rev.
 
 <span class="rh">🌀 STRANGE'S RISK CHECK</span>
 Approved: 2 trades | Vetoed: 1
@@ -1592,7 +1640,7 @@ renderReport();
 // ============================================================
 function updateTopPrices(){
   const container=document.getElementById('topPrices');
-  const show=['BTCUSD','ETHUSD','EURUSD','XAUUSD'];
+  const show=['ES','NQ','CL','EURUSD','XAUUSD','BTCUSD'];
   container.innerHTML=show.map(k=>{const p=PAIRS[k];const chg=((p.price-p.prev)/p.prev*100);const dp=p.price<10?4:p.price<1000?2:0;return`<span class="tb-price"><span class="sym">${k}</span> <span class="val">${p.price.toFixed(dp)}</span> <span class="chg ${chg>=0?'up':'dn'}">${chg>=0?'+':''}${chg.toFixed(2)}%</span></span>`;}).join('');
 }
 
@@ -1754,7 +1802,7 @@ function updateAll(){updateClock();updateTopPrices();renderChart();updateAgentNo
 setInterval(updateAll,1000);updateAll();
 setInterval(renderSessions,30000);
 
-const FEED_MESSAGES=['OpenClaw AI Command Center — 12 agents operational','Iron Man: JARVIS scan complete — 3 pairs trending','Black Widow: 3 signals generated, 2 passed confluence gate','Doctor Strange: Portfolio risk 3.2% — within tolerance','War Machine: 3 trades logged — 2W/1L — 66% win rate','Nick Fury: Team grade A (88/100) — strong week','Spider-Man: Fed speech in 4h — monitoring newsfeeds','Thor: BTC/ETH correlation stable at 0.89','Hulk: Backtest Sharpe 1.8 on EMA crossover'];
+const FEED_MESSAGES=['OpenClaw AI Command Center — 12 agents operational','Iron Man: JARVIS scan complete — ES NQ trending, CL bearish','Black Widow: 9 signals generated, 6 passed confluence gate','Doctor Strange: Portfolio risk 3.2% — within tolerance','War Machine: 7 trades logged — 5W/2L — 71% win rate','Nick Fury: Team grade A (88/100) — strong week','Spider-Man: Fed speech in 4h — monitoring newsfeeds, ES/NQ watching','Thor: ES/BTC correlation elevated at 0.74 — risk-on regime','Hulk: Backtest Sharpe 1.8 on EMA crossover — ES MNQ NQ top performers','Vision: ES order flow 62% bid-side — institutional accumulation','Hawkeye: NQ RTH breakout alert — watching 21,250 liquidity level'];
 let feedIdx=0;
 setInterval(()=>{document.getElementById('bbFeed').textContent=FEED_MESSAGES[feedIdx%FEED_MESSAGES.length];feedIdx++;},5000);
 
