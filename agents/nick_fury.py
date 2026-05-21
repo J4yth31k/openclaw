@@ -15,6 +15,8 @@ Extended capabilities:
 import logging
 import argparse
 import textwrap
+import sys
+import os
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 import requests
@@ -29,6 +31,17 @@ from vision import Vision
 from spider_man import SpiderMan
 from doctor_strange import DoctorStrange
 from hulk import Hulk
+
+# Session/timezone module (src/ is one level up)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+try:
+    from sessions import (
+        session_context, session_label, classify_instrument,
+        FUTURES_INSTRUMENTS, FOREX_INSTRUMENTS, CRYPTO_INSTRUMENTS,
+    )
+    _SESSIONS_AVAILABLE = True
+except ImportError:
+    _SESSIONS_AVAILABLE = False
 
 logger = logging.getLogger('nick_fury')
 
@@ -798,183 +811,272 @@ class NickFury:
     # Pipeline
     # ==================================================================
 
-    def _run_all_agents(self) -> dict:
+    def _run_all_agents(self, discord_webhook: str = '') -> dict:
         """
-        Assemble the Avengers and run all agents in sequence.
-        Each agent call is wrapped in try/except for graceful degradation.
+        7-step pipeline — clean agent communication order.
 
-        Pipeline phases:
-          1. Data gathering (IronMan, Cap, Wanda, Thor, Vision, SpiderMan)
-          2. Signal generation (BlackWidow)
-          3. Risk validation (DoctorStrange)
-          4. Optional backtesting (Hulk)
-
-        Returns:
-            Dictionary with all agent results keyed by role name.
+        Step 1  Collect market data          (Iron Man + Spider-Man fetch)
+        Step 2  Check session & timezone     (sessions.py + legacy session_info)
+        Step 3  Process Forex / Futures      (Cap, Wanda, Thor, Vision, Black Widow — split by class)
+        Step 4  Share in central workspace   (shared results dict passed forward)
+        Step 5  Summarize important changes  (Doctor Strange compiles)
+        Step 6  Send Discord updates         (Fury posts embeds)
+        Step 7  Log all messages & alerts    (War Machine journals)
         """
-        logger.info("Avengers, assemble! Running all agents...")
+        logger.info("=== OpenClaw Pipeline: 7-step cycle starting ===")
+        workspace: Dict[str, Any] = {}   # central shared workspace (Step 4)
 
-        # ── Phase 0: Session Context ────────────────────────────────────
+        # ── STEP 1: Collect Market Data ─────────────────────────────────
+        logger.info("Step 1/7 — Collecting market data (Iron Man + Spider-Man)...")
 
-        session_info = self.get_current_session()
-        logger.info(
-            f"Active sessions: {session_info['active_sessions']}, "
-            f"overlap={session_info['is_overlap']}"
-        )
-
-        # ── Phase 1: Data Gathering ──────────────────────────────────────
-
-        # Iron Man - Technical analysis (module-level function, takes pair name list)
-        logger.info("Stark, fire up the suit. Running tactical scan...")
         try:
             tech_result = tech_analyze(self.pairs)
         except Exception as e:
-            logger.error(f"Iron Man agent failed: {e}", exc_info=True)
+            logger.error(f"Iron Man failed: {e}", exc_info=True)
             tech_result = {'status': 'error', 'error': str(e), 'pairs': {}}
 
-        # Captain America - Fundamental analysis (class method, no pairs arg)
-        logger.info("Cap, give us the ground truth...")
-        try:
-            fund_result = self.fundamental.analyze()
-        except Exception as e:
-            logger.error(f"Captain America agent failed: {e}", exc_info=True)
-            fund_result = {'status': 'error', 'error': str(e)}
-
-        # Scarlet Witch - Sentiment analysis
-        logger.info("Wanda, read their minds...")
-        try:
-            sent_result = self.sentiment.analyze(self.pairs)
-        except Exception as e:
-            logger.error(f"Scarlet Witch agent failed: {e}", exc_info=True)
-            sent_result = {'status': 'error', 'error': str(e)}
-
-        # Thor - Correlation tracking
-        logger.info("Thor, open the Bifrost...")
-        try:
-            corr_result = self.correlation.analyze()
-        except Exception as e:
-            logger.error(f"Thor agent failed: {e}", exc_info=True)
-            corr_result = {'status': 'error', 'error': str(e)}
-
-        # Vision - Order flow / liquidity (crypto pairs only)
-        crypto_pairs = [p for p in self.pairs if p in self.CRYPTO_PAIRS]
-        logger.info("Vision, scan the order books...")
-        try:
-            if crypto_pairs:
-                vision_result = self.order_flow.analyze(crypto_pairs)
-            else:
-                vision_result = {
-                    'status': 'skipped',
-                    'reason': 'No crypto pairs in watchlist',
-                }
-        except Exception as e:
-            logger.error(f"Vision agent failed: {e}", exc_info=True)
-            vision_result = {'status': 'error', 'error': str(e)}
-
-        # Spider-Man - News & events
-        logger.info("Parker, check the Daily Bugle...")
         try:
             news_result = self.news.analyze(self.pairs)
         except Exception as e:
-            logger.error(f"Spider-Man agent failed: {e}", exc_info=True)
+            logger.error(f"Spider-Man failed: {e}", exc_info=True)
             news_result = {'status': 'error', 'error': str(e)}
 
-        # ── Phase 1.5: Session Bias ──────────────────────────────────────
+        workspace['technical'] = tech_result
+        workspace['news']      = news_result
 
+        # ── STEP 2: Check Active Session & Timezone ─────────────────────
+        logger.info("Step 2/7 — Session & timezone check...")
+
+        # Extended session context (Forex + Futures) via sessions.py
+        if _SESSIONS_AVAILABLE:
+            sess_ctx = session_context(self.pairs)
+            logger.info(
+                f"  Forex sessions: {sess_ctx['forex_sessions']}"
+                f"  |  Active futures: {sess_ctx['active_futures']}"
+            )
+        else:
+            sess_ctx = {}
+
+        # Legacy session_info for backward compat with set_session_bias
+        session_info = self.get_current_session()
+
+        workspace['session_ctx']  = sess_ctx
+        workspace['session_info'] = session_info
+
+        # ── STEP 3: Process Forex / Futures Separately ──────────────────
+        logger.info("Step 3/7 — Processing Forex and Futures separately...")
+
+        # Split pairs by asset class
+        if _SESSIONS_AVAILABLE:
+            forex_pairs   = [p for p in self.pairs if classify_instrument(p) == 'forex']
+            futures_pairs = [p for p in self.pairs if classify_instrument(p) == 'futures']
+            crypto_pairs  = [p for p in self.pairs if classify_instrument(p) == 'crypto']
+        else:
+            forex_pairs   = self.pairs
+            futures_pairs = []
+            crypto_pairs  = [p for p in self.pairs if p in getattr(self, 'CRYPTO_PAIRS', [])]
+
+        logger.info(f"  Forex: {len(forex_pairs)}  Futures: {len(futures_pairs)}  Crypto: {len(crypto_pairs)}")
+
+        # Cap — fundamentals (macro, applies to all classes)
+        logger.info("  Cap: fundamentals...")
+        try:
+            fund_result = self.fundamental.analyze()
+        except Exception as e:
+            logger.error(f"Captain America failed: {e}", exc_info=True)
+            fund_result = {'status': 'error', 'error': str(e)}
+
+        # Wanda — sentiment
+        logger.info("  Scarlet Witch: sentiment...")
+        try:
+            sent_result = self.sentiment.analyze(self.pairs)
+        except Exception as e:
+            logger.error(f"Scarlet Witch failed: {e}", exc_info=True)
+            sent_result = {'status': 'error', 'error': str(e)}
+
+        # Thor — correlations (label each instrument's session)
+        logger.info("  Thor: correlations...")
+        try:
+            corr_result = self.correlation.analyze()
+            if _SESSIONS_AVAILABLE:
+                corr_result['session_labels'] = {
+                    sym: session_label(sym) for sym in self.pairs[:20]
+                }
+        except Exception as e:
+            logger.error(f"Thor failed: {e}", exc_info=True)
+            corr_result = {'status': 'error', 'error': str(e)}
+
+        # Vision — order flow (crypto + futures liquidity)
+        logger.info("  Vision: order flow...")
+        active_of_pairs = crypto_pairs + futures_pairs
+        try:
+            vision_result = self.order_flow.analyze(active_of_pairs) if active_of_pairs else {
+                'status': 'skipped', 'reason': 'No crypto/futures pairs'
+            }
+        except Exception as e:
+            logger.error(f"Vision failed: {e}", exc_info=True)
+            vision_result = {'status': 'error', 'error': str(e)}
+
+        # Session bias (uses legacy session_info)
         session_bias = self.set_session_bias(
             session_info=session_info,
             htf_trend=tech_result.get('pairs', {}) if tech_result.get('status') == 'success' else None,
             key_levels=None,
-            pending_news=news_result.get('headlines', []) if news_result.get('status') == 'success' else None,
+            pending_news=news_result.get('news_cards', []) if news_result.get('status') == 'success' else None,
             correlated_markets=corr_result if corr_result.get('status') == 'success' else None,
         )
 
-        # ── Phase 2: Signal Generation ───────────────────────────────────
-
-        # Black Widow - Trade ideas generation (with session context)
-        logger.info("Romanoff, compile the intel...")
+        # Black Widow — generate signals, informed by asset class split
+        logger.info("  Black Widow: generating signals...")
         try:
             ideas_result = self.trade_ideas_gen.generate(
                 tech_result, fund_result, sent_result, corr_result,
                 session_info=session_info,
             )
         except TypeError:
-            # Fallback if BlackWidow.generate() doesn't accept session_info yet
             try:
                 ideas_result = self.trade_ideas_gen.generate(
                     tech_result, fund_result, sent_result, corr_result
                 )
             except Exception as e:
-                logger.error(f"Black Widow agent failed: {e}", exc_info=True)
+                logger.error(f"Black Widow failed: {e}", exc_info=True)
                 ideas_result = {'status': 'error', 'error': str(e), 'trade_ideas': []}
         except Exception as e:
-            logger.error(f"Black Widow agent failed: {e}", exc_info=True)
+            logger.error(f"Black Widow failed: {e}", exc_info=True)
             ideas_result = {'status': 'error', 'error': str(e), 'trade_ideas': []}
 
-        # ── Phase 3: Risk Validation ─────────────────────────────────────
+        workspace.update({
+            'fundamental':    fund_result,
+            'sentiment':      sent_result,
+            'correlation':    corr_result,
+            'order_flow':     vision_result,
+            'trade_ideas':    ideas_result,
+            'session_bias':   session_bias,
+            'forex_pairs':    forex_pairs,
+            'futures_pairs':  futures_pairs,
+            'crypto_pairs':   crypto_pairs,
+        })
 
-        # Doctor Strange - Risk management check on trade ideas
-        # Pass each signal through with confluence-scaled risk
-        logger.info("Strange, consult the timelines...")
+        # ── STEP 4: Share Findings in Central Workspace ──────────────────
+        # (workspace dict is already complete — agents above read from it)
+        logger.info("Step 4/7 — Central workspace populated.")
+
+        # ── STEP 5: Summarize Important Changes ──────────────────────────
+        logger.info("Step 5/7 — Doctor Strange: risk validation + summary...")
+
         try:
             risk_result = self.risk_mgr.analyze(
                 trade_ideas=ideas_result,
                 account_size=self.account_size,
-                open_positions=[],          # TODO: feed live positions
+                open_positions=[],
                 correlation_data=corr_result,
             )
         except Exception as e:
-            logger.error(f"Doctor Strange agent failed: {e}", exc_info=True)
+            logger.error(f"Doctor Strange failed: {e}", exc_info=True)
             risk_result = {'status': 'error', 'error': str(e)}
 
-        # ── Phase 3.5: Journal Logging ───────────────────────────────────
+        approved_trades = risk_result.get('approved_trades', risk_result.get('approved', [])) \
+            if risk_result.get('status') == 'success' else []
 
-        # Log every approved signal to WarMachine journal
-        approved_trades = []
-        if risk_result.get('status') == 'success':
-            approved_trades = risk_result.get(
-                'approved_trades', risk_result.get('approved', [])
-            )
-            if isinstance(approved_trades, list):
-                for trade in approved_trades:
-                    self.journal.log_signal({
-                        'pair': trade.get('pair', 'Unknown'),
-                        'direction': trade.get('direction', 'N/A'),
-                        'confluence': trade.get('confluence_score',
-                                                trade.get('confidence', 0)),
-                        'session': session_info.get('active_sessions', []),
-                        'risk_pct': trade.get('risk_pct',
-                                              self.account_config.get(
-                                                  'max_risk_pct', 0)),
-                    })
+        # Build a short change summary for Discord/alerts
+        news_cards    = news_result.get('news_cards', []) if news_result.get('status') == 'success' else []
+        high_news     = [c for c in news_cards if c.get('impact') == 'HIGH']
+        summary_lines = []
+        if high_news:
+            summary_lines.append(f"🚨 {len(high_news)} HIGH-impact news event(s)")
+        if approved_trades:
+            summary_lines.append(f"🎯 {len(approved_trades)} trade signal(s) approved")
+        if sess_ctx:
+            active_fut = sess_ctx.get('active_futures', [])
+            if active_fut:
+                summary_lines.append(f"📈 Active futures: {', '.join(active_fut[:4])}")
+            forex_s = sess_ctx.get('forex_sessions', [])
+            if forex_s:
+                summary_lines.append(f"🌍 Forex session: {'/'.join(forex_s)}")
 
-        # ── Phase 4: Optional Backtesting ────────────────────────────────
+        workspace['risk']          = risk_result
+        workspace['approved_trades'] = approved_trades
+        workspace['summary_lines'] = summary_lines
 
+        # Optional backtesting
         backtest_result = None
         if self.run_backtest:
-            logger.info("HULK SMASH... historical data...")
+            logger.info("  Hulk: backtesting...")
             try:
-                backtest_result = self.backtester.analyze(
-                    self.pairs, strategies=None
-                )
+                backtest_result = self.backtester.analyze(self.pairs, strategies=None)
             except Exception as e:
-                logger.error(f"Hulk agent failed: {e}", exc_info=True)
+                logger.error(f"Hulk failed: {e}", exc_info=True)
                 backtest_result = {'status': 'error', 'error': str(e)}
+        workspace['backtest'] = backtest_result
 
-        logger.info("All Avengers reported in. Briefing ready.")
+        # ── STEP 6: Send Discord Updates ─────────────────────────────────
+        logger.info("Step 6/7 — Sending Discord updates...")
+
+        if discord_webhook:
+            # Session update
+            if sess_ctx:
+                self.send_to_discord(
+                    self.format_discord_alert('session', sess_ctx),
+                    discord_webhook,
+                )
+
+            # High-impact news cards
+            for card in high_news[:3]:
+                self.send_to_discord(
+                    self.format_discord_alert('news', card),
+                    discord_webhook,
+                )
+
+            # Approved trade signals
+            for trade in approved_trades[:3]:
+                if _SESSIONS_AVAILABLE:
+                    sym = trade.get('pair', trade.get('symbol', ''))
+                    trade['session_label'] = session_label(sym) if sym else ''
+                self.send_to_discord(
+                    self.format_discord_alert('signal', trade),
+                    discord_webhook,
+                )
+
+            # Summary embed
+            if summary_lines:
+                self.send_to_discord(
+                    self.format_discord_alert('summary', {'lines': summary_lines}),
+                    discord_webhook,
+                )
+        else:
+            logger.debug("No Discord webhook configured — Step 6 skipped")
+
+        # ── STEP 7: Log All Messages & Alerts ────────────────────────────
+        logger.info("Step 7/7 — War Machine: logging trades and alerts...")
+
+        for trade in approved_trades:
+            self.journal.log_signal({
+                'pair':       trade.get('pair', 'Unknown'),
+                'direction':  trade.get('direction', 'N/A'),
+                'confluence': trade.get('confluence_score', trade.get('confidence', 0)),
+                'session':    session_info.get('active_sessions', []),
+                'risk_pct':   trade.get('risk_pct', self.account_config.get('max_risk_pct', 0)),
+            })
+
+        logger.info("=== Pipeline complete ===  "
+                    f"signals={len(approved_trades)}  news_cards={len(news_cards)}")
+
         return {
-            'technical': tech_result,
-            'fundamental': fund_result,
-            'sentiment': sent_result,
-            'correlation': corr_result,
-            'order_flow': vision_result,
-            'news': news_result,
-            'trade_ideas': ideas_result,
-            'risk': risk_result,
-            'backtest': backtest_result,
-            'session': session_info,
-            'session_bias': session_bias,
+            'technical':     workspace['technical'],
+            'fundamental':   workspace['fundamental'],
+            'sentiment':     workspace['sentiment'],
+            'correlation':   workspace['correlation'],
+            'order_flow':    workspace['order_flow'],
+            'news':          workspace['news'],
+            'trade_ideas':   workspace['trade_ideas'],
+            'risk':          workspace['risk'],
+            'backtest':      workspace['backtest'],
+            'session':       session_info,
+            'session_ctx':   workspace['session_ctx'],
+            'session_bias':  workspace['session_bias'],
+            'summary_lines': workspace['summary_lines'],
         }
+
 
     def _compile_briefing(self, results: dict) -> dict:
         """
@@ -1378,6 +1480,113 @@ class NickFury:
 
         return chunks
 
+    # ==================================================================
+    # Discord Delivery
+    # ==================================================================
+
+    @staticmethod
+    def format_discord_alert(kind: str, data: dict) -> dict:
+        """
+        Build a compact, mobile-friendly Discord embed payload.
+
+        kind: 'signal' | 'news' | 'session' | 'summary' | 'alert'
+        """
+        now = datetime.now(timezone.utc).strftime('%H:%M UTC')
+
+        if kind == 'signal':
+            sym      = data.get('pair', data.get('symbol', '?'))
+            side     = data.get('direction', '?').upper()
+            entry    = data.get('entry', '?')
+            tp       = data.get('tp', data.get('take_profit', '?'))
+            sl       = data.get('sl', data.get('stop_loss', '?'))
+            conf     = data.get('confluence_score', data.get('confidence', 0))
+            sess_lbl = data.get('session_label', '')
+            color    = 0x00FF88 if side == 'LONG' else 0xFF006E
+            emoji    = '🟢' if side == 'LONG' else '🔴'
+            return {
+                'embeds': [{
+                    'color': color,
+                    'title': f"{emoji} {side}  {sym}",
+                    'description': (
+                        f"**Entry** `{entry}`  |  **TP** `{tp}`  |  **SL** `{sl}`\n"
+                        f"Confluence `{conf}`  ·  {sess_lbl}"
+                    ),
+                    'footer': {'text': f"OpenClaw  ·  {now}"},
+                }]
+            }
+
+        if kind == 'news':
+            headline = data.get('headline', data.get('title', ''))[:120]
+            source   = data.get('source', '?')
+            impact   = data.get('impact', 'LOW')
+            assets   = ', '.join(data.get('affected_assets', [])[:3])
+            why      = data.get('why_it_matters', '')[:80]
+            impact_color = {'HIGH': 0xFF0000, 'MEDIUM': 0xFF9500, 'LOW': 0xFFFFFF}
+            impact_emoji = {'HIGH': '🚨', 'MEDIUM': '⚠️', 'LOW': 'ℹ️'}
+            return {
+                'embeds': [{
+                    'color': impact_color.get(impact, 0xFFFFFF),
+                    'title': f"{impact_emoji.get(impact, 'ℹ️')} [{impact}]  {headline}",
+                    'description': f"**{assets}**  ·  {source}\n_{why}_",
+                    'footer': {'text': f"Spider-Man  ·  {now}"},
+                }]
+            }
+
+        if kind == 'session':
+            forex_s   = ', '.join(data.get('forex_sessions', ['Off-Hours']))
+            active_fx = ', '.join(data.get('active_forex_pairs', [])[:4])
+            fut_lines = '\n'.join(
+                f"`{sym}` {info['session']}  {info['exchange_time']}"
+                for sym, info in list(data.get('futures', {}).items())[:6]
+            )
+            return {
+                'embeds': [{
+                    'color': 0x00D4FF,
+                    'title': f"📡 Session Update  ·  {now}",
+                    'fields': [
+                        {'name': 'Forex', 'value': f"{forex_s}\nActive: {active_fx or '—'}", 'inline': False},
+                        {'name': 'Futures', 'value': fut_lines or '—', 'inline': False},
+                    ],
+                    'footer': {'text': 'Nick Fury'},
+                }]
+            }
+
+        if kind == 'summary':
+            lines = data.get('lines', [])
+            return {
+                'embeds': [{
+                    'color': 0xF59E0B,
+                    'title': f"📋 Market Summary  ·  {now}",
+                    'description': '\n'.join(f'• {l}' for l in lines[:8]),
+                    'footer': {'text': 'Nick Fury  ·  OpenClaw'},
+                }]
+            }
+
+        # generic alert
+        return {
+            'embeds': [{
+                'color': 0x8B5CF6,
+                'title': data.get('title', 'Alert'),
+                'description': data.get('detail', ''),
+                'footer': {'text': f"OpenClaw  ·  {now}"},
+            }]
+        }
+
+    def send_to_discord(self, payload: dict, webhook_url: str) -> bool:
+        """POST a Discord embed payload to a webhook URL."""
+        if not webhook_url:
+            logger.debug("Discord webhook not configured — skipping")
+            return False
+        try:
+            resp = requests.post(webhook_url, json=payload, timeout=8)
+            if resp.status_code not in (200, 204):
+                logger.warning(f"Discord webhook returned {resp.status_code}: {resp.text[:120]}")
+                return False
+            return True
+        except requests.RequestException as exc:
+            logger.error(f"Discord send failed: {exc}")
+            return False
+
     def send_to_telegram(self, briefing: dict, telegram_token: str,
                          chat_id: str) -> bool:
         """
@@ -1431,13 +1640,15 @@ class NickFury:
             return False
 
     def run_daily_briefing(self, telegram_token: Optional[str] = None,
-                          chat_id: Optional[str] = None) -> str:
+                          chat_id: Optional[str] = None,
+                          discord_webhook: Optional[str] = None) -> str:
         """
-        Run complete Avengers Market Intelligence Briefing workflow.
+        Run complete Avengers Market Intelligence Briefing (7-step pipeline).
 
         Args:
-            telegram_token: Telegram Bot API token (optional)
-            chat_id: Telegram chat ID (optional)
+            telegram_token:   Telegram Bot API token (optional)
+            chat_id:          Telegram chat ID (optional)
+            discord_webhook:  Discord webhook URL (optional)
 
         Returns:
             Formatted briefing string
@@ -1445,16 +1656,10 @@ class NickFury:
         logger.info("Nick Fury initiating Avengers Market Intelligence Briefing")
 
         try:
-            # Assemble the Avengers — returns a dict keyed by role
-            results = self._run_all_agents()
-
-            # Compile briefing
+            results = self._run_all_agents(discord_webhook=discord_webhook or '')
             briefing = self._compile_briefing(results)
-
-            # Format for display
             formatted = self.format_briefing_markdown(briefing)
 
-            # Send to Telegram if credentials provided
             if telegram_token and chat_id:
                 success = self.send_to_telegram(briefing, telegram_token, chat_id)
                 if success:

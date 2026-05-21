@@ -1,10 +1,16 @@
 """
-Spider-Man (Peter Parker) - News & Events Agent for Crypto/Forex Markets
+Spider-Man (Peter Parker) - News & Events Agent for Forex, Futures & Crypto
 
 My spider-sense is tingling... something big is about to move the markets.
-Monitors real-time news feeds, economic data releases, and breaking events
-that could impact crypto and forex markets. Uses RSS feeds, CryptoCompare,
-and keyword-based sentiment scoring to detect market-moving catalysts.
+Monitors real-time news feeds and economic events across Forex, Futures
+(ES, NQ, YM, RTY, CL, GC, NG, ZB, ZN, …), and Crypto.
+
+Each news item is returned with:
+  - headline, source, time_utc, affected_assets, impact (HIGH/MEDIUM/LOW)
+  - summary, agent_summary, why_it_matters, related_assets, url
+  - sentiment score and label
+
+This structure feeds the expandable news cards in the dashboard.
 """
 
 import logging
@@ -28,20 +34,72 @@ class SpiderMan:
     """Peter Parker's spider-sense for market-moving news."""
 
     RSS_FEEDS = {
-        'CoinDesk': 'https://www.coindesk.com/arc/outboundfeeds/rss/',
+        # Crypto
+        'CoinDesk':     'https://www.coindesk.com/arc/outboundfeeds/rss/',
         'CoinTelegraph': 'https://cointelegraph.com/rss',
-        'ForexLive': 'https://www.forexlive.com/feed/',
-        'FXStreet': 'https://www.fxstreet.com/rss',
+        # Forex
+        'ForexLive':    'https://www.forexlive.com/feed/',
+        'FXStreet':     'https://www.fxstreet.com/rss',
+        # Futures / macro
+        'Investing.com': 'https://www.investing.com/rss/news.rss',
+        'MarketWatch':   'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines',
+        'SeekingAlpha':  'https://seekingalpha.com/market_currents.xml',
     }
 
+    # ── Instrument keyword map (Forex + Futures + Crypto) ─────────────
     PAIR_KEYWORDS = {
+        # Crypto
         'BTCUSD': ['bitcoin', 'btc', 'satoshi', 'lightning network'],
         'ETHUSD': ['ethereum', 'eth', 'vitalik', 'defi', 'layer 2', 'l2'],
         'SOLUSD': ['solana', 'sol'],
-        'EURUSD': ['euro', 'eur', 'ecb', 'eurozone', 'lagarde'],
+        # Forex
+        'EURUSD': ['euro', 'eur', 'ecb', 'eurozone', 'lagarde', 'european central bank'],
+        'GBPUSD': ['pound', 'gbp', 'bank of england', 'boe', 'sterling', 'uk gdp', 'uk cpi'],
+        'USDJPY': ['yen', 'jpy', 'bank of japan', 'boj', 'japan gdp', 'nikkei'],
         'XAUUSD': ['gold', 'xau', 'precious metals', 'safe haven', 'bullion'],
-        'USDCAD': ['canadian dollar', 'cad', 'bank of canada', 'boc', 'oil', 'crude'],
+        'USDCAD': ['canadian dollar', 'cad', 'bank of canada', 'boc'],
+        'AUDUSD': ['australian dollar', 'aud', 'rba', 'reserve bank of australia'],
+        # Equity Index Futures
+        'ES':     ['s&p 500', 'sp500', 'spx', 's&p futures', 'e-mini s&p', 'federal reserve', 'fed rate',
+                   'cpi', 'nonfarm payroll', 'nfp', 'pce', 'fomc'],
+        'NQ':     ['nasdaq', 'qqq', 'tech stocks', 'nvidia', 'apple', 'microsoft', 'meta', 'amazon',
+                   'alphabet', 'ai stocks', 'semiconductor', 'e-mini nasdaq'],
+        'YM':     ['dow jones', 'djia', 'dow futures', 'industrial stocks'],
+        'RTY':    ['russell 2000', 'small cap', 'rut', 'iwm'],
+        'MNQ':    ['micro nasdaq', 'mnq'],
+        'MES':    ['micro s&p', 'mes'],
+        # Energy
+        'CL':     ['crude oil', 'wti', 'oil prices', 'opec', 'brent', 'petroleum',
+                   'oil inventory', 'eia crude', 'oil supply', 'energy prices'],
+        'NG':     ['natural gas', 'henry hub', 'gas prices', 'eia natural gas', 'lng'],
+        # Metals
+        'GC':     ['gold futures', 'comex gold', 'gold prices', 'precious metals',
+                   'bullion', 'gold etf', 'gold demand'],
+        'SI':     ['silver futures', 'comex silver', 'silver prices'],
+        'HG':     ['copper futures', 'copper prices', 'dr copper', 'china pmi'],
+        # Bonds
+        'ZB':     ['treasury bond', '30-year', 'long bond', 't-bond', 'yield curve'],
+        'ZN':     ['10-year treasury', '10yr yield', 'treasury note', 'bond yield'],
     }
+
+    # ── Impact classification: HIGH events by keyword ──────────────────
+    HIGH_IMPACT_KEYWORDS = [
+        'fomc', 'federal reserve', 'fed rate', 'rate decision', 'rate hike', 'rate cut',
+        'nonfarm payroll', 'nfp', 'jobs report', 'cpi', 'inflation data', 'gdp report',
+        'recession', 'debt ceiling', 'default', 'bank collapse', 'circuit breaker',
+        'flash crash', 'market halt', 'margin call', 'liquidity crisis',
+        'war', 'military', 'sanctions', 'invasion', 'opec cut', 'emergency meeting',
+        'earnings miss', 'earnings beat', 'profit warning', 'bankruptcy',
+        'sec charges', 'exchange hack', 'exploit', 'rug pull',
+    ]
+
+    MEDIUM_IMPACT_KEYWORDS = [
+        'pmi', 'retail sales', 'trade balance', 'industrial production', 'housing data',
+        'jobless claims', 'consumer confidence', 'ecb minutes', 'fed minutes', 'fomc minutes',
+        'analyst upgrade', 'analyst downgrade', 'price target', 'earnings',
+        'ipo', 'merger', 'acquisition', 'buyback', 'dividend',
+        'opec', 'oil inventory', 'eia report',
+    ]
 
     BULLISH_KEYWORDS = [
         'rally', 'surge', 'adoption', 'approval', 'partnership',
@@ -197,48 +255,99 @@ class SpiderMan:
             'label': self._sentiment_label(score),
         }
 
+    def _classify_impact(self, title: str, summary: str = '') -> str:
+        """Return 'HIGH', 'MEDIUM', or 'LOW' based on event keywords."""
+        text = (title + ' ' + summary).lower()
+        if any(kw in text for kw in self.HIGH_IMPACT_KEYWORDS):
+            return 'HIGH'
+        if any(kw in text for kw in self.MEDIUM_IMPACT_KEYWORDS):
+            return 'MEDIUM'
+        return 'LOW'
+
+    def _build_card(self, item: dict, affected_assets: list, score: float) -> dict:
+        """
+        Build a fully structured news card for the dashboard expandable view.
+
+        Collapsed row:  headline, source, time_utc, affected_assets, impact
+        Expanded panel: full_text, agent_summary, why_it_matters, related_assets, time_utc, url
+        """
+        title   = item.get('title', '')
+        summary = item.get('summary', item.get('body', ''))
+        impact  = self._classify_impact(title, summary)
+        label   = self._sentiment_label(score)
+
+        # Derive related assets (same asset class as primary affected)
+        related = list({a for a in affected_assets
+                        if a not in affected_assets[:1]})[:4]
+
+        # Short agent summary (first 120 chars of summary or generated)
+        agent_summary = summary[:120].rstrip() + '…' if len(summary) > 120 else summary
+
+        # why_it_matters: heuristic one-liner
+        if impact == 'HIGH':
+            why = f"High-impact event — potential sharp move in {', '.join(affected_assets[:2]) or 'markets'}."
+        elif score >= 2:
+            why = f"Bullish catalyst for {', '.join(affected_assets[:2]) or 'markets'}. Watch for continuation."
+        elif score <= -2:
+            why = f"Bearish pressure on {', '.join(affected_assets[:2]) or 'markets'}. Risk-off likely."
+        else:
+            why = "Low directional bias. Monitor for follow-through."
+
+        return {
+            # collapsed
+            'headline':        title,
+            'source':          item.get('source', 'Unknown'),
+            'time_utc':        item.get('published', ''),
+            'affected_assets': affected_assets if affected_assets else ['GENERAL'],
+            'impact':          impact,
+            'sentiment':       score,
+            'sentiment_label': label,
+            # expanded
+            'full_text':       summary,
+            'agent_summary':   agent_summary,
+            'why_it_matters':  why,
+            'related_assets':  related,
+            'url':             item.get('link', ''),
+        }
+
     def detect_market_moving_events(self, news_items: list) -> list:
         """
-        Flag potentially market-moving events from a list of scored news items.
+        Flag market-moving events and return fully structured news cards.
 
-        Criteria: high sentiment magnitude, pair-specific mentions, or high-authority sources.
+        Each card has collapsed fields (headline, source, time_utc, affected_assets, impact)
+        and expanded fields (full_text, agent_summary, why_it_matters, related_assets, url).
         """
         events = []
 
         for item in news_items:
-            title = item.get('title', '')
+            title    = item.get('title', '')
             sentiment = item.get('sentiment', {})
-            score = sentiment.get('score', 0)
-            source = item.get('source', '').lower()
+            score    = sentiment.get('score', 0)
+            source   = item.get('source', '').lower()
 
-            # Determine affected pairs
-            affected_pairs = []
-            title_lower = title.lower()
-            summary_lower = item.get('summary', '').lower() + ' ' + item.get('body', '').lower()
-            combined = title_lower + ' ' + summary_lower
-
-            for pair, keywords in self.PAIR_KEYWORDS.items():
+            # Detect affected instruments
+            affected = []
+            combined = (
+                title.lower() + ' '
+                + item.get('summary', '').lower() + ' '
+                + item.get('body', '').lower()
+            )
+            for sym, keywords in self.PAIR_KEYWORDS.items():
                 if any(kw in combined for kw in keywords):
-                    affected_pairs.append(pair)
+                    affected.append(sym)
 
-            # Authority boost
             is_high_authority = any(auth in source for auth in self.HIGH_AUTHORITY_SOURCES)
+            impact = self._classify_impact(title, item.get('summary', ''))
 
-            # Flag if score magnitude > 5, or high authority with score > 3
+            # Include if: HIGH impact, or magnitude threshold met, or asset-specific hit
             threshold = 3 if is_high_authority else 5
-            if abs(score) >= threshold or (affected_pairs and abs(score) >= 3):
-                events.append({
-                    'title': title,
-                    'sentiment': score,
-                    'source': item.get('source', 'Unknown'),
-                    'url': item.get('link', ''),
-                    'affected_pairs': affected_pairs if affected_pairs else ['GENERAL'],
-                    'published': item.get('published'),
-                    'high_authority': is_high_authority,
-                })
+            if impact == 'HIGH' or abs(score) >= threshold or (affected and abs(score) >= 3):
+                events.append(self._build_card(item, affected, score))
 
-        # Sort by absolute sentiment score descending
-        events.sort(key=lambda x: abs(x['sentiment']), reverse=True)
+        events.sort(key=lambda x: (
+            {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2}[x['impact']],
+            -abs(x['sentiment'])
+        ))
         return events
 
     def get_pair_news_sentiment(self, pair: str, news_items: list) -> dict:
@@ -357,11 +466,23 @@ class SpiderMan:
         # Overall market sentiment
         overall = round(sum(all_pair_scores) / len(all_pair_scores), 2) if all_pair_scores else 0
 
+        # Split cards by asset class for pipeline routing
+        forex_cards   = [c for c in market_moving if any(
+            a in c['affected_assets'] for a in self.PAIR_KEYWORDS
+            if a not in {'ES','NQ','YM','RTY','MNQ','MES','CL','NG','GC','SI','HG','ZB','ZN','BTCUSD','ETHUSD','SOLUSD'}
+        )]
+        futures_cards = [c for c in market_moving if any(
+            a in c['affected_assets'] for a in ('ES','NQ','YM','RTY','MNQ','MES','CL','NG','GC','SI','HG','ZB','ZN')
+        )]
+
         result = {
             'status': 'success',
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'total_articles': len(all_news),
-            'market_moving_events': market_moving[:10],  # Top 10 events
+            'news_cards': market_moving[:15],    # structured cards for dashboard
+            'forex_cards': forex_cards[:8],
+            'futures_cards': futures_cards[:8],
+            'market_moving_events': market_moving[:10],  # legacy key kept for compat
             'pairs': pairs_analysis,
             'overall_market_sentiment': overall,
             'sentiment_label': self._sentiment_label(overall),

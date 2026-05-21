@@ -34,7 +34,7 @@ def run():
             logger.info(f"=== Running {norm} ===")
             try:
                 df = load_minute_data('data', pair=norm)
-                df = df.resample(f"{cfg['bar_minutes']}T").last().dropna()
+                df = df.resample(f"{cfg['bar_minutes']}min").last().dropna()
 
                 # In-sample
                 tmp_cfg = {**cfg, 'pair': norm}

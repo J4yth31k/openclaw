@@ -7,7 +7,7 @@ def to_time_index(df, col='time'):
     df = df.set_index(col).sort_index()
     return df
 
-def geometric_random_walk(n=20000, mu=0.0, sigma=0.0008, start=1.10, seed=42, freq='T'):
+def geometric_random_walk(n=20000, mu=0.0, sigma=0.0008, start=1.10, seed=42, freq='min'):
     rng = np.random.default_rng(seed)
     steps = rng.normal(mu, sigma, n)
     prices = start * np.exp(np.cumsum(steps))
