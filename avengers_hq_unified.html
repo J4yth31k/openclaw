@@ -165,8 +165,13 @@ body{
 .dt-section.active{display:block;}
 
 /* CHART */
-.chart-wrap{width:100%;height:168px;position:relative;margin-bottom:8px;}
-.chart-wrap canvas{width:100%;height:100%;border-radius:4px;border:1px solid var(--bdr);}
+.chart-wrap{width:100%;height:168px;position:relative;margin-bottom:8px;border-radius:4px;border:1px solid var(--bdr);overflow:hidden;}
+.chart-wrap canvas{width:100%;height:100%;}
+/* Data status pill */
+.data-status{font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;padding:2px 7px;border-radius:3px;border:1px solid;transition:all .4s;}
+.data-status.live{color:#00ff88;border-color:rgba(0,255,136,.3);background:rgba(0,255,136,.06);}
+.data-status.delayed{color:#ff9500;border-color:rgba(255,149,0,.3);background:rgba(255,149,0,.06);}
+.data-status.offline{color:#ef4444;border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.06);}
 .pair-selector{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;}
 .pair-btn{font-family:'Share Tech Mono',monospace;font-size:8px;padding:2px 6px;border-radius:2px;background:rgba(255,255,255,.02);color:var(--dim);cursor:pointer;border:1px solid transparent;transition:all .15s;}
 .pair-btn.active{color:var(--cyan);border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.06);}
@@ -264,6 +269,8 @@ body{
 @media(max-width:1080px){.left-panel{display:none;}.right-panel{width:320px;}}
 @media(max-width:760px){.right-panel{width:100%;border-left:none;border-top:1px solid var(--bdr);}.main-area{flex-direction:column;}.colony-map{flex:none;height:40vh;}.agent-cards{grid-template-columns:repeat(6,1fr);}.bottom-tray{display:none;}.tb-prices{display:none;}.left-panel{display:none;}}
 </style>
+<!-- TradingView Lightweight Charts (Apache 2.0) — free, no license required -->
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 
@@ -280,6 +287,8 @@ body{
     <div class="tb-prices" id="topPrices"></div>
     <div class="tb-sep"></div>
     <button class="tb-assemble" id="assembleBtn" onclick="toggleAssemble()">⚡ ASSEMBLE</button>
+    <div class="tb-sep"></div>
+    <span class="data-status offline" id="dataStatus">OFFLINE</span>
     <div class="tb-sep"></div>
     <span class="tb-fps" id="fpsCounter">-- FPS</span>
   </div>
@@ -336,7 +345,7 @@ body{
       <div class="dt-section active" id="tab-chart">
         <div class="pair-selector" id="pairSelector"></div>
         <div class="price-display"><span class="pd-price" id="pdPrice">--</span><span class="pd-chg" id="pdChg"></span></div>
-        <div class="chart-wrap"><canvas id="chartCanvas"></canvas></div>
+        <div class="chart-wrap"><div id="tvChart" style="width:100%;height:100%;"></div></div>
       </div>
       <div class="dt-section" id="tab-signals"><div id="signalsList"></div></div>
       <div class="dt-section" id="tab-sessions"><div id="sessionsList"></div></div>
@@ -416,17 +425,112 @@ const PAIRS = {
 let activePair = 'BTCUSD';
 const priceHistory = {};
 Object.keys(PAIRS).forEach(k=>{priceHistory[k]=[];for(let i=0;i<120;i++)priceHistory[k].push(PAIRS[k].price*(1+(Math.random()-.5)*.002));});
-function connectBinance(){
-  const streams=Object.values(PAIRS).filter(p=>p.ws).map(p=>p.ws+'@trade').join('/');
-  if(!streams)return;
-  try{
-    const ws=new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
-    ws.onmessage=e=>{const d=JSON.parse(e.data);if(d.data&&d.data.p){const stream=d.data.s;const price=parseFloat(d.data.p);Object.entries(PAIRS).forEach(([k,v])=>{if(v.ws&&stream.toLowerCase().includes(v.ws.replace('usdt',''))){v.prev=v.price;v.price=price;priceHistory[k].push(price);if(priceHistory[k].length>300)priceHistory[k].shift();}});}};
-    ws.onerror=()=>setTimeout(connectBinance,5000);ws.onclose=()=>setTimeout(connectBinance,5000);
-  }catch(e){setTimeout(connectBinance,5000);}
+// ============================================================
+// MARKET DATA WEBSOCKET — OpenClaw market-data-service
+// Start: cd market-data-service && npm run dev
+// Falls back gracefully if the service is offline.
+// ============================================================
+const MARKET_WS_URL = 'ws://localhost:3001/ws/market';
+const OHLCV = {};  // symbol → array of {time,open,high,low,close,volume} for LWC
+Object.keys(PAIRS).forEach(k=>{OHLCV[k]=[];});
+
+let mktWs = null;
+let mktStatus = 'offline';
+let mktProvider = 'mock';
+
+function setDataStatus(status, provider){
+  mktStatus   = status;
+  mktProvider = provider || mktProvider;
+  const el    = document.getElementById('dataStatus');
+  if(!el) return;
+  const cls   = status === 'connected' ? 'live' : status === 'delayed' ? 'delayed' : 'offline';
+  const label = status === 'connected'
+    ? (mktProvider === 'rithmic' ? 'LIVE · RITHMIC' : 'LIVE · MOCK')
+    : status === 'delayed' ? 'DELAYED' : 'OFFLINE';
+  el.className = 'data-status ' + cls;
+  el.textContent = label;
 }
-connectBinance();
-setInterval(()=>{Object.entries(PAIRS).forEach(([k,v])=>{if(!v.ws){v.prev=v.price;v.price*=1+(Math.random()-.5)*.0003;v.price=Math.round(v.price*100000)/100000;priceHistory[k].push(v.price);if(priceHistory[k].length>300)priceHistory[k].shift();}});},2000);
+
+function handleMarketMessage(msg){
+  if(msg.type === 'quote'){
+    const q = msg.quote;
+    const pair = PAIRS[q.symbol];
+    if(!pair) return;
+    pair.prev  = pair.price;
+    pair.price = q.price;
+    pair.bid   = q.bid;
+    pair.ask   = q.ask;
+    priceHistory[q.symbol].push(q.price);
+    if(priceHistory[q.symbol].length > 300) priceHistory[q.symbol].shift();
+    // Update LWC chart if this is the active pair
+    if(q.symbol === activePair && lwcSeries){
+      lwcSeries.update({time: Math.floor(q.timestamp/1000), value: q.price});
+    }
+  } else if(msg.type === 'bar'){
+    const b = msg.bar;
+    if(!OHLCV[b.symbol]) OHLCV[b.symbol] = [];
+    const arr = OHLCV[b.symbol];
+    if(arr.length && arr[arr.length-1].time === b.t){
+      arr[arr.length-1] = {time:b.t,open:b.o,high:b.h,low:b.l,close:b.c,volume:b.v};
+    } else {
+      arr.push({time:b.t,open:b.o,high:b.h,low:b.l,close:b.c,volume:b.v});
+      if(arr.length > 500) arr.shift();
+    }
+    if(b.symbol === activePair && lwcSeries){
+      lwcSeries.update({time:b.t,open:b.o,high:b.h,low:b.l,close:b.c});
+    }
+  } else if(msg.type === 'bars'){
+    const arr = msg.bars.map(b=>({time:b.t,open:b.o,high:b.h,low:b.l,close:b.c,volume:b.v}));
+    OHLCV[msg.symbol] = arr;
+    if(msg.symbol === activePair) loadChartBars(arr);
+  } else if(msg.type === 'status'){
+    setDataStatus(msg.status.status, msg.status.provider);
+  } else if(msg.type === 'pong'){
+    // heartbeat ok
+  }
+}
+
+function mktSubscribe(symbol){
+  if(mktWs && mktWs.readyState === WebSocket.OPEN){
+    mktWs.send(JSON.stringify({type:'subscribe', symbol}));
+  }
+}
+
+function mktRequestBars(symbol, resolution){
+  if(mktWs && mktWs.readyState === WebSocket.OPEN){
+    const to   = Math.floor(Date.now()/1000);
+    const from = to - 60 * 300; // 300 minutes of history
+    mktWs.send(JSON.stringify({type:'bars', symbol, resolution: resolution||'1', from, to}));
+  }
+}
+
+function connectMarketData(){
+  try{
+    mktWs = new WebSocket(MARKET_WS_URL);
+    mktWs.onopen = ()=>{
+      setDataStatus('connecting', mktProvider);
+      // Subscribe to every pair we track
+      Object.keys(PAIRS).forEach(sym => mktSubscribe(sym));
+      // Request initial bars for active pair
+      mktRequestBars(activePair, '1');
+      // Heartbeat
+      setInterval(()=>{
+        if(mktWs && mktWs.readyState === WebSocket.OPEN)
+          mktWs.send(JSON.stringify({type:'ping'}));
+      }, 20000);
+    };
+    mktWs.onmessage = e => { try{ handleMarketMessage(JSON.parse(e.data)); }catch(ex){} };
+    mktWs.onerror   = ()=>{ setDataStatus('offline', mktProvider); };
+    mktWs.onclose   = ()=>{
+      setDataStatus('offline', mktProvider);
+      setTimeout(connectMarketData, 4000);
+    };
+  }catch(e){
+    setDataStatus('offline', mktProvider);
+    setTimeout(connectMarketData, 4000);
+  }
+}
+connectMarketData();
 
 // ============================================================
 // SIGNALS / MOCK DATA
@@ -1449,39 +1553,84 @@ function buildPairSelector(){
     hdr.textContent=catLabel[cat];container.appendChild(hdr);
     keys.forEach(k=>{
       const btn=document.createElement('div');btn.className='pair-btn'+(k===activePair?' active':'');btn.textContent=k;
-      btn.addEventListener('click',()=>{activePair=k;document.querySelectorAll('.pair-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');});
+      btn.addEventListener('click',()=>switchChartPair(k));
       container.appendChild(btn);
     });
     const br=document.createElement('div');br.style.cssText='width:100%;height:0;flex-basis:100%;';container.appendChild(br);
   });
 }
 buildPairSelector();
-const chartCanvas=document.getElementById('chartCanvas');const chartCtx=chartCanvas.getContext('2d');
+
+// ============================================================
+// TRADINGVIEW LIGHTWEIGHT CHARTS (candlestick)
+// ============================================================
+let lwcChart = null;
+let lwcSeries = null;
+
+function initLWC(){
+  const container = document.getElementById('tvChart');
+  if(!container || !window.LightweightCharts) return;
+  lwcChart = LightweightCharts.createChart(container, {
+    layout:{background:{type:'solid',color:'#06060f'},textColor:'#2a3a4a',fontSize:8,fontFamily:"'JetBrains Mono',monospace"},
+    grid:{vertLines:{color:'rgba(0,212,255,0.04)'},horzLines:{color:'rgba(0,212,255,0.04)'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Normal,vertLine:{color:'rgba(0,212,255,0.3)',width:1,style:2},horzLine:{color:'rgba(0,212,255,0.3)',width:1,style:2}},
+    rightPriceScale:{borderColor:'rgba(0,212,255,0.1)',textColor:'#2a3a4a'},
+    timeScale:{borderColor:'rgba(0,212,255,0.1)',textColor:'#2a3a4a',timeVisible:true,secondsVisible:false},
+    handleScroll:true,handleScale:true,
+  });
+  lwcSeries = lwcChart.addCandlestickSeries({
+    upColor:'#00ff88',downColor:'#ff006e',
+    borderUpColor:'#00ff88',borderDownColor:'#ff006e',
+    wickUpColor:'#00ff88',wickDownColor:'#ff006e',
+  });
+  const ro = new ResizeObserver(()=>{
+    if(lwcChart && container.clientWidth>0 && container.clientHeight>0)
+      lwcChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  });
+  ro.observe(container);
+}
+
+function loadChartBars(bars){
+  if(!lwcSeries || !bars.length) return;
+  const sorted=[...bars].sort((a,b)=>a.time-b.time);
+  lwcSeries.setData(sorted);
+  if(lwcChart) lwcChart.timeScale().fitContent();
+}
+
+function switchChartPair(sym){
+  activePair = sym;
+  document.querySelectorAll('.pair-btn').forEach(b=>b.classList.toggle('active',b.textContent===sym));
+  if(OHLCV[sym] && OHLCV[sym].length){ loadChartBars(OHLCV[sym]); }
+  else {
+    // Seed from price history until real bars arrive
+    const hist = priceHistory[sym]||[];
+    const nowSec = Math.floor(Date.now()/1000);
+    const bars = hist.map((c,i)=>{
+      const t = nowSec - (hist.length-i)*60;
+      const o=c*(1+(Math.random()-.5)*.0005);
+      const cl=c*(1+(Math.random()-.5)*.0005);
+      return {time:t,open:o,high:Math.max(o,cl)*(1+Math.random()*.0003),low:Math.min(o,cl)*(1-Math.random()*.0003),close:cl};
+    });
+    loadChartBars(bars);
+  }
+  // Always request real bars from backend for this pair
+  mktRequestBars(sym, '1');
+}
+
 function renderChart(){
-  const wrap=chartCanvas.parentElement;const cw=wrap.clientWidth,ch=wrap.clientHeight;
-  const dpr=Math.min(window.devicePixelRatio||1,2);
-  chartCanvas.width=cw*dpr;chartCanvas.height=ch*dpr;chartCanvas.style.width=cw+'px';chartCanvas.style.height=ch+'px';
-  chartCtx.setTransform(dpr,0,0,dpr,0,0);
-  const data=priceHistory[activePair]||[];if(data.length<2)return;
-  const pair=PAIRS[activePair],price=pair.price,chg=((price-pair.prev)/pair.prev*100);
+  const pair=PAIRS[activePair]; if(!pair) return;
+  const price=pair.price, chg=((price-pair.prev)/pair.prev*100);
   const dp=price<10?4:price<1000?2:0;
   document.getElementById('pdPrice').textContent=price.toFixed(dp);
-  const pdChg=document.getElementById('pdChg');pdChg.textContent=(chg>=0?'+':'')+chg.toFixed(3)+'%';pdChg.style.color=chg>=0?'#00ff88':'#ff006e';
-  const pad={t:8,r:8,b:20,l:50};const gw=cw-pad.l-pad.r,gh=ch-pad.t-pad.b;
-  const slice=data.slice(-Math.min(data.length,120));const min=Math.min(...slice),max=Math.max(...slice),range=max-min||1;
-  chartCtx.fillStyle='#06060f';chartCtx.fillRect(0,0,cw,ch);
-  chartCtx.strokeStyle='rgba(0,212,255,0.05)';chartCtx.lineWidth=.5;
-  for(let i=0;i<5;i++){const gy=pad.t+(gh/4)*i;chartCtx.beginPath();chartCtx.moveTo(pad.l,gy);chartCtx.lineTo(cw-pad.r,gy);chartCtx.stroke();const val=max-(range/4)*i;chartCtx.font="8px 'JetBrains Mono',monospace";chartCtx.fillStyle='#2a3a4a';chartCtx.textAlign='right';chartCtx.fillText(val.toFixed(dp),pad.l-4,gy+3);}
-  const isUp=slice[slice.length-1]>=slice[0],lineColor=isUp?'#00ff88':'#ff006e';
-  chartCtx.strokeStyle=lineColor;chartCtx.lineWidth=1.5;chartCtx.beginPath();
-  slice.forEach((p,i)=>{const px=pad.l+(i/(slice.length-1))*gw;const py=pad.t+(1-(p-min)/range)*gh;i===0?chartCtx.moveTo(px,py):chartCtx.lineTo(px,py);});chartCtx.stroke();
-  const lastPy=pad.t+(1-(slice[slice.length-1]-min)/range)*gh;
-  chartCtx.lineTo(pad.l+gw,pad.t+gh);chartCtx.lineTo(pad.l,pad.t+gh);chartCtx.closePath();
-  const grad=chartCtx.createLinearGradient(0,pad.t,0,pad.t+gh);grad.addColorStop(0,hexToRGBA(lineColor,.14));grad.addColorStop(1,'transparent');chartCtx.fillStyle=grad;chartCtx.fill();
-  chartCtx.setLineDash([3,3]);chartCtx.strokeStyle=hexToRGBA(lineColor,.4);chartCtx.lineWidth=.5;
-  chartCtx.beginPath();chartCtx.moveTo(pad.l,lastPy);chartCtx.lineTo(cw-pad.r,lastPy);chartCtx.stroke();chartCtx.setLineDash([]);
-  chartCtx.fillStyle=lineColor;chartCtx.font="bold 8px 'JetBrains Mono',monospace";chartCtx.textAlign='left';chartCtx.fillText(price.toFixed(dp),cw-pad.r+2,lastPy+3);
+  const pdChg=document.getElementById('pdChg');
+  pdChg.textContent=(chg>=0?'+':'')+chg.toFixed(3)+'%';
+  pdChg.style.color=chg>=0?'#00ff88':'#ff006e';
 }
+
+initLWC();
+
+// Seed chart from initial priceHistory; real bars arrive via WS shortly after
+setTimeout(()=>switchChartPair(activePair), 300);
 
 // ============================================================
 // SIGNALS
