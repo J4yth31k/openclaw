@@ -171,7 +171,11 @@ body{
 .data-status{font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;padding:2px 7px;border-radius:3px;border:1px solid;transition:all .4s;}
 .data-status.live{color:#00ff88;border-color:rgba(0,255,136,.3);background:rgba(0,255,136,.06);}
 .data-status.delayed{color:#ff9500;border-color:rgba(255,149,0,.3);background:rgba(255,149,0,.06);}
+.data-status.reconnecting{color:#ff9500;border-color:rgba(255,149,0,.3);background:rgba(255,149,0,.06);animation:blink-amber .9s step-end infinite;}
 .data-status.offline{color:#ef4444;border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.06);}
+@keyframes blink-amber{50%{opacity:.3;}}
+.stale-warn{display:none;background:rgba(239,68,68,.07);border-top:1px solid rgba(239,68,68,.18);border-bottom:1px solid rgba(239,68,68,.18);font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:#ef4444;text-align:center;padding:3px 0;animation:blink-red .8s step-end infinite;}
+@keyframes blink-red{50%{opacity:.4;}}
 .pair-selector{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;}
 .pair-btn{font-family:'Share Tech Mono',monospace;font-size:8px;padding:2px 6px;border-radius:2px;background:rgba(255,255,255,.02);color:var(--dim);cursor:pointer;border:1px solid transparent;transition:all .15s;}
 .pair-btn.active{color:var(--cyan);border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.06);}
@@ -293,6 +297,8 @@ body{
     <span class="tb-fps" id="fpsCounter">-- FPS</span>
   </div>
 </div>
+
+<div id="staleWarn" class="stale-warn">⚠ FEED DISCONNECTED — SIGNAL DATA MAY BE STALE</div>
 
 <!-- MAIN AREA -->
 <div class="main-area">
@@ -442,13 +448,30 @@ function setDataStatus(status, provider){
   mktStatus   = status;
   mktProvider = provider || mktProvider;
   const el    = document.getElementById('dataStatus');
+  const sw    = document.getElementById('staleWarn');
   if(!el) return;
-  const cls   = status === 'connected' ? 'live' : status === 'delayed' ? 'delayed' : 'offline';
-  const label = status === 'connected'
-    ? (mktProvider === 'rithmic' ? 'LIVE · RITHMIC' : 'LIVE · MOCK')
-    : status === 'delayed' ? 'DELAYED' : 'OFFLINE';
-  el.className = 'data-status ' + cls;
-  el.textContent = label;
+
+  const clsMap = {
+    connected:    'live',
+    delayed:      'delayed',
+    reconnecting: 'reconnecting',
+    connecting:   'offline',
+    offline:      'offline',
+  };
+  const labelMap = {
+    connected:    mktProvider === 'rithmic' ? 'LIVE · RITHMIC' : 'LIVE · MOCK',
+    delayed:      'DELAYED',
+    reconnecting: 'RECONNECTING',
+    connecting:   'CONNECTING',
+    offline:      'OFFLINE',
+  };
+
+  el.className   = 'data-status ' + (clsMap[status] || 'offline');
+  el.textContent = labelMap[status] || 'OFFLINE';
+
+  // Show stale warning banner when feed is not delivering data
+  const isStale = status === 'offline' || status === 'reconnecting';
+  if(sw) sw.style.display = isStale ? 'block' : 'none';
 }
 
 function handleMarketMessage(msg){
@@ -456,6 +479,8 @@ function handleMarketMessage(msg){
     const q = msg.quote;
     const pair = PAIRS[q.symbol];
     if(!pair) return;
+    // Freeze updates when feed is disconnected — keep last known prices
+    if(mktStatus === 'offline' || mktStatus === 'reconnecting') return;
     pair.prev  = pair.price;
     pair.price = q.price;
     pair.bid   = q.bid;
@@ -520,13 +545,13 @@ function connectMarketData(){
       }, 20000);
     };
     mktWs.onmessage = e => { try{ handleMarketMessage(JSON.parse(e.data)); }catch(ex){} };
-    mktWs.onerror   = ()=>{ setDataStatus('offline', mktProvider); };
+    mktWs.onerror   = ()=>{ setDataStatus('reconnecting', mktProvider); };
     mktWs.onclose   = ()=>{
-      setDataStatus('offline', mktProvider);
+      setDataStatus('reconnecting', mktProvider);
       setTimeout(connectMarketData, 4000);
     };
   }catch(e){
-    setDataStatus('offline', mktProvider);
+    setDataStatus('reconnecting', mktProvider);
     setTimeout(connectMarketData, 4000);
   }
 }

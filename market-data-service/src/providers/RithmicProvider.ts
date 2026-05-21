@@ -1,3 +1,4 @@
+import fs from 'fs';
 import WebSocket from 'ws';
 import { Bar, ContractSpec, DataStatus, ProviderStatus, Quote, QuoteCallback } from '../types';
 import { resolveContract } from '../contracts';
@@ -10,34 +11,57 @@ import { MarketDataProvider } from './MarketDataProvider';
  * - Rithmic uses a JSON-over-WebSocket protocol for their R|Web API.
  * - Message keys follow Rithmic's published R|Web schema (RequestLogin,
  *   ResponseLogin, RequestMarketDataUpdate, BestBidOffer, LastTrade, etc.).
- * - Set RITHMIC_GATEWAY_URI in .env to your broker's gateway.
+ * - Set RITHMIC_ENVIRONMENT or RITHMIC_GATEWAY_URI in .env to your gateway.
  *   Paper trading: wss://rituz00100.rithmic.com:443/
- * - Requires RITHMIC_USER, RITHMIC_PASSWORD, RITHMIC_APP_NAME,
- *   RITHMIC_SYSTEM_NAME, and RITHMIC_INFRA_TYPE env vars.
+ * - Requires RITHMIC_USERNAME and RITHMIC_PASSWORD env vars.
  *
- * Historical bars:
- * - Rithmic's R|Web API provides replay/history via RequestTimeBarUpdate.
- * - We request 1-minute bars then resample to larger resolutions locally.
+ * Environment presets (RITHMIC_ENVIRONMENT):
+ *   paper     — Rithmic Paper Trading (default)
+ *   rithmic01 — Rithmic 01 live infrastructure
+ *   rithmic04 — Rithmic 04 live infrastructure
+ * Individual env vars (RITHMIC_GATEWAY_URI, RITHMIC_SYSTEM_NAME,
+ * RITHMIC_INFRA_TYPE) always override the preset.
+ *
+ * Prop-firm setup:
+ *   Set RITHMIC_ENVIRONMENT=paper (or rithmic01), RITHMIC_SYSTEM_NAME to
+ *   the system name provided by your prop firm (e.g. "Apex Trader Funding"),
+ *   and RITHMIC_INFRA_TYPE=3 for sim or 1 for live.
+ *
+ * SSL / custom certs:
+ *   If your broker uses a self-signed CA, set RITHMIC_CERT_PATH to the
+ *   path of the PEM file. The cert is loaded at startup; the connection
+ *   still validates with rejectUnauthorized=true.
+ *
+ * Stale data detection:
+ *   If no message is received for 30 s while connected, getStatus()
+ *   returns 'delayed' so the UI can warn the user.
  *
  * Fallback:
- * - If the WS connection fails or credentials are missing, the server
- *   automatically falls back to MockProvider (see server.ts).
+ *   If the WS connection fails or credentials are missing, server.ts
+ *   automatically falls back to MockProvider.
  */
+
+// ─── Environment presets ─────────────────────────────────────────────────────
+const ENVIRONMENTS: Record<string, { uri: string; infraType: number; systemName: string }> = {
+  paper:      { uri: 'wss://rituz00100.rithmic.com:443/', infraType: 3, systemName: 'Rithmic Paper Trading' },
+  rithmic01:  { uri: 'wss://rithmic01.rithmic.com:443/',  infraType: 1, systemName: 'Rithmic 01' },
+  rithmic04:  { uri: 'wss://rithmic04.rithmic.com:443/',  infraType: 1, systemName: 'Rithmic 04' },
+};
+
+const STALE_THRESHOLD_MS = 30_000;
+
 export class RithmicProvider extends MarketDataProvider {
   readonly name = 'rithmic';
 
   private ws: WebSocket | null = null;
   private status: ProviderStatus = 'connecting';
-  private lastHeartbeat = 0;
+  private lastDataReceived = 0;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private sessionToken = '';
   private subscribed = new Set<string>();
   private readonly callbacks: Map<string, QuoteCallback[]> = new Map();
 
-  // Bar data accumulation: symbol → resolution → bar array
   private readonly barCache: Map<string, Map<string, Bar[]>> = new Map();
-
-  // Pending bar requests: requestId → resolve fn
   private readonly pendingBars: Map<string, (bars: Bar[]) => void> = new Map();
 
   private readonly gatewayUri: string;
@@ -47,22 +71,28 @@ export class RithmicProvider extends MarketDataProvider {
   private readonly appVersion: string;
   private readonly systemName: string;
   private readonly infraType: number;
+  private readonly certPath: string;
   private readonly reconnectMs: number;
 
   constructor() {
     super();
-    this.gatewayUri   = process.env.RITHMIC_GATEWAY_URI   ?? 'wss://rituz00100.rithmic.com:443/';
-    this.user         = process.env.RITHMIC_USER          ?? '';
-    this.password     = process.env.RITHMIC_PASSWORD      ?? '';
-    this.appName      = process.env.RITHMIC_APP_NAME      ?? 'OpenClaw';
-    this.appVersion   = process.env.RITHMIC_APP_VERSION   ?? '1.0.0';
-    this.systemName   = process.env.RITHMIC_SYSTEM_NAME   ?? 'Rithmic Paper Trading';
-    this.infraType    = parseInt(process.env.RITHMIC_INFRA_TYPE ?? '3', 10);
-    this.reconnectMs  = parseInt(process.env.RITHMIC_RECONNECT_MS ?? '5000', 10);
+    const envName  = (process.env.RITHMIC_ENVIRONMENT ?? '').toLowerCase();
+    const preset   = ENVIRONMENTS[envName];
+
+    // Individual env vars take precedence over the environment preset
+    this.gatewayUri  = process.env.RITHMIC_GATEWAY_URI  ?? preset?.uri        ?? 'wss://rituz00100.rithmic.com:443/';
+    this.user        = process.env.RITHMIC_USERNAME      ?? process.env.RITHMIC_USER ?? '';
+    this.password    = process.env.RITHMIC_PASSWORD      ?? '';
+    this.appName     = process.env.RITHMIC_APP_NAME      ?? 'OpenClaw';
+    this.appVersion  = process.env.RITHMIC_APP_VERSION   ?? '1.0.0';
+    this.systemName  = process.env.RITHMIC_SYSTEM_NAME   ?? preset?.systemName ?? 'Rithmic Paper Trading';
+    this.infraType   = parseInt(process.env.RITHMIC_INFRA_TYPE ?? String(preset?.infraType ?? 3), 10);
+    this.certPath    = process.env.RITHMIC_CERT_PATH     ?? '';
+    this.reconnectMs = parseInt(process.env.RITHMIC_RECONNECT_MS ?? '5000', 10);
 
     if (!this.user || !this.password) {
       throw new Error(
-        'RithmicProvider: RITHMIC_USER and RITHMIC_PASSWORD must be set. ' +
+        'RithmicProvider: RITHMIC_USERNAME and RITHMIC_PASSWORD must be set. ' +
         'Set MARKET_PROVIDER=mock for development without credentials.'
       );
     }
@@ -104,7 +134,6 @@ export class RithmicProvider extends MarketDataProvider {
       const reqId = `${symbol}_${resolution}_${Date.now()}`;
       this.pendingBars.set(reqId, resolve);
 
-      // Rithmic R|Web: request time bar replay
       this.send({
         RequestTimeBarUpdate: {
           requestId:      reqId,
@@ -119,7 +148,6 @@ export class RithmicProvider extends MarketDataProvider {
         },
       });
 
-      // Timeout after 10s
       setTimeout(() => {
         if (this.pendingBars.has(reqId)) {
           this.pendingBars.get(reqId)?.([]);
@@ -130,11 +158,15 @@ export class RithmicProvider extends MarketDataProvider {
   }
 
   getStatus(): DataStatus {
+    // Derive stale state from last received timestamp; no timer needed
+    const isStale = this.status === 'connected' &&
+      this.lastDataReceived > 0 &&
+      Date.now() - this.lastDataReceived > STALE_THRESHOLD_MS;
     return {
       provider:      this.name,
-      status:        this.status,
-      dataDelayed:   this.infraType !== 1,
-      lastHeartbeat: this.lastHeartbeat,
+      status:        isStale ? 'delayed' : this.status,
+      dataDelayed:   isStale || this.infraType !== 1,
+      lastHeartbeat: this.lastDataReceived,
     };
   }
 
@@ -146,10 +178,21 @@ export class RithmicProvider extends MarketDataProvider {
 
   private openWs(): void {
     this.status = 'connecting';
-    this.ws = new WebSocket(this.gatewayUri, { rejectUnauthorized: true });
+
+    const wsOpts: WebSocket.ClientOptions = { rejectUnauthorized: true };
+    if (this.certPath) {
+      try {
+        wsOpts.ca = fs.readFileSync(this.certPath);
+        console.log(`[Rithmic] Using custom CA cert: ${this.certPath}`);
+      } catch (e) {
+        console.warn(`[Rithmic] Cannot read cert at ${this.certPath}:`, (e as Error).message);
+      }
+    }
+
+    this.ws = new WebSocket(this.gatewayUri, wsOpts);
 
     this.ws.on('open', () => {
-      console.log(`[Rithmic] Connected to ${this.gatewayUri}`);
+      console.log(`[Rithmic] Connected to ${this.gatewayUri} (${this.systemName})`);
       this.sendLogin();
     });
 
@@ -163,18 +206,19 @@ export class RithmicProvider extends MarketDataProvider {
 
     this.ws.on('error', err => {
       console.error('[Rithmic] WS error:', err.message);
-      this.status = 'offline';
+      this.status = 'reconnecting';
     });
 
     this.ws.on('close', () => {
       console.warn('[Rithmic] Disconnected. Reconnecting in', this.reconnectMs, 'ms');
-      this.status = 'offline';
+      this.status = 'reconnecting';
       this.ws = null;
       this.reconnectTimer = setTimeout(() => this.openWs(), this.reconnectMs);
     });
   }
 
   private sendLogin(): void {
+    console.log(`[Rithmic] Logging in as ${this.user} @ ${this.systemName} (infraType ${this.infraType})`);
     this.send({
       RequestLogin: {
         user:        this.user,
@@ -216,7 +260,7 @@ export class RithmicProvider extends MarketDataProvider {
   // ─── Incoming message dispatch ───────────────────────────────────────────
 
   private handleMessage(msg: Record<string, unknown>): void {
-    this.lastHeartbeat = Date.now();
+    this.lastDataReceived = Date.now();
 
     if (msg['ResponseLogin']) {
       this.handleLogin(msg['ResponseLogin'] as Record<string, unknown>);
@@ -227,17 +271,17 @@ export class RithmicProvider extends MarketDataProvider {
     } else if (msg['TimeBar']) {
       this.handleTimeBar(msg['TimeBar'] as Record<string, unknown>);
     } else if (msg['Heartbeat']) {
-      // Already updated lastHeartbeat above
+      // lastDataReceived already updated above
     }
   }
 
   private handleLogin(resp: Record<string, unknown>): void {
     if (resp['rpCode'] === '0') {
       console.log('[Rithmic] Login successful');
-      this.status        = 'connected';
-      this.sessionToken  = (resp['fcmId'] as string) ?? '';
+      this.status       = 'connected';
+      this.sessionToken = (resp['fcmId'] as string) ?? '';
 
-      // Re-subscribe to any symbols that were pending
+      // Re-subscribe to any symbols that were pending before reconnect
       for (const sym of this.callbacks.keys()) {
         if (!this.subscribed.has(sym)) this.sendSubscribe(sym);
       }
@@ -314,7 +358,6 @@ export class RithmicProvider extends MarketDataProvider {
       v:  parseInt(data['volume']         as string ?? '0', 10),
     };
 
-    // Accumulate bars for this request
     const cache = this.barCache.get(reqId) ?? new Map();
     const res   = bar.resolution;
     const arr   = cache.get(res) ?? [];
@@ -322,7 +365,6 @@ export class RithmicProvider extends MarketDataProvider {
     cache.set(res, arr);
     this.barCache.set(reqId, cache);
 
-    // Detect end-of-response (Rithmic sends rqHandlerRpCode='0' on last bar)
     if (data['rqHandlerRpCode'] === '0') {
       const resolve = this.pendingBars.get(reqId);
       if (resolve) {
@@ -342,8 +384,8 @@ export class RithmicProvider extends MarketDataProvider {
   }
 
   /**
-   * Convert our root symbol (NQ) to the Rithmic active contract (NQM26).
-   * For forex/crypto returns symbol unchanged.
+   * Convert root symbol (NQ) to the active Rithmic contract (NQM26).
+   * Forex/crypto symbols pass through unchanged.
    */
   private rithmicSymbol(symbol: string): string {
     const spec = resolveContract(symbol);
@@ -352,7 +394,7 @@ export class RithmicProvider extends MarketDataProvider {
 
   /**
    * Strip contract suffix from a Rithmic symbol (NQM26 → NQ).
-   * Rithmic returns the full contract symbol in trade/BBO messages.
+   * Matches by checking if the full contract starts with a subscribed root.
    */
   private normalizeSymbol(rithmicSym: string): string | null {
     if (!rithmicSym) return null;

@@ -1,4 +1,4 @@
-export type ProviderStatus = 'connecting' | 'connected' | 'delayed' | 'offline';
+export type ProviderStatus = 'connecting' | 'connected' | 'delayed' | 'reconnecting' | 'offline';
 
 export type SessionStatus =
   | 'RTH'
