@@ -13,6 +13,7 @@ import { buildUdfRouter, updateLatestQuote } from './providers/TradingViewDatafe
 import { buildWebhookRouter, buildAlertsRouter } from './webhook/router';
 import { allContracts, resolveContract } from './contracts';
 import { Bar, ClientMessage, ServerMessage } from './types';
+import { setProvider } from './shared';
 
 // ─── Provider selection ───────────────────────────────────────────────────────
 function createProvider(): MarketDataProvider {
@@ -43,6 +44,7 @@ function createProvider(): MarketDataProvider {
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 const provider = createProvider();
+setProvider(provider); // make provider available to indicator engine
 const app      = express();
 const httpServer = createServer(app);
 const wss      = new WebSocketServer({ server: httpServer, path: '/ws/market' });
