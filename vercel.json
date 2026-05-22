@@ -1,6 +1,11 @@
 {
+  "version": 2,
+  "buildCommand": "",
+  "outputDirectory": ".",
+  "installCommand": "",
   "routes": [
-    { "src": "/",             "dest": "/avengers_hq_unified.html" },
-    { "src": "/(.*\\.html)$", "dest": "/$1" }
+    { "src": "/",              "dest": "/avengers_hq_unified.html" },
+    { "src": "/mobile",        "dest": "/mobile.html" },
+    { "src": "/(.*\\.html)$",  "dest": "/$1" }
   ]
 }

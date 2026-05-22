@@ -2,9 +2,12 @@ agents/
 configs/
 market-data-service/
 pine_scripts/
+__pycache__/
 *.py
+pyproject.toml
 requirements.txt
 railway.json
 trade_journal.json
 session_summaries.json
 weekly_reports.json
+*.json.bak
