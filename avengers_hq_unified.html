@@ -436,7 +436,7 @@ Object.keys(PAIRS).forEach(k=>{priceHistory[k]=[];for(let i=0;i<120;i++)priceHis
 // Start: cd market-data-service && npm run dev
 // Falls back gracefully if the service is offline.
 // ============================================================
-const MARKET_WS_URL = 'ws://localhost:3001/ws/market';
+const MARKET_WS_URL = 'wss://openclaw-production-44a4.up.railway.app/ws/market';
 const OHLCV = {};  // symbol → array of {time,open,high,low,close,volume} for LWC
 Object.keys(PAIRS).forEach(k=>{OHLCV[k]=[];});
 

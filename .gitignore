@@ -39,3 +39,8 @@ node_modules/
 
 # Logs
 *.log
+
+# Sensitive local files
+BACKUP_CODES.txt
+*.backup
+secrets.txt
