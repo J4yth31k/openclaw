@@ -1,0 +1,10 @@
+agents/
+configs/
+market-data-service/
+pine_scripts/
+*.py
+requirements.txt
+railway.json
+trade_journal.json
+session_summaries.json
+weekly_reports.json
