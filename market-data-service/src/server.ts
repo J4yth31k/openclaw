@@ -10,7 +10,7 @@ import { RithmicProvider } from './providers/RithmicProvider';
 import { TradovateProvider } from './providers/TradovateProvider';
 import { WebhookFeedProvider, webhookFeedProvider } from './providers/WebhookFeedProvider';
 import { buildUdfRouter, updateLatestQuote } from './providers/TradingViewDatafeedProvider';
-import { buildWebhookRouter } from './webhook/router';
+import { buildWebhookRouter, buildAlertsRouter } from './webhook/router';
 import { allContracts, resolveContract } from './contracts';
 import { Bar, ClientMessage, ServerMessage } from './types';
 
@@ -103,6 +103,9 @@ app.use('/udf', buildUdfRouter(provider));
 
 // ─── TradingView webhook receiver ────────────────────────────────────────────
 app.use('/webhook', buildWebhookRouter());
+
+// ─── Recent alerts API (for mobile dashboard) ────────────────────────────────
+app.use('/api/alerts', buildAlertsRouter());
 
 // ─── WebSocket server ─────────────────────────────────────────────────────────
 type SymbolSet = Set<string>;

@@ -58,6 +58,24 @@ export function buildWebhookRouter(): Router {
   return router;
 }
 
+// ── Recent alerts endpoint (mounted on /api/alerts/recent) ────────────────────
+
+export function buildAlertsRouter(): Router {
+  const router = Router();
+  router.get('/recent', (_req, res) => {
+    try {
+      if (!fs.existsSync(ALERT_LOG_PATH)) { res.json([]); return; }
+      const raw = fs.readFileSync(ALERT_LOG_PATH, 'utf-8').trim();
+      const journal = raw ? (JSON.parse(raw) as unknown[]) : [];
+      const recent  = journal.slice(-50);
+      res.json(recent);
+    } catch {
+      res.status(500).json([]);
+    }
+  });
+  return router;
+}
+
 // ─── Alert pipeline ───────────────────────────────────────────────────────────
 
 async function processAlert(alert: TradingViewAlert): Promise<void> {
