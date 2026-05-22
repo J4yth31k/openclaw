@@ -47,7 +47,7 @@ const app      = express();
 const httpServer = createServer(app);
 const wss      = new WebSocketServer({ server: httpServer, path: '/ws/market' });
 
-const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? '3001', 10);
+const HTTP_PORT = parseInt(process.env.PORT ?? process.env.HTTP_PORT ?? '3001', 10);
 const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? '*').split(',');
 
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));

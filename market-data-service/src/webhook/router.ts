@@ -48,7 +48,8 @@ export function buildWebhookRouter(): Router {
   router.get('/health', (_req, res) => {
     res.json({
       ok:              true,
-      discord:         !!DISCORD_WEBHOOK_URL,
+      discord:         !!(DISCORD_WEBHOOK_URL || (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID)),
+      discordMode:     DISCORD_BOT_TOKEN ? 'bot' : DISCORD_WEBHOOK_URL ? 'webhook' : 'none',
       alertLog:        ALERT_LOG_PATH,
       secretProtected: !!WEBHOOK_SECRET,
     });
