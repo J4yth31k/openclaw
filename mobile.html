@@ -16,7 +16,7 @@
 }
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
 
-/* ── Full-height shell ── */
+/* ── Shell ── */
 html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; }
 .shell { display:flex; flex-direction:column; height:100%; }
 
@@ -42,39 +42,51 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
 /* ── Scrollable content area ── */
 .content {
   flex:1; overflow-y:auto; overflow-x:hidden;
-  padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));
+  padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px);
   -webkit-overflow-scrolling:touch;
 }
 .tab-page { display:none; }
 .tab-page.active { display:block; }
 
 /* ── Section label ── */
-.sec { padding:12px 16px 6px; font-size:10px; font-weight:700; color:var(--mut); letter-spacing:1.5px; text-transform:uppercase; }
+.sec {
+  padding:12px 14px 5px;
+  font-size:9px; font-weight:700; color:var(--mut);
+  letter-spacing:1.5px; text-transform:uppercase;
+  border-top:1px solid var(--bdr);
+}
+.sec:first-child { border-top:none; }
 
 /* ── Session chips ── */
-.sess-bar { display:flex; gap:8px; padding:8px 16px 10px; overflow-x:auto; border-bottom:1px solid var(--bdr); scrollbar-width:none; }
+.sess-bar { display:flex; gap:8px; padding:8px 14px 10px; overflow-x:auto; border-bottom:1px solid var(--bdr); scrollbar-width:none; }
 .sess-bar::-webkit-scrollbar { display:none; }
-.chip { flex-shrink:0; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:600; border:1px solid var(--bdr); background:var(--card); color:var(--mut); white-space:nowrap; }
+.chip { flex-shrink:0; padding:4px 10px; border-radius:20px; font-size:10px; font-weight:600; border:1px solid var(--bdr); background:var(--card); color:var(--mut); white-space:nowrap; }
 .chip.on  { border-color:var(--green); color:var(--green); background:rgba(0,255,136,.08); }
 .chip.ov  { border-color:var(--gold);  color:var(--gold);  background:rgba(255,215,0,.08); }
 
 /* ── Price grid — 2 cols ── */
-.pgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 12px 12px; }
-.pcard { background:var(--card); border:1px solid var(--bdr); border-radius:10px; padding:12px 10px; position:relative; overflow:hidden; transition:border-color .2s; }
+.pgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:0 10px 4px; }
+.pcard {
+  background:var(--card); border:1px solid var(--bdr);
+  border-radius:10px; padding:10px; position:relative; overflow:hidden;
+  transition:border-color .2s;
+}
 .pcard.up   { border-color:rgba(0,255,136,.35); }
 .pcard.down { border-color:rgba(255,68,68,.35); }
 .pcard::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--bdr); transition:background .3s; }
 .pcard.up::before   { background:var(--green); }
 .pcard.down::before { background:var(--red); }
-.psym   { font-family:'Orbitron',monospace; font-size:11px; font-weight:700; color:var(--cyan); margin-bottom:5px; }
-.pprice { font-family:'Orbitron',monospace; font-size:17px; font-weight:900; line-height:1; margin-bottom:5px; color:var(--text); }
+.psym   { font-family:'Orbitron',monospace; font-size:10px; font-weight:700; color:var(--cyan); margin-bottom:2px; }
+.pfull  { font-size:8px; color:var(--mut); margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pprice { font-family:'Orbitron',monospace; font-size:16px; font-weight:900; line-height:1; margin-bottom:5px; color:var(--text); }
 .pprice.up   { color:var(--green); }
 .pprice.down { color:var(--red); }
-.pmeta { display:flex; justify-content:space-between; align-items:center; }
+.pmeta { display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; }
 .pchg  { font-size:10px; font-weight:600; color:var(--mut); }
 .pchg.up   { color:var(--green); }
 .pchg.down { color:var(--red); }
-.psess { font-size:9px; color:var(--mut); }
+.pvol  { font-size:8px; color:var(--mut); }
+.psess { font-size:8px; color:var(--mut); margin-top:1px; }
 
 /* ── Agent list ── */
 .agent-list { display:flex; flex-direction:column; gap:8px; padding:0 12px 12px; }
@@ -109,7 +121,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
 .albody   { flex:1; min-width:0; }
 .altitle  { font-size:13px; font-weight:600; margin-bottom:2px; }
 .alsub    { font-size:10px; color:var(--dim); margin-bottom:3px; }
-.alai     { font-size:10px; color:var(--mut); font-style:italic; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.alai     { font-size:10px; color:var(--mut); font-style:italic; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; }
 .altime   { font-size:9px; color:var(--mut); flex-shrink:0; padding-top:2px; }
 .empty    { text-align:center; padding:30px 16px; color:var(--mut); font-size:13px; }
 
@@ -134,7 +146,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
 
   <!-- Tab bar -->
   <div class="tab-bar">
-    <button class="tab-btn active" data-tab="prices">📊 PRICES</button>
+    <button class="tab-btn active" data-tab="prices">📊 DATA CENTER</button>
     <button class="tab-btn"        data-tab="agents">🦾 AGENTS</button>
     <button class="tab-btn"        data-tab="alerts">🔔 ALERTS</button>
   </div>
@@ -142,29 +154,28 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
   <!-- Scrollable content -->
   <div class="content">
 
-    <!-- PRICES -->
+    <!-- DATA CENTER (prices) -->
     <div class="tab-page active" id="tab-prices">
       <div class="sess-bar">
         <div class="chip" id="c-rth">🔔 RTH</div>
-        <div class="chip" id="c-pre">🌅 Pre-Market</div>
+        <div class="chip" id="c-pre">🌅 Pre-Mkt</div>
         <div class="chip" id="c-lon">🇬🇧 London</div>
         <div class="chip" id="c-ny">🗽 New York</div>
         <div class="chip" id="c-tok">🗼 Tokyo</div>
         <div class="chip" id="c-syd">🦘 Sydney</div>
       </div>
-      <div class="sec">Live Prices</div>
-      <div class="pgrid" id="pgrid"></div>
+      <div id="price-sections"></div>
     </div>
 
     <!-- AGENTS -->
     <div class="tab-page" id="tab-agents">
-      <div class="sec">Agent Network · 12 Operational</div>
+      <div class="sec" style="border-top:none">Agent Network · 12 Operational</div>
       <div class="agent-list" id="agent-list"></div>
     </div>
 
     <!-- ALERTS -->
     <div class="tab-page" id="tab-alerts">
-      <div class="sec">Recent Signals</div>
+      <div class="sec" style="border-top:none">Recent Signals</div>
       <div class="alist" id="alist">
         <div class="empty" id="empty">Waiting for TradingView signals…</div>
       </div>
@@ -181,10 +192,92 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
 </div>
 
 <script>
-const WS      = 'wss://openclaw-production-44a4.up.railway.app/ws/market';
-const SYMS    = ['NQ','ES','CL','GC','MNQ','MES'];
-const A_EMOJI = { BUY:'🟢', SELL:'🔴', NEUTRAL:'🟡' };
+const WS = 'wss://openclaw-production-44a4.up.railway.app/ws/market';
 
+// ── Market categories ─────────────────────────────────────────────────────────
+const CATEGORIES = [
+  {
+    label: '📈 Index Futures',
+    syms: [
+      { sym:'NQ',  name:'Nasdaq 100'   },
+      { sym:'ES',  name:'S&P 500'      },
+      { sym:'YM',  name:'Dow Jones'    },
+      { sym:'RTY', name:'Russell 2000' },
+      { sym:'MNQ', name:'Micro NQ'     },
+      { sym:'MES', name:'Micro ES'     },
+    ]
+  },
+  {
+    label: '🛢️ Commodity Futures',
+    syms: [
+      { sym:'CL',  name:'Crude Oil'    },
+      { sym:'NG',  name:'Natural Gas'  },
+      { sym:'GC',  name:'Gold'         },
+      { sym:'SI',  name:'Silver'       },
+      { sym:'HG',  name:'Copper'       },
+    ]
+  },
+  {
+    label: '📜 Bond Futures',
+    syms: [
+      { sym:'ZB',  name:'30Y T-Bond'   },
+      { sym:'ZN',  name:'10Y T-Note'   },
+      { sym:'ZF',  name:'5Y T-Note'    },
+    ]
+  },
+  {
+    label: '💱 FX Futures',
+    syms: [
+      { sym:'6E',  name:'Euro'         },
+      { sym:'6B',  name:'British Pound'},
+      { sym:'6J',  name:'Japanese Yen' },
+      { sym:'6A',  name:'Aussie Dollar'},
+    ]
+  },
+  {
+    label: '🪙 Crypto',
+    syms: [
+      { sym:'BTCUSD', name:'Bitcoin'   },
+      { sym:'ETHUSD', name:'Ethereum'  },
+    ]
+  },
+];
+
+const ALL_SYMS = CATEGORIES.flatMap(c => c.syms.map(s => s.sym));
+const A_EMOJI  = { BUY:'🟢', SELL:'🔴', NEUTRAL:'🟡' };
+
+// ── Build price sections ───────────────────────────────────────────────────────
+const prices = {};
+const sections = document.getElementById('price-sections');
+
+CATEGORIES.forEach((cat, ci) => {
+  const secDiv = document.createElement('div');
+  secDiv.className = 'sec';
+  if (ci === 0) secDiv.style.borderTop = 'none';
+  secDiv.textContent = cat.label;
+  sections.appendChild(secDiv);
+
+  const grid = document.createElement('div');
+  grid.className = 'pgrid';
+  sections.appendChild(grid);
+
+  cat.syms.forEach(({ sym, name }) => {
+    prices[sym] = null;
+    grid.insertAdjacentHTML('beforeend', `
+      <div class="pcard" id="pc-${sym}">
+        <div class="psym">${sym}</div>
+        <div class="pfull">${name}</div>
+        <div class="pprice" id="pp-${sym}">---</div>
+        <div class="pmeta">
+          <span class="pchg" id="pch-${sym}">--</span>
+          <span class="pvol" id="pvol-${sym}"></span>
+        </div>
+        <div class="psess" id="pse-${sym}">--</div>
+      </div>`);
+  });
+});
+
+// ── Agents ────────────────────────────────────────────────────────────────────
 const AGENTS = [
   {id:'ironman',   name:'IRON MAN',    hero:'Tony Stark',       role:'Technical Analysis', emoji:'🦾', color:'#ef4444', grade:'S', score:96, quote:'JARVIS, run the scan.'},
   {id:'captain',   name:'CAPTAIN',     hero:'Steve Rogers',     role:'Fundamentals',       emoji:'🛡️', color:'#3b82f6', grade:'A', score:89, quote:'I can do this all day.'},
@@ -200,37 +293,9 @@ const AGENTS = [
   {id:'fury',      name:'NICK FURY',   hero:'Nick Fury',        role:'Orchestrator',       emoji:'🏴', color:'#f59e0b', grade:'S', score:97, quote:'Avengers, assemble!'},
 ];
 
-// ── Tabs ──────────────────────────────────────────────────────────
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-    document.querySelector('.content').scrollTop = 0;
-  });
-});
-
-// ── Price cards ───────────────────────────────────────────────────
-const prices = {};
-const pgrid  = document.getElementById('pgrid');
-SYMS.forEach(s => {
-  prices[s] = null;
-  pgrid.insertAdjacentHTML('beforeend', `
-    <div class="pcard" id="pc-${s}">
-      <div class="psym">${s}</div>
-      <div class="pprice" id="pp-${s}">---</div>
-      <div class="pmeta">
-        <span class="pchg" id="pch-${s}">--</span>
-        <span class="psess" id="pse-${s}">--</span>
-      </div>
-    </div>`);
-});
-
-// ── Agent cards ───────────────────────────────────────────────────
-const alist = document.getElementById('agent-list');
+const agentList = document.getElementById('agent-list');
 AGENTS.forEach(a => {
-  alist.insertAdjacentHTML('beforeend', `
+  agentList.insertAdjacentHTML('beforeend', `
     <div class="acard" id="ac-${a.id}" style="border-left-color:${a.color}">
       <div class="aemoji">${a.emoji}</div>
       <div class="ainfo">
@@ -247,21 +312,35 @@ AGENTS.forEach(a => {
     </div>`);
 });
 
-// ── Session ───────────────────────────────────────────────────────
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    document.querySelector('.content').scrollTop = 0;
+  });
+});
+
+// ── Sessions ──────────────────────────────────────────────────────────────────
 function sessions() {
-  const fmt  = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hour12:false});
+  const fmt = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hour12:false});
   const [h,m] = fmt.format(new Date()).split(':').map(Number);
   const t = h*60+m;
   return {
-    rth: t>=570&&t<960, pre: t>=540&&t<570,
-    lon: t>=180&&t<720, ny:  t>=480&&t<1020,
-    tok: t>=1140||t<240, syd: t>=1020||t<360,
+    rth:   t>=570&&t<960,
+    pre:   t>=540&&t<570,
+    lon:   t>=180&&t<720,
+    ny:    t>=480&&t<1020,
+    tok:   t>=1140||t<240,
+    syd:   t>=1020||t<360,
     ovlap: t>=480&&t<720
   };
 }
 function updateSessions() {
   const s = sessions();
-  const chip = (id, on, ov) => document.getElementById(id).className = `chip${ov?' ov':on?' on':''}`;
+  const chip = (id, on, ov) => { const el = document.getElementById(id); if(el) el.className = `chip${ov?' ov':on?' on':''}`; };
   chip('c-rth', s.rth,  false);
   chip('c-pre', s.pre,  false);
   chip('c-lon', s.lon,  s.ovlap);
@@ -272,62 +351,79 @@ function updateSessions() {
 updateSessions();
 setInterval(updateSessions, 30000);
 
-// ── WebSocket ─────────────────────────────────────────────────────
-const dot = document.getElementById('dot');
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+const dot  = document.getElementById('dot');
 const ctxt = document.getElementById('conn-txt');
 let ws, rtimer;
 
 function connect() {
   ws = new WebSocket(WS);
   ws.onopen = () => {
-    dot.className = 'dot live'; ctxt.textContent = 'Live'; ctxt.style.color = 'var(--green)';
-    SYMS.forEach(s => ws.send(JSON.stringify({type:'subscribe',symbol:s})));
+    dot.className = 'dot live';
+    ctxt.textContent = 'Live'; ctxt.style.color = 'var(--green)';
+    ALL_SYMS.forEach(s => ws.send(JSON.stringify({type:'subscribe', symbol:s})));
   };
   ws.onmessage = ({data}) => {
-    try { const m = JSON.parse(data); if (m.type==='quote') onQuote(m.quote); } catch {}
+    try { const m = JSON.parse(data); if (m.type === 'quote') onQuote(m.quote); } catch {}
   };
   ws.onclose = () => {
-    dot.className = 'dot'; ctxt.textContent = 'Reconnecting…'; ctxt.style.color = 'var(--mut)';
+    dot.className = 'dot';
+    ctxt.textContent = 'Reconnecting…'; ctxt.style.color = 'var(--mut)';
     clearTimeout(rtimer); rtimer = setTimeout(connect, 3000);
   };
   ws.onerror = () => ws.close();
 }
 
+function fmtVol(v) {
+  if (!v) return '';
+  if (v >= 1_000_000) return `${(v/1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)     return `${(v/1_000).toFixed(0)}K`;
+  return String(v);
+}
+
 function onQuote(q) {
-  if (!SYMS.includes(q.symbol)) return;
-  const prev = prices[q.symbol]; prices[q.symbol] = q.price;
-  const dir  = prev===null ? '' : q.price>prev ? 'up' : q.price<prev ? 'down' : '';
-  const fmt  = q.price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  if (!ALL_SYMS.includes(q.symbol)) return;
+  const prev = prices[q.symbol];
+  prices[q.symbol] = q.price;
+  const dir = prev === null ? '' : q.price > prev ? 'up' : q.price < prev ? 'down' : '';
+  const decimals = q.price < 10 ? 4 : q.price < 100 ? 3 : 2;
+  const fmt = q.price.toLocaleString('en-US',{minimumFractionDigits:decimals, maximumFractionDigits:decimals});
 
-  const pp  = document.getElementById(`pp-${q.symbol}`);
-  const pch = document.getElementById(`pch-${q.symbol}`);
-  const pc  = document.getElementById(`pc-${q.symbol}`);
-  const pse = document.getElementById(`pse-${q.symbol}`);
+  const pp   = document.getElementById(`pp-${q.symbol}`);
+  const pch  = document.getElementById(`pch-${q.symbol}`);
+  const pc   = document.getElementById(`pc-${q.symbol}`);
+  const pse  = document.getElementById(`pse-${q.symbol}`);
+  const pvol = document.getElementById(`pvol-${q.symbol}`);
 
-  if (pp)  { pp.textContent = fmt; pp.className = `pprice ${dir}`; }
-  if (pc)    pc.className = `pcard ${dir}`;
-  if (pch && prev!==null) {
-    const d = q.price-prev;
-    pch.textContent = `${d>=0?'+':''}${d.toFixed(2)}`; pch.className = `pchg ${dir}`;
+  if (pp)  { pp.textContent = fmt; pp.className = `pprice${dir ? ' '+dir : ''}`; }
+  if (pc)    pc.className = `pcard${dir ? ' '+dir : ''}`;
+  if (pch && prev !== null) {
+    const d = q.price - prev;
+    pch.textContent = `${d>=0?'+':''}${d.toFixed(decimals)}`; pch.className = `pchg${dir ? ' '+dir : ''}`;
   }
+  if (pvol && q.volume) pvol.textContent = `Vol ${fmtVol(q.volume)}`;
   if (pse) {
     const s = sessions();
-    pse.textContent = s.rth?'🔔 RTH':s.pre?'🌅 Pre':'🌙 Overnight';
+    pse.textContent = s.rth ? '🔔 RTH' : s.pre ? '🌅 Pre-Mkt' : '🌙 Overnight';
   }
 }
 
-// ── Agent pulse ───────────────────────────────────────────────────
+// ── Agent pulse on new alert ───────────────────────────────────────────────────
 function pulseAgents() {
   ['ironman','strange','widow','fury'].forEach(id => {
     const st = document.getElementById(`as-${id}`);
     const ac = document.getElementById(`ac-${id}`);
     if (!st||!ac) return;
-    st.textContent='⚡ ANALYZING'; st.className='astatus run'; ac.classList.add('analyzing');
-    setTimeout(()=>{ st.textContent='● ONLINE'; st.className='astatus on'; ac.classList.remove('analyzing'); }, 5000);
+    st.textContent = '⚡ ANALYZING'; st.className = 'astatus run';
+    ac.classList.add('analyzing');
+    setTimeout(() => {
+      st.textContent = '● ONLINE'; st.className = 'astatus on';
+      ac.classList.remove('analyzing');
+    }, 5000);
   });
 }
 
-// ── Alerts ────────────────────────────────────────────────────────
+// ── Alerts feed ───────────────────────────────────────────────────────────────
 const alertsEl = document.getElementById('alist');
 const emptyEl  = document.getElementById('empty');
 let lastCount  = 0;
@@ -337,21 +433,26 @@ async function fetchAlerts() {
     const r = await fetch('https://openclaw-production-44a4.up.railway.app/api/alerts/recent');
     if (!r.ok) return;
     const data = await r.json();
-    if (!Array.isArray(data)||!data.length) return;
+    if (!Array.isArray(data) || !data.length) return;
     if (data.length > lastCount) { pulseAgents(); lastCount = data.length; }
     emptyEl.style.display = 'none';
-    // remove old cards
     alertsEl.querySelectorAll('.alcard').forEach(el => el.remove());
-    data.slice(-20).reverse().forEach(a => {
+    data.slice(-25).reverse().forEach(a => {
       const t = new Date(a.logged_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
       const p = Number(a.price).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+      const indLine = [
+        a.stoch_k != null    ? `StochK ${a.stoch_k.toFixed(0)}` : (a.rsi != null ? `RSI ${a.rsi}` : null),
+        a.ribbon_bull != null ? (a.ribbon_bull ? 'Ribbon ▲' : 'Ribbon ▼') : null,
+        a.squeeze === true    ? '🟡 Squeeze' : null,
+        a.vol_ratio != null && a.vol_ratio > 1.5 ? `RVOL ${a.vol_ratio.toFixed(1)}x` : null,
+      ].filter(Boolean).join(' · ');
       alertsEl.insertAdjacentHTML('beforeend', `
         <div class="alcard">
           <div class="albadge ${a.action}">${A_EMOJI[a.action]??'📊'}</div>
           <div class="albody">
             <div class="altitle">${a.action} · ${a.symbol} @ ${p}</div>
-            <div class="alsub">${a.strategy??'Signal'} · ${a.session??'--'} · RSI ${a.rsi??'--'}</div>
-            ${a.analysis?`<div class="alai">🤖 ${a.analysis}</div>`:''}
+            <div class="alsub">${a.strategy??'Signal'} · ${a.session??'--'}${indLine ? ' · '+indLine : ''}</div>
+            ${a.analysis ? `<div class="alai">🤖 ${a.analysis}</div>` : ''}
           </div>
           <div class="altime">${t}</div>
         </div>`);
