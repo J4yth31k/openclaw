@@ -2,6 +2,8 @@ import https from 'https';
 import { TradingViewAlert } from './types';
 import { SessionInfo } from './session';
 
+const DASHBOARD_URL = process.env.DASHBOARD_URL ?? 'https://openclaw.vercel.app';
+
 const COLOR: Record<string, number> = {
   BUY:     0x00ff88,
   SELL:    0xff4444,
@@ -60,9 +62,10 @@ export async function sendDiscordAlert(opts: DiscordAlert): Promise<void> {
 
   const embed = {
     title:     `${actionEmoji} ${alert.action} · ${alert.symbol} · ${alert.strategy ?? 'Signal'}`,
+    url:       DASHBOARD_URL,
     color:     COLOR[alert.action] ?? COLOR['NEUTRAL'],
     fields,
-    footer:    { text: `OpenClaw · ${alert.tier ?? 'free'} · TradingView` },
+    footer:    { text: `OpenClaw · ${alert.tier ?? 'free'} · TradingView · ${DASHBOARD_URL}` },
     timestamp: new Date().toISOString(),
   };
 

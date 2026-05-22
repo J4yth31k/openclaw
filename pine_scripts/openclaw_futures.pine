@@ -1,42 +1,36 @@
-//@version=5
-// OpenClaw Futures Pro — NQ · ES · YM · RTY · CL · GC
+//@version=6
+// OpenClaw Futures Pro - NQ, ES, YM, RTY, CL, GC
 // Scalping stack: EMA Ribbon + Stoch RSI + VWAP bands + TTM Squeeze + RVOL
 indicator("OpenClaw Futures Pro", overlay=true, max_bars_back=500)
 
-// ─── Inputs ───────────────────────────────────────────────────────────────────
-// EMA Ribbon
-e8_len      = input.int(8,    "EMA 8",            group="EMA Ribbon")
-e13_len     = input.int(13,   "EMA 13",           group="EMA Ribbon")
-e21_len     = input.int(21,   "EMA 21",           group="EMA Ribbon")
-e34_len     = input.int(34,   "EMA 34",           group="EMA Ribbon")
-e55_len     = input.int(55,   "EMA 55",           group="EMA Ribbon")
-show_ribbon = input.bool(true,"Show Ribbon",      group="EMA Ribbon")
+// --- Inputs ------------------------------------------------------------------
+e8_len      = input.int(8,     "EMA 8",                group="EMA Ribbon")
+e13_len     = input.int(13,    "EMA 13",               group="EMA Ribbon")
+e21_len     = input.int(21,    "EMA 21",               group="EMA Ribbon")
+e34_len     = input.int(34,    "EMA 34",               group="EMA Ribbon")
+e55_len     = input.int(55,    "EMA 55",               group="EMA Ribbon")
+show_ribbon = input.bool(true, "Show Ribbon",           group="EMA Ribbon")
 
-// VWAP
-use_vwap    = input.bool(true, "VWAP Filter",     group="VWAP")
-show_bands  = input.bool(true, "Show VWAP Bands", group="VWAP")
+use_vwap   = input.bool(true, "VWAP Filter",            group="VWAP")
+show_bands = input.bool(true, "Show VWAP Bands",        group="VWAP")
 
-// Stochastic RSI
-srsi_rsi_len   = input.int(14, "RSI Length",      group="Stoch RSI")
-srsi_stoch_len = input.int(14, "Stoch Length",    group="Stoch RSI")
-srsi_k_smooth  = input.int(3,  "K Smooth",        group="Stoch RSI")
-srsi_d_smooth  = input.int(3,  "D Smooth",        group="Stoch RSI")
-srsi_ob        = input.int(80, "Overbought",      group="Stoch RSI")
-srsi_os        = input.int(20, "Oversold",        group="Stoch RSI")
+srsi_rsi_len   = input.int(14, "RSI Length",            group="Stoch RSI")
+srsi_stoch_len = input.int(14, "Stoch Length",          group="Stoch RSI")
+srsi_k_smooth  = input.int(3,  "K Smooth",              group="Stoch RSI")
+srsi_d_smooth  = input.int(3,  "D Smooth",              group="Stoch RSI")
+srsi_ob        = input.int(80, "Overbought",            group="Stoch RSI")
+srsi_os        = input.int(20, "Oversold",              group="Stoch RSI")
 
-// TTM Squeeze
-sqz_bb_len  = input.int(20,   "BB Length",        group="TTM Squeeze")
-sqz_bb_mult = input.float(2.0,"BB Mult",          group="TTM Squeeze")
-sqz_kc_len  = input.int(20,   "KC Length",        group="TTM Squeeze")
-sqz_kc_mult = input.float(1.5,"KC Mult",          group="TTM Squeeze")
-use_squeeze = input.bool(true, "Squeeze Filter",  group="TTM Squeeze")
+sqz_bb_len  = input.int(20,    "BB Length",             group="TTM Squeeze")
+sqz_bb_mult = input.float(2.0, "BB Mult",               group="TTM Squeeze")
+sqz_kc_len  = input.int(20,    "KC Length",             group="TTM Squeeze")
+sqz_kc_mult = input.float(1.5, "KC Mult",               group="TTM Squeeze")
 
-// Volume / Session
-vol_mult = input.float(1.2, "RVOL Threshold",     group="Filters", step=0.1)
-use_rth  = input.bool(true, "RTH Only (9:30–16:00 ET)", group="Filters")
-tier     = input.string("premium","Tier", options=["premium","free"])
+vol_mult = input.float(1.2, "RVOL Threshold",           group="Filters", step=0.1)
+use_rth  = input.bool(true, "RTH Only (9:30-16:00 ET)", group="Filters")
+tier     = input.string("premium", "Tier", options=["premium","free"])
 
-// ─── EMA Ribbon ───────────────────────────────────────────────────────────────
+// --- EMA Ribbon --------------------------------------------------------------
 ema8  = ta.ema(close, e8_len)
 ema13 = ta.ema(close, e13_len)
 ema21 = ta.ema(close, e21_len)
@@ -46,11 +40,11 @@ ema55 = ta.ema(close, e55_len)
 ribbon_bull = ema8 > ema13 and ema13 > ema21 and ema21 > ema34
 ribbon_bear = ema8 < ema13 and ema13 < ema21 and ema21 < ema34
 
-// ─── VWAP with ±1σ / ±2σ bands ───────────────────────────────────────────────
+// --- VWAP with +/-1SD / +/-2SD bands ----------------------------------------
 hlc3_src = hlc3
-var float cum_vol         = 0.0
-var float cum_vol_price   = 0.0
-var float cum_vol_price2  = 0.0
+var float cum_vol        = 0.0
+var float cum_vol_price  = 0.0
+var float cum_vol_price2 = 0.0
 
 if ta.change(time("D")) != 0
     cum_vol        := 0.0
@@ -67,22 +61,22 @@ vwap_sd  = vwap_var > 0 ? math.sqrt(vwap_var) : 0.0
 
 vwap_u1 = vwap_val + vwap_sd
 vwap_l1 = vwap_val - vwap_sd
-vwap_u2 = vwap_val + 2 * vwap_sd
-vwap_l2 = vwap_val - 2 * vwap_sd
+vwap_u2 = vwap_val + 2.0 * vwap_sd
+vwap_l2 = vwap_val - 2.0 * vwap_sd
 
 above_vwap = close > vwap_val
 below_vwap = close < vwap_val
 
-// ─── Stochastic RSI ───────────────────────────────────────────────────────────
+// --- Stochastic RSI ----------------------------------------------------------
 rsi_raw   = ta.rsi(close, srsi_rsi_len)
 stoch_raw = ta.stoch(rsi_raw, rsi_raw, rsi_raw, srsi_stoch_len)
-stoch_k   = ta.sma(stoch_raw,  srsi_k_smooth)
-stoch_d   = ta.sma(stoch_k,    srsi_d_smooth)
+stoch_k   = ta.sma(stoch_raw, srsi_k_smooth)
+stoch_d   = ta.sma(stoch_k,   srsi_d_smooth)
 
 srsi_bull = ta.crossover(stoch_k,  stoch_d) and stoch_k < srsi_ob
 srsi_bear = ta.crossunder(stoch_k, stoch_d) and stoch_k > srsi_os
 
-// ─── TTM Squeeze (LazyBear) ───────────────────────────────────────────────────
+// --- TTM Squeeze (LazyBear) --------------------------------------------------
 bb_upper = ta.sma(close, sqz_bb_len) + sqz_bb_mult * ta.stdev(close, sqz_bb_len)
 bb_lower = ta.sma(close, sqz_bb_len) - sqz_bb_mult * ta.stdev(close, sqz_bb_len)
 kc_mid   = ta.ema(close, sqz_kc_len)
@@ -90,99 +84,79 @@ kc_range = ta.atr(sqz_kc_len) * sqz_kc_mult
 kc_upper = kc_mid + kc_range
 kc_lower = kc_mid - kc_range
 
-squeeze_on  = bb_lower > kc_lower and bb_upper < kc_upper   // coiling
-squeeze_off = bb_lower < kc_lower                            // just fired
+squeeze_on  = bb_lower > kc_lower and bb_upper < kc_upper
+squeeze_off = bb_lower < kc_lower
 
-mom_delta    = close - math.avg(
-    math.avg(ta.highest(high, sqz_kc_len), ta.lowest(low, sqz_kc_len)),
-    ta.sma(close, sqz_kc_len))
-momentum     = ta.linreg(mom_delta, sqz_kc_len, 0)
-mom_rising   = momentum > nz(momentum[1])
-mom_falling  = momentum < nz(momentum[1])
-mom_bull     = momentum > 0 and mom_rising
-mom_bear     = momentum < 0 and mom_falling
+mom_hl_avg  = math.avg(ta.highest(high, sqz_kc_len), ta.lowest(low, sqz_kc_len))
+mom_delta   = close - math.avg(mom_hl_avg, ta.sma(close, sqz_kc_len))
+momentum    = ta.linreg(mom_delta, sqz_kc_len, 0)
+mom_rising  = momentum > nz(momentum[1])
+mom_falling = momentum < nz(momentum[1])
+mom_bull    = momentum > 0 and mom_rising
+mom_bear    = momentum < 0 and mom_falling
 
-// ─── Relative Volume ──────────────────────────────────────────────────────────
+// --- Relative Volume ---------------------------------------------------------
 atr_val   = ta.atr(14)
 vol_ratio = volume / ta.sma(volume, 20)
 
-// ─── Session ──────────────────────────────────────────────────────────────────
+// --- Session -----------------------------------------------------------------
 in_rth  = not na(time("1", "0930-1600", "America/New_York"))
 sess_ok = use_rth ? in_rth : true
 
-// ─── Signal Logic ─────────────────────────────────────────────────────────────
+// --- Signal Logic ------------------------------------------------------------
 vwap_bull_ok = use_vwap ? above_vwap : true
 vwap_bear_ok = use_vwap ? below_vwap : true
 
-// Primary scalp: ribbon aligned + Stoch RSI cross + VWAP side + volume
-bull = ribbon_bull and srsi_bull and vwap_bull_ok and vol_ratio >= vol_mult and sess_ok
-bear = ribbon_bear and srsi_bear and vwap_bear_ok and vol_ratio >= vol_mult and sess_ok
-
-// Squeeze breakout: fires when BB expands out of KC + momentum direction confirmed
+bull     = ribbon_bull and srsi_bull and vwap_bull_ok and vol_ratio >= vol_mult and sess_ok
+bear     = ribbon_bear and srsi_bear and vwap_bear_ok and vol_ratio >= vol_mult and sess_ok
 sqz_bull = squeeze_off and mom_bull and above_vwap and vol_ratio >= vol_mult and sess_ok
 sqz_bear = squeeze_off and mom_bear and below_vwap and vol_ratio >= vol_mult and sess_ok
 
-// ─── Plots ────────────────────────────────────────────────────────────────────
+// --- Plots -------------------------------------------------------------------
 p8  = plot(show_ribbon ? ema8  : na, "EMA 8",  color.new(color.lime,   15), 1)
 plot(show_ribbon ? ema13 : na, "EMA 13", color.new(color.green,  25), 1)
 plot(show_ribbon ? ema21 : na, "EMA 21", color.new(color.aqua,   20), 1)
 plot(show_ribbon ? ema34 : na, "EMA 34", color.new(color.orange, 25), 1)
-p55 = plot(show_ribbon ? ema55 : na, "EMA 55", color.new(color.red,    35), 1)
+p55 = plot(show_ribbon ? ema55 : na, "EMA 55", color.new(color.red,   35), 1)
 
-fill(p8, p55,
-    ribbon_bull ? color.new(color.lime, 88) :
-    ribbon_bear ? color.new(color.red,  88) : na,
-    "Ribbon Fill")
+ribbon_fill = ribbon_bull ? color.new(color.lime, 88) : ribbon_bear ? color.new(color.red, 88) : na
+fill(p8, p55, ribbon_fill, "Ribbon Fill")
 
-plot(vwap_val,               "VWAP",     color.new(color.white,  10), 2)
-plot(show_bands ? vwap_u1 : na, "VWAP +1σ", color.new(color.blue,   35), 1)
-plot(show_bands ? vwap_l1 : na, "VWAP -1σ", color.new(color.blue,   35), 1)
-plot(show_bands ? vwap_u2 : na, "VWAP +2σ", color.new(color.purple, 35), 1)
-plot(show_bands ? vwap_l2 : na, "VWAP -2σ", color.new(color.purple, 35), 1)
+plot(vwap_val,                  "VWAP",     color.new(color.white,  10), 2)
+plot(show_bands ? vwap_u1 : na, "VWAP+1SD", color.new(color.blue,   35), 1)
+plot(show_bands ? vwap_l1 : na, "VWAP-1SD", color.new(color.blue,   35), 1)
+plot(show_bands ? vwap_u2 : na, "VWAP+2SD", color.new(color.purple, 35), 1)
+plot(show_bands ? vwap_l2 : na, "VWAP-2SD", color.new(color.purple, 35), 1)
 
-// Ribbon signal arrows
 plotshape(bull,     "BUY",      shape.triangleup,   location.belowbar, color.lime,   size=size.small)
 plotshape(bear,     "SELL",     shape.triangledown, location.abovebar, color.red,    size=size.small)
+plotshape(sqz_bull, "SQZ BUY",  shape.diamond,      location.belowbar, color.yellow, size=size.tiny)
+plotshape(sqz_bear, "SQZ SELL", shape.diamond,      location.abovebar, color.yellow, size=size.tiny)
 
-// Squeeze breakout diamonds (yellow = extra conviction)
-plotshape(sqz_bull, "SQZ BUY",  shape.diamond, location.belowbar, color.yellow, size=size.tiny)
-plotshape(sqz_bear, "SQZ SELL", shape.diamond, location.abovebar, color.yellow, size=size.tiny)
+bg_color = bull or sqz_bull ? color.new(color.lime, 93) : bear or sqz_bear ? color.new(color.red, 93) : na
+bgcolor(bg_color)
 
-// Background flash on signal
-bgcolor(bull or sqz_bull ? color.new(color.lime, 93) :
-        bear or sqz_bear ? color.new(color.red,  93) : na)
-
-// ─── Alert payload ────────────────────────────────────────────────────────────
+// --- Alert payload -----------------------------------------------------------
 strat_name = "EMA_Ribbon_StochRSI" + (use_vwap ? "_VWAP" : "") + (use_rth ? "_RTH" : "")
 
 msg(action, signal_type) =>
-    '{"symbol":"'       + syminfo.ticker                           + '",'  +
-    '"timeframe":"'     + timeframe.period                         + '",'  +
-    '"action":"'        + action                                   + '",'  +
-    '"signal":"'        + signal_type                              + '",'  +
-    '"price":'          + str.tostring(close)                      + ','   +
-    '"bid":'            + str.tostring(close - atr_val * 0.01)     + ','   +
-    '"ask":'            + str.tostring(close + atr_val * 0.01)     + ','   +
-    '"volume":'         + str.tostring(volume)                     + ','   +
-    '"rsi":'            + str.tostring(math.round(rsi_raw,    2))  + ','   +
-    '"stoch_k":'        + str.tostring(math.round(stoch_k,    2))  + ','   +
-    '"stoch_d":'        + str.tostring(math.round(stoch_d,    2))  + ','   +
-    '"atr":'            + str.tostring(math.round(atr_val,    2))  + ','   +
-    '"vol_ratio":'      + str.tostring(math.round(vol_ratio,  2))  + ','   +
-    '"ema8":'           + str.tostring(math.round(ema8,        2)) + ','   +
-    '"ema21":'          + str.tostring(math.round(ema21,       2)) + ','   +
-    '"ema55":'          + str.tostring(math.round(ema55,       2)) + ','   +
-    '"vwap":'           + str.tostring(math.round(vwap_val,    2)) + ','   +
-    '"vwap_u1":'        + str.tostring(math.round(vwap_u1,     2)) + ','   +
-    '"vwap_l1":'        + str.tostring(math.round(vwap_l1,     2)) + ','   +
-    '"momentum":'       + str.tostring(math.round(momentum,    4)) + ','   +
-    '"squeeze":'        + str.tostring(squeeze_on)                 + ','   +
-    '"ribbon_bull":'    + str.tostring(ribbon_bull)                + ','   +
-    '"strategy":"'      + strat_name                               + '",'  +
-    '"tier":"'          + tier                                     + '",'  +
-    '"source":"tradingview"}'
+    j1  = '{"symbol":"' + syminfo.ticker + '","timeframe":"' + timeframe.period + '",'
+    j2  = '"action":"' + action + '","signal":"' + signal_type + '",'
+    j3  = '"price":' + str.tostring(close) + ',"bid":' + str.tostring(math.round(close - atr_val * 0.01, 2)) + ',"ask":' + str.tostring(math.round(close + atr_val * 0.01, 2)) + ','
+    j4  = '"volume":' + str.tostring(volume) + ',"rsi":' + str.tostring(math.round(rsi_raw, 2)) + ','
+    j5  = '"stoch_k":' + str.tostring(math.round(stoch_k, 2)) + ',"stoch_d":' + str.tostring(math.round(stoch_d, 2)) + ','
+    j6  = '"atr":' + str.tostring(math.round(atr_val, 2)) + ',"vol_ratio":' + str.tostring(math.round(vol_ratio, 2)) + ','
+    j7  = '"ema8":' + str.tostring(math.round(ema8, 2)) + ',"ema21":' + str.tostring(math.round(ema21, 2)) + ',"ema55":' + str.tostring(math.round(ema55, 2)) + ','
+    j8  = '"vwap":' + str.tostring(math.round(vwap_val, 2)) + ',"vwap_u1":' + str.tostring(math.round(vwap_u1, 2)) + ',"vwap_l1":' + str.tostring(math.round(vwap_l1, 2)) + ','
+    j9  = '"momentum":' + str.tostring(math.round(momentum, 4)) + ',"squeeze":' + str.tostring(squeeze_on) + ',"ribbon_bull":' + str.tostring(ribbon_bull) + ','
+    j10 = '"strategy":"' + strat_name + '","tier":"' + tier + '","source":"tradingview"}'
+    j1 + j2 + j3 + j4 + j5 + j6 + j7 + j8 + j9 + j10
 
-alertcondition(bull,     "OpenClaw Futures BUY",  msg("BUY",  "ribbon"))
-alertcondition(bear,     "OpenClaw Futures SELL", msg("SELL", "ribbon"))
-alertcondition(sqz_bull, "OpenClaw Squeeze BUY",  msg("BUY",  "squeeze"))
-alertcondition(sqz_bear, "OpenClaw Squeeze SELL", msg("SELL", "squeeze"))
+if bull
+    alert(msg("BUY",  "ribbon"),  alert.freq_once_per_bar)
+if bear
+    alert(msg("SELL", "ribbon"),  alert.freq_once_per_bar)
+if sqz_bull
+    alert(msg("BUY",  "squeeze"), alert.freq_once_per_bar)
+if sqz_bear
+    alert(msg("SELL", "squeeze"), alert.freq_once_per_bar)
