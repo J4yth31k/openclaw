@@ -118,6 +118,9 @@ TIMEFRAMES = {
     '1d': '1d',
     '4h': '1h',  # Will resample to 4h
     '1h': '1h',
+    '15m': '15m',
+    '5m':  '5m',
+    '1m':  '1m',
 }
 
 # Technical indicator parameters
@@ -1278,7 +1281,10 @@ class IronMan:
         try:
             for tf_name, yf_interval in TIMEFRAMES.items():
                 logger.info(f"JARVIS scanning {pair_name} {tf_name}...")
-                df = self.fetch_data(yf_ticker, yf_interval)
+                # yfinance caps intraday history: 1m=7d, 5m/15m=60d
+                intraday_period = {'1m': '5d', '5m': '30d', '15m': '60d'}
+                period = intraday_period.get(yf_interval, '90d')
+                df = self.fetch_data(yf_ticker, yf_interval, period=period)
 
                 if df is None or df.empty:
                     analysis['timeframes'][tf_name] = {'error': 'Failed to fetch data'}
