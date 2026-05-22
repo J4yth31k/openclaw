@@ -1,0 +1,38 @@
+//@version=6
+// OpenClaw Price Feed — broadcasts every bar close to the OpenClaw server.
+// Add this to EVERY symbol chart you want live prices on (NQ, ES, CL, etc.)
+// Set the alert to fire "On Bar Close" for 1-minute bars.
+indicator("OpenClaw Price Feed", overlay = true)
+
+// ─── Calculations ─────────────────────────────────────────────────────────────
+float spread  = syminfo.mintick * 2
+float bid_est = close - spread / 2
+float ask_est = close + spread / 2
+float rsi_val = ta.rsi(close, 14)
+float atr_val = ta.atr(14)
+float bar_o   = open
+float bar_h   = high
+float bar_l   = low
+float bar_v   = volume
+
+// ─── JSON payload ─────────────────────────────────────────────────────────────
+string feed_msg =
+     '{"symbol":'    + '"' + syminfo.ticker    + '",'
+   + '"timeframe":'  + '"' + timeframe.period  + '",'
+   + '"action":"NEUTRAL",'
+   + '"price":'      + str.tostring(close)                      + ','
+   + '"bid":'        + str.tostring(bid_est)                    + ','
+   + '"ask":'        + str.tostring(ask_est)                    + ','
+   + '"volume":'     + str.tostring(bar_v)                      + ','
+   + '"open":'       + str.tostring(bar_o)                      + ','
+   + '"high":'       + str.tostring(bar_h)                      + ','
+   + '"low":'        + str.tostring(bar_l)                      + ','
+   + '"rsi":'        + str.tostring(math.round(rsi_val, 2))     + ','
+   + '"atr":'        + str.tostring(math.round(atr_val, 4))     + ','
+   + '"strategy":"PriceFeed",'
+   + '"source":"tradingview"}'
+
+// Fires on every bar close — wires live prices into OpenClaw dashboard
+// NOTE: Create the alert by selecting this script as the condition in TradingView.
+// The webhook URL goes in the alert's Notifications tab.
+alert(feed_msg, alert.freq_once_per_bar_close)

@@ -1,0 +1,70 @@
+//@version=5
+// OpenClaw Futures Signal — NQ · ES · YM · RTY · CL · GC
+// Works on any futures chart. Session filter auto-uses RTH (ET).
+indicator("OpenClaw Futures", overlay=true, max_bars_back=500)
+
+// ─── Inputs ───────────────────────────────────────────────────────────────────
+fast_len     = input.int(9,    "Fast EMA")
+slow_len     = input.int(21,   "Slow EMA")
+rsi_len      = input.int(14,   "RSI")
+rsi_ob       = input.int(70,   "RSI Overbought")
+rsi_os       = input.int(30,   "RSI Oversold")
+vol_mult     = input.float(1.2,"Volume Threshold")
+use_rth      = input.bool(true,"RTH Only (9:30–16:00 ET)")
+use_vwap     = input.bool(true,"VWAP Filter")
+tier         = input.string("premium","Tier", options=["premium","free"])
+
+// ─── Indicators ───────────────────────────────────────────────────────────────
+fast_ema  = ta.ema(close, fast_len)
+slow_ema  = ta.ema(close, slow_len)
+rsi_val   = ta.rsi(close, rsi_len)
+atr_val   = ta.atr(14)
+vwap_val  = ta.vwap(hlc3)
+vol_ratio = volume / ta.sma(volume, 20)
+
+// ─── Session ──────────────────────────────────────────────────────────────────
+in_rth    = not na(time("1","0930-1600","America/New_York"))
+sess_ok   = use_rth ? in_rth : true
+
+// ─── VWAP filter ──────────────────────────────────────────────────────────────
+above_vwap = close > vwap_val
+below_vwap = close < vwap_val
+
+// ─── Signals ──────────────────────────────────────────────────────────────────
+vwap_bull_ok = use_vwap ? above_vwap : true
+vwap_bear_ok = use_vwap ? below_vwap : true
+
+bull = ta.crossover(fast_ema, slow_ema)  and rsi_val < rsi_ob and vol_ratio >= vol_mult and sess_ok and vwap_bull_ok
+bear = ta.crossunder(fast_ema, slow_ema) and rsi_val > rsi_os and vol_ratio >= vol_mult and sess_ok and vwap_bear_ok
+
+// ─── Plots ────────────────────────────────────────────────────────────────────
+plot(fast_ema, "Fast EMA", color.new(color.aqua,   15), 1)
+plot(slow_ema, "Slow EMA", color.new(color.orange,  15), 1)
+plot(use_vwap ? vwap_val : na, "VWAP", color.new(color.purple, 20), 1)
+plotshape(bull, "BUY",  shape.triangleup,   location.belowbar, color.lime, size=size.small)
+plotshape(bear, "SELL", shape.triangledown, location.abovebar, color.red,  size=size.small)
+
+bgcol = bull ? color.new(color.lime,92) : bear ? color.new(color.red,92) : na
+bgcolor(bgcol, title="Signal BG")
+
+// ─── Dynamic strategy name ────────────────────────────────────────────────────
+strat_name = "EMA_Cross" + (use_vwap ? "_VWAP" : "") + (use_rth ? "_RTH" : "")
+
+// ─── Alert payload ────────────────────────────────────────────────────────────
+msg(action) =>
+    '{"symbol":"'   + syminfo.ticker                      + '",'  +
+    '"timeframe":"' + timeframe.period                    + '",'  +
+    '"action":"'    + action                              + '",'  +
+    '"price":'      + str.tostring(close)                 + ','   +
+    '"rsi":'        + str.tostring(math.round(rsi_val,2)) + ','   +
+    '"atr":'        + str.tostring(math.round(atr_val,2)) + ','   +
+    '"vol_ratio":'  + str.tostring(math.round(vol_ratio,2))+ ','  +
+    '"fast_ema":'   + str.tostring(math.round(fast_ema,2))+ ','   +
+    '"slow_ema":'   + str.tostring(math.round(slow_ema,2))+ ','   +
+    '"vwap":'       + str.tostring(math.round(vwap_val,2))+ ','   +
+    '"strategy":"'  + strat_name                          + '",'  +
+    '"tier":"'      + tier                                + '",'  +
+    '"source":"tradingview"}'
+
+alertcondition(bull, "OpenClaw Futures BUY",  msg("BUY"))
+alertcondition(bear, "OpenClaw Futures SELL", msg("SELL"))

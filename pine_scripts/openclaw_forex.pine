@@ -1,0 +1,74 @@
+//@version=5
+// OpenClaw Forex Signal — EUR/USD · GBP/USD · USD/JPY · AUD/USD etc.
+// Session filter covers London, New York, and the high-liquidity overlap.
+indicator("OpenClaw Forex", overlay=true, max_bars_back=500)
+
+// ─── Inputs ───────────────────────────────────────────────────────────────────
+fast_len   = input.int(9,    "Fast EMA")
+slow_len   = input.int(21,   "Slow EMA")
+rsi_len    = input.int(14,   "RSI")
+vol_mult   = input.float(1.1,"Volume Threshold", step=0.1)
+tier       = input.string("premium","Tier", options=["premium","free"])
+
+// Session toggles — disable any you don't want signals in
+use_london   = input.bool(true, "London Session (3–12 ET)")
+use_newyork  = input.bool(true, "New York Session (8–17 ET)")
+use_tokyo    = input.bool(false,"Tokyo Session (7PM–4AM ET)")
+
+// ─── Indicators ───────────────────────────────────────────────────────────────
+fast_ema  = ta.ema(close, fast_len)
+slow_ema  = ta.ema(close, slow_len)
+rsi_val   = ta.rsi(close, rsi_len)
+atr_val   = ta.atr(14)
+vol_ratio = volume / ta.sma(volume, 20)
+
+// ─── Session windows (all times ET) ───────────────────────────────────────────
+in_london  = not na(time("1","0300-1200","America/New_York"))
+in_newyork = not na(time("1","0800-1700","America/New_York"))
+in_tokyo   = not na(time("1","1900-0400","America/New_York"))
+
+in_overlap = in_london and in_newyork   // highest liquidity
+
+sess_ok = (use_london  and in_london)  or
+          (use_newyork and in_newyork) or
+          (use_tokyo   and in_tokyo)
+
+// ─── Signals ──────────────────────────────────────────────────────────────────
+bull = ta.crossover(fast_ema, slow_ema)  and rsi_val < 70 and vol_ratio >= vol_mult and sess_ok
+bear = ta.crossunder(fast_ema, slow_ema) and rsi_val > 30 and vol_ratio >= vol_mult and sess_ok
+
+// ─── Plots ────────────────────────────────────────────────────────────────────
+plot(fast_ema, "Fast EMA", color.new(color.aqua,  15), 1)
+plot(slow_ema, "Slow EMA", color.new(color.orange, 15), 1)
+
+// Shade overlap window
+bgcolor(in_overlap ? color.new(color.yellow,93) : na, title="LN+NY Overlap")
+
+plotshape(bull, "BUY",  shape.triangleup,   location.belowbar, color.lime, size=size.small)
+plotshape(bear, "SELL", shape.triangledown, location.abovebar, color.red,  size=size.small)
+
+// ─── Session label for payload ────────────────────────────────────────────────
+get_session() =>
+    in_overlap ? "LONDON+NEW_YORK" :
+    in_london  ? "LONDON" :
+    in_newyork ? "NEW_YORK" :
+    in_tokyo   ? "TOKYO" : "OTHER"
+
+// ─── Alert payload ────────────────────────────────────────────────────────────
+msg(action) =>
+    '{"symbol":"'   + syminfo.ticker                      + '",'  +
+    '"timeframe":"' + timeframe.period                    + '",'  +
+    '"action":"'    + action                              + '",'  +
+    '"price":'      + str.tostring(close)                 + ','   +
+    '"rsi":'        + str.tostring(math.round(rsi_val,2)) + ','   +
+    '"atr":'        + str.tostring(math.round(atr_val,4)) + ','   +
+    '"vol_ratio":'  + str.tostring(math.round(vol_ratio,2))+ ','  +
+    '"fast_ema":'   + str.tostring(math.round(fast_ema,5))+ ','   +
+    '"slow_ema":'   + str.tostring(math.round(slow_ema,5))+ ','   +
+    '"session":"'   + get_session()                       + '",'  +
+    '"strategy":"EMA_Cross_Forex",'                               +
+    '"tier":"'      + tier                                + '",'  +
+    '"source":"tradingview"}'
+
+alertcondition(bull, "OpenClaw Forex BUY",  msg("BUY"))
+alertcondition(bear, "OpenClaw Forex SELL", msg("SELL"))

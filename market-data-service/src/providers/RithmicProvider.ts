@@ -79,14 +79,15 @@ export class RithmicProvider extends MarketDataProvider {
     const envName  = (process.env.RITHMIC_ENVIRONMENT ?? '').toLowerCase();
     const preset   = ENVIRONMENTS[envName];
 
-    // Individual env vars take precedence over the environment preset
-    this.gatewayUri  = process.env.RITHMIC_GATEWAY_URI  ?? preset?.uri        ?? 'wss://rituz00100.rithmic.com:443/';
-    this.user        = process.env.RITHMIC_USERNAME      ?? process.env.RITHMIC_USER ?? '';
-    this.password    = process.env.RITHMIC_PASSWORD      ?? '';
-    this.appName     = process.env.RITHMIC_APP_NAME      ?? 'OpenClaw';
-    this.appVersion  = process.env.RITHMIC_APP_VERSION   ?? '1.0.0';
-    this.systemName  = process.env.RITHMIC_SYSTEM_NAME   ?? preset?.systemName ?? 'Rithmic Paper Trading';
-    this.infraType   = parseInt(process.env.RITHMIC_INFRA_TYPE ?? String(preset?.infraType ?? 3), 10);
+    // Individual env vars take precedence over the environment preset.
+    // Use || so empty-string values (RITHMIC_GATEWAY_URI=) fall through to the preset.
+    this.gatewayUri  = process.env.RITHMIC_GATEWAY_URI  || preset?.uri        || 'wss://rituz00100.rithmic.com:443/';
+    this.user        = process.env.RITHMIC_USERNAME      || process.env.RITHMIC_USER || '';
+    this.password    = process.env.RITHMIC_PASSWORD      || '';
+    this.appName     = process.env.RITHMIC_APP_NAME      || 'OpenClaw';
+    this.appVersion  = process.env.RITHMIC_APP_VERSION   || '1.0.0';
+    this.systemName  = process.env.RITHMIC_SYSTEM_NAME   || preset?.systemName || 'Rithmic Paper Trading';
+    this.infraType   = parseInt(process.env.RITHMIC_INFRA_TYPE || String(preset?.infraType ?? 3), 10);
     this.certPath    = process.env.RITHMIC_CERT_PATH     ?? '';
     this.reconnectMs = parseInt(process.env.RITHMIC_RECONNECT_MS ?? '5000', 10);
 

@@ -7,7 +7,10 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { MarketDataProvider } from './providers/MarketDataProvider';
 import { MockProvider } from './providers/MockProvider';
 import { RithmicProvider } from './providers/RithmicProvider';
+import { TradovateProvider } from './providers/TradovateProvider';
+import { WebhookFeedProvider, webhookFeedProvider } from './providers/WebhookFeedProvider';
 import { buildUdfRouter, updateLatestQuote } from './providers/TradingViewDatafeedProvider';
+import { buildWebhookRouter } from './webhook/router';
 import { allContracts, resolveContract } from './contracts';
 import { Bar, ClientMessage, ServerMessage } from './types';
 
@@ -22,6 +25,18 @@ function createProvider(): MarketDataProvider {
       console.warn('[server] Falling back to MockProvider');
       return new MockProvider();
     }
+  }
+  if (name === 'tradovate') {
+    try {
+      return new TradovateProvider();
+    } catch (e) {
+      console.warn('[server] TradovateProvider init failed:', (e as Error).message);
+      console.warn('[server] Falling back to MockProvider');
+      return new MockProvider();
+    }
+  }
+  if (name === 'tradingview') {
+    return webhookFeedProvider;
   }
   return new MockProvider();
 }
@@ -85,6 +100,9 @@ app.get('/api/health', (_req, res) => {
 
 // ─── TradingView UDF datafeed ────────────────────────────────────────────────
 app.use('/udf', buildUdfRouter(provider));
+
+// ─── TradingView webhook receiver ────────────────────────────────────────────
+app.use('/webhook', buildWebhookRouter());
 
 // ─── WebSocket server ─────────────────────────────────────────────────────────
 type SymbolSet = Set<string>;
