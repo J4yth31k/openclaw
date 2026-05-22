@@ -1,10 +1,6 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "*.html", "use": "@vercel/static" }
-  ],
   "routes": [
-    { "src": "/",                  "dest": "/avengers_hq_unified.html" },
-    { "src": "/(.*\\.html)$",      "dest": "/$1" }
+    { "src": "/",             "dest": "/avengers_hq_unified.html" },
+    { "src": "/(.*\\.html)$", "dest": "/$1" }
   ]
 }
