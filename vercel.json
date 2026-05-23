@@ -4,7 +4,8 @@
   "outputDirectory": ".",
   "installCommand": "",
   "routes": [
-    { "src": "/",              "dest": "/avengers_hq_unified.html" },
+    { "src": "/",              "dest": "/openclaw_command.html" },
+    { "src": "/hq",            "dest": "/avengers_hq_unified.html" },
     { "src": "/mobile",        "dest": "/mobile.html" },
     { "src": "/(.*\\.html)$",  "dest": "/$1" }
   ]

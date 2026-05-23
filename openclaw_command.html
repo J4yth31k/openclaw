@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OPENCLAW // AI TRADING COMMAND CENTER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Grotesk:wght@300;400;500;700&family=IBM+Plex+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg-void:#020408;--bg-deep:#04080f;--bg-panel:rgba(5,10,22,0.92);
+  --bg-glass:rgba(8,15,32,0.70);--bg-card:rgba(6,12,26,0.88);
+  --cyan:#00d4ff;--cyan-d:rgba(0,212,255,0.12);--cyan-g:rgba(0,212,255,0.06);
+  --amber:#ffb300;--amber-d:rgba(255,179,0,0.12);
+  --crimson:#ff2244;--crimson-d:rgba(255,34,68,0.12);
+  --violet:#a855f7;--violet-d:rgba(168,85,247,0.12);
+  --emerald:#00ff88;--emerald-d:rgba(0,255,136,0.10);
+  --gold:#ffd700;--gold-d:rgba(255,215,0,0.10);
+  --red:#ff3355;--blue:#4488ff;--teal:#00cccc;
+  --txt:#d0e4f5;--txt2:#8099bb;--txt3:rgba(100,130,170,0.6);
+  --bdr:rgba(30,60,120,0.25);--bdr-c:rgba(0,212,255,0.22);
+  --bdr-hot:rgba(0,212,255,0.50);
+  --orb:'Orbitron',sans-serif;--grotesk:'Space Grotesk',sans-serif;--mono:'IBM Plex Mono',monospace;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-void);}
+body{
+  font-family:var(--grotesk);color:var(--txt);
+  display:flex;flex-direction:column;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%,rgba(0,100,180,0.07) 0%,transparent 70%),
+    repeating-linear-gradient(0deg,transparent,transparent 59px,rgba(0,212,255,0.018) 59px,rgba(0,212,255,0.018) 60px),
+    repeating-linear-gradient(90deg,transparent,transparent 59px,rgba(0,212,255,0.01) 59px,rgba(0,212,255,0.01) 60px);
+}
+
+/* ── TOPBAR ─────────────────────────────────────────────────────────────────── */
+.topbar{
+  height:38px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;background:rgba(3,6,14,0.99);z-index:200;
+  border-bottom:1px solid var(--bdr-c);
+  box-shadow:0 0 30px rgba(0,212,255,0.06),inset 0 -1px 0 rgba(0,212,255,0.08);
+}
+.topbar-brand{display:flex;align-items:center;gap:12px;}
+.topbar-logo{
+  font-family:var(--orb);font-weight:900;font-size:16px;letter-spacing:4px;
+  color:var(--cyan);text-shadow:0 0 20px rgba(0,212,255,0.8),0 0 40px rgba(0,212,255,0.4);
+  position:relative;
+}
+.topbar-logo::before{
+  content:'';position:absolute;bottom:-2px;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  animation:shimmer-h 3s ease-in-out infinite;
+}
+.topbar-tag{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:2px;text-transform:uppercase;}
+.topbar-center{display:flex;align-items:center;gap:24px;}
+.status-pill{
+  display:flex;align-items:center;gap:6px;padding:3px 10px;
+  border:1px solid rgba(0,255,136,0.25);border-radius:2px;
+  background:rgba(0,255,136,0.05);font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--emerald);
+}
+.status-dot{width:5px;height:5px;border-radius:50%;background:var(--emerald);animation:pulse-dot 1.8s ease-in-out infinite;}
+.topbar-clock{font-family:var(--mono);font-size:12px;color:var(--cyan);letter-spacing:2px;}
+.topbar-right{display:flex;align-items:center;gap:16px;}
+.tbar-stat{text-align:center;}
+.tbar-stat .lbl{font-family:var(--mono);font-size:8px;color:var(--txt3);letter-spacing:1px;}
+.tbar-stat .val{font-family:var(--mono);font-size:11px;font-weight:600;}
+.top-btn{
+  padding:4px 12px;border:1px solid var(--bdr-c);border-radius:2px;
+  background:var(--cyan-d);color:var(--cyan);font-family:var(--orb);font-size:8px;letter-spacing:2px;
+  cursor:pointer;transition:all .2s;
+}
+.top-btn:hover{background:rgba(0,212,255,0.22);box-shadow:0 0 12px rgba(0,212,255,0.3);}
+
+/* ── MAIN GRID ───────────────────────────────────────────────────────────────── */
+.command-grid{
+  flex:1;display:grid;overflow:hidden;
+  grid-template-columns:272px 1fr 296px;
+  grid-template-rows:1fr 130px;
+  gap:3px;padding:3px;min-height:0;
+}
+
+/* ── PANEL SHELL ─────────────────────────────────────────────────────────────── */
+.panel{
+  background:var(--bg-panel);border:1px solid var(--bdr);
+  backdrop-filter:blur(12px);position:relative;overflow:hidden;
+}
+.panel::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(135deg,rgba(0,212,255,0.025) 0%,transparent 50%,rgba(168,85,247,0.015) 100%);
+}
+/* sci-fi corner brackets */
+.panel::after{
+  content:'';position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;
+  border:1px solid transparent;
+  background:
+    linear-gradient(var(--bg-void),var(--bg-void)) padding-box,
+    linear-gradient(135deg,var(--cyan) 0%,transparent 30%,transparent 70%,var(--violet) 100%) border-box;
+  border-radius:0;opacity:0.18;
+}
+.panel-corner{position:absolute;width:12px;height:12px;pointer-events:none;z-index:10;}
+.panel-corner.tl{top:0;left:0;border-top:2px solid var(--cyan);border-left:2px solid var(--cyan);}
+.panel-corner.tr{top:0;right:0;border-top:2px solid var(--cyan);border-right:2px solid var(--cyan);}
+.panel-corner.bl{bottom:0;left:0;border-bottom:2px solid var(--violet);border-left:2px solid var(--violet);}
+.panel-corner.br{bottom:0;right:0;border-bottom:2px solid var(--violet);border-right:2px solid var(--violet);}
+.panel-header{
+  height:32px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 12px;border-bottom:1px solid var(--bdr);flex-shrink:0;
+  background:linear-gradient(90deg,rgba(0,212,255,0.05) 0%,transparent 100%);
+}
+.panel-title{font-family:var(--orb);font-size:9px;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;}
+.panel-badge{
+  font-family:var(--mono);font-size:8px;padding:2px 6px;
+  border:1px solid rgba(0,212,255,0.25);color:var(--txt3);letter-spacing:1px;
+}
+
+/* ── LEFT: AGENT NETWORK ─────────────────────────────────────────────────────── */
+.agent-network{display:flex;flex-direction:column;grid-row:1/2;}
+.agent-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px;}
+.agent-scroll::-webkit-scrollbar{width:2px;}
+.agent-scroll::-webkit-scrollbar-track{background:transparent;}
+.agent-scroll::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.2);border-radius:1px;}
+
+.agent-card{
+  position:relative;margin-bottom:5px;padding:10px;overflow:hidden;
+  border:1px solid var(--bdr);cursor:pointer;transition:all .3s;
+  background:var(--bg-card);
+}
+.agent-card:hover{border-color:var(--bdr-c);box-shadow:0 0 20px rgba(0,212,255,0.08);}
+.agent-card.active{border-color:rgba(0,212,255,0.45);box-shadow:0 0 24px rgba(0,212,255,0.12);}
+.agent-card-inner{display:flex;gap:10px;align-items:flex-start;position:relative;z-index:2;}
+.agent-avatar{width:52px;height:52px;flex-shrink:0;position:relative;}
+.agent-info{flex:1;min-width:0;}
+.agent-name{font-family:var(--orb);font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:2px;}
+.agent-role{font-family:var(--mono);font-size:8px;color:var(--txt3);letter-spacing:1px;margin-bottom:5px;}
+.agent-stat-row{display:flex;gap:8px;margin-bottom:4px;}
+.agent-stat{font-family:var(--mono);font-size:8px;}
+.agent-stat .s-lbl{color:var(--txt3);}
+.agent-stat .s-val{color:var(--cyan);}
+.agent-status-bar{height:2px;background:rgba(255,255,255,0.06);border-radius:1px;overflow:hidden;}
+.agent-status-fill{height:100%;border-radius:1px;transition:width .5s ease;}
+.agent-scan-line{
+  position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent 0%,rgba(0,212,255,0.6) 50%,transparent 100%);
+  animation:scan-v 3s ease-in-out infinite;opacity:0.4;
+}
+/* Background glow per agent */
+.agent-bg{
+  position:absolute;inset:0;opacity:0.04;pointer-events:none;
+  background:radial-gradient(ellipse at center,var(--agent-color) 0%,transparent 70%);
+}
+
+/* ── IRON MAN AVATAR ─────────────────────────────────────────────────────────── */
+.av-ironman{background:radial-gradient(circle,rgba(200,30,0,0.15) 0%,rgba(180,100,0,0.08) 40%,transparent 70%);}
+.av-ironman svg{width:52px;height:52px;}
+/* ── DR. STRANGE AVATAR ─────────────────────────────────────────────────────── */
+.av-strange{background:radial-gradient(circle,rgba(168,85,247,0.2) 0%,rgba(255,215,0,0.05) 50%,transparent 70%);}
+/* ── BLACK WIDOW AVATAR ─────────────────────────────────────────────────────── */
+.av-widow{background:radial-gradient(circle,rgba(255,34,68,0.12) 0%,rgba(20,0,30,0.1) 50%,transparent 70%);}
+/* ── THOR AVATAR ─────────────────────────────────────────────────────────────── */
+.av-thor{background:radial-gradient(circle,rgba(40,140,255,0.18) 0%,rgba(200,240,255,0.04) 50%,transparent 70%);}
+/* ── VISION AVATAR ─────────────────────────────────────────────────────────── */
+.av-vision{background:radial-gradient(circle,rgba(255,215,0,0.10) 0%,rgba(0,212,255,0.08) 50%,transparent 70%);}
+/* ── HULK AVATAR ─────────────────────────────────────────────────────────────── */
+.av-hulk{background:radial-gradient(circle,rgba(0,220,80,0.18) 0%,rgba(0,100,30,0.08) 50%,transparent 70%);}
+/* ── NICK FURY AVATAR ────────────────────────────────────────────────────────── */
+.av-fury{background:radial-gradient(circle,rgba(255,179,0,0.14) 0%,rgba(80,50,0,0.08) 50%,transparent 70%);}
+
+/* ── CENTER: INTELLIGENCE GRID ─────────────────────────────────────────────── */
+.intel-center{display:flex;flex-direction:column;grid-row:1/2;}
+.intel-top{height:24px;flex-shrink:0;display:flex;align-items:center;gap:16px;padding:0 12px;
+  background:rgba(3,6,14,0.8);border-bottom:1px solid var(--bdr);}
+.intel-top-item{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;}
+.intel-top-item .sym{color:var(--amber);font-weight:600;letter-spacing:1px;}
+.intel-top-item .prc{color:var(--txt);}
+.intel-top-item .chg{font-size:8px;}
+.pos{color:var(--emerald);}.neg{color:var(--crimson);}
+
+.chart-area{flex:1;position:relative;overflow:hidden;min-height:0;}
+#mainChart{width:100%;height:100%;display:block;}
+.chart-overlay{position:absolute;inset:0;pointer-events:none;}
+/* Corner brackets on chart */
+.chart-bracket{position:absolute;width:18px;height:18px;pointer-events:none;}
+.chart-bracket.tl{top:8px;left:8px;border-top:2px solid var(--cyan);border-left:2px solid var(--cyan);opacity:0.6;}
+.chart-bracket.tr{top:8px;right:8px;border-top:2px solid var(--amber);border-right:2px solid var(--amber);opacity:0.6;}
+.chart-bracket.bl{bottom:8px;left:8px;border-bottom:2px solid var(--violet);border-left:2px solid var(--violet);opacity:0.6;}
+.chart-bracket.br{bottom:8px;right:8px;border-bottom:2px solid var(--violet);border-right:2px solid var(--violet);opacity:0.6;}
+.chart-crosshair-h{position:absolute;left:0;right:0;height:1px;background:rgba(0,212,255,0.15);pointer-events:none;top:50%;}
+.chart-crosshair-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(0,212,255,0.10);pointer-events:none;left:70%;}
+
+/* Signal overlays */
+.signal-badge{
+  position:absolute;left:50%;transform:translateX(-50%);
+  display:flex;gap:8px;top:10px;
+}
+.sig-pill{
+  padding:3px 10px;font-family:var(--mono);font-size:8px;letter-spacing:2px;
+  border-radius:2px;display:flex;align-items:center;gap:5px;
+}
+.sig-pill.bull{background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);color:var(--emerald);}
+.sig-pill.bear{background:rgba(255,34,68,0.08);border:1px solid rgba(255,34,68,0.3);color:var(--crimson);}
+.sig-pill.warn{background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.3);color:var(--amber);}
+.sig-dot{width:4px;height:4px;border-radius:50%;animation:pulse-dot 1.4s ease-in-out infinite;}
+.sig-pill.bull .sig-dot{background:var(--emerald);}
+.sig-pill.bear .sig-dot{background:var(--crimson);}
+.sig-pill.warn .sig-dot{background:var(--amber);}
+
+/* Bottom stats bar inside chart */
+.chart-stats{
+  position:absolute;bottom:0;left:0;right:0;height:28px;
+  display:flex;align-items:center;gap:16px;padding:0 12px;
+  background:rgba(3,6,14,0.85);border-top:1px solid var(--bdr);
+  font-family:var(--mono);font-size:9px;
+}
+.cs-item{display:flex;gap:5px;align-items:center;}
+.cs-lbl{color:var(--txt3);letter-spacing:1px;}
+.cs-val{color:var(--cyan);}
+
+/* Mini heatmap + order flow */
+.intel-bottom-row{height:68px;flex-shrink:0;display:flex;gap:3px;border-top:1px solid var(--bdr);}
+.mini-panel{flex:1;background:var(--bg-card);border:1px solid var(--bdr);padding:6px 8px;overflow:hidden;}
+.mini-panel-title{font-family:var(--orb);font-size:7px;letter-spacing:2px;color:var(--txt3);margin-bottom:4px;text-transform:uppercase;}
+.heatmap-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;height:40px;}
+.hm-cell{border-radius:1px;transition:background .5s;}
+.orderflow-bars{display:flex;gap:1px;align-items:flex-end;height:40px;}
+.of-bar{flex:1;border-radius:1px 1px 0 0;min-height:2px;transition:height .4s;}
+.pulse-meter{height:40px;position:relative;display:flex;flex-direction:column;justify-content:space-between;}
+.pm-row{display:flex;justify-content:space-between;align-items:center;}
+.pm-lbl{font-family:var(--mono);font-size:8px;color:var(--txt3);}
+.pm-bar{flex:1;height:3px;margin:0 6px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden;}
+.pm-fill{height:100%;border-radius:2px;animation:breathe-bar 2s ease-in-out infinite;}
+.pm-val{font-family:var(--mono);font-size:8px;color:var(--cyan);}
+
+/* ── RIGHT: MISSION FEED ─────────────────────────────────────────────────────── */
+.mission-feed{display:flex;flex-direction:column;grid-row:1/2;}
+.feed-scroll{flex:1;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:4px;}
+.feed-scroll::-webkit-scrollbar{width:2px;}
+.feed-scroll::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.15);}
+
+.feed-section-title{
+  font-family:var(--orb);font-size:7px;letter-spacing:3px;color:var(--txt3);
+  padding:3px 4px;border-left:2px solid var(--cyan);margin:4px 0 2px;
+  text-transform:uppercase;background:rgba(0,212,255,0.03);
+}
+.alert-card{
+  background:var(--bg-card);border:1px solid var(--bdr);padding:7px 8px;
+  position:relative;overflow:hidden;transition:all .25s;
+}
+.alert-card:hover{border-color:var(--bdr-c);}
+.alert-card.buy{border-left:2px solid var(--emerald);}
+.alert-card.sell{border-left:2px solid var(--crimson);}
+.alert-card.warn{border-left:2px solid var(--amber);}
+.alert-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;}
+.alert-sym{font-family:var(--orb);font-size:10px;font-weight:700;}
+.alert-action{font-family:var(--mono);font-size:8px;padding:1px 6px;border-radius:1px;letter-spacing:1px;}
+.alert-action.buy{background:rgba(0,255,136,0.12);color:var(--emerald);border:1px solid rgba(0,255,136,0.25);}
+.alert-action.sell{background:rgba(255,34,68,0.12);color:var(--crimson);border:1px solid rgba(255,34,68,0.25);}
+.alert-meta{font-family:var(--mono);font-size:8px;color:var(--txt3);margin-bottom:4px;}
+.alert-analysis{font-family:var(--mono);font-size:8px;color:var(--txt2);line-height:1.5;}
+.alert-indicators{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;}
+.ind-chip{font-family:var(--mono);font-size:7px;padding:1px 5px;border:1px solid var(--bdr);color:var(--txt3);border-radius:1px;}
+.ind-chip.hot{border-color:rgba(0,212,255,0.25);color:var(--cyan);}
+
+/* Risk engine */
+.risk-block{background:var(--bg-card);border:1px solid var(--bdr);padding:8px;}
+.risk-title{font-family:var(--orb);font-size:8px;letter-spacing:2px;color:var(--amber);margin-bottom:6px;text-transform:uppercase;}
+.risk-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.risk-lbl{font-family:var(--mono);font-size:8px;color:var(--txt3);letter-spacing:1px;}
+.risk-bar-wrap{flex:1;height:3px;background:rgba(255,255,255,0.06);margin:0 8px;border-radius:2px;overflow:hidden;}
+.risk-bar-fill{height:100%;border-radius:2px;}
+.risk-val{font-family:var(--mono);font-size:8px;min-width:32px;text-align:right;}
+
+.exec-btn{
+  width:100%;padding:7px;border:1px solid var(--bdr-c);
+  background:linear-gradient(90deg,rgba(0,212,255,0.08),rgba(0,212,255,0.04));
+  color:var(--cyan);font-family:var(--orb);font-size:9px;letter-spacing:3px;
+  cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:4px;
+}
+.exec-btn:hover{background:rgba(0,212,255,0.18);box-shadow:0 0 20px rgba(0,212,255,0.2);}
+.exec-btn.sell-btn{
+  border-color:rgba(255,34,68,0.35);
+  background:linear-gradient(90deg,rgba(255,34,68,0.08),rgba(255,34,68,0.04));
+  color:var(--crimson);
+}
+.exec-btn.sell-btn:hover{background:rgba(255,34,68,0.18);box-shadow:0 0 20px rgba(255,34,68,0.2);}
+
+/* Threat matrix */
+.threat-matrix{
+  background:var(--bg-card);border:1px solid var(--bdr);padding:8px;
+}
+.threat-title{font-family:var(--orb);font-size:8px;letter-spacing:2px;color:var(--crimson);margin-bottom:6px;text-transform:uppercase;}
+.threat-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;}
+.threat-cell{padding:4px;border:1px solid var(--bdr);background:rgba(255,255,255,0.015);}
+.tc-label{font-family:var(--mono);font-size:7px;color:var(--txt3);letter-spacing:1px;margin-bottom:2px;}
+.tc-value{font-family:var(--mono);font-size:10px;font-weight:600;}
+.tc-value.ok{color:var(--emerald);}
+.tc-value.warn{color:var(--amber);}
+.tc-value.danger{color:var(--crimson);}
+
+/* ── BOTTOM: EXECUTION TIMELINE ─────────────────────────────────────────────── */
+.exec-timeline{
+  grid-column:1/4;grid-row:2/3;
+  display:flex;gap:3px;
+}
+.timeline-panel{flex:1;background:var(--bg-panel);border:1px solid var(--bdr);display:flex;flex-direction:column;overflow:hidden;}
+.timeline-header{
+  height:24px;flex-shrink:0;padding:0 10px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--bdr);
+  background:linear-gradient(90deg,rgba(0,212,255,0.04),transparent);
+}
+.tl-title{font-family:var(--orb);font-size:8px;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;}
+.timeline-body{flex:1;overflow:hidden;display:flex;align-items:stretch;}
+
+/* Command feed */
+.cmd-feed{flex:1;overflow-y:auto;padding:4px 8px;display:flex;flex-direction:column;gap:2px;}
+.cmd-feed::-webkit-scrollbar{width:1px;}
+.cmd-line{display:flex;gap:8px;align-items:baseline;font-family:var(--mono);font-size:9px;line-height:1.6;animation:fadein .3s ease;}
+.cmd-time{color:var(--txt3);flex-shrink:0;font-size:8px;}
+.cmd-agent{flex-shrink:0;font-weight:600;font-size:8px;letter-spacing:1px;}
+.cmd-msg{color:var(--txt2);flex:1;}
+.cmd-tag{font-size:7px;padding:1px 4px;border-radius:1px;border:1px solid var(--bdr);color:var(--txt3);flex-shrink:0;}
+.cmd-tag.buy-tag{border-color:rgba(0,255,136,0.2);color:var(--emerald);}
+.cmd-tag.sell-tag{border-color:rgba(255,34,68,0.2);color:var(--crimson);}
+
+/* Trade log */
+.trade-log{width:230px;flex-shrink:0;border-left:1px solid var(--bdr);overflow-y:auto;padding:4px;}
+.trade-log::-webkit-scrollbar{width:1px;}
+.trade-row{display:flex;justify-content:space-between;padding:3px 4px;border-bottom:1px solid rgba(255,255,255,0.03);}
+.tr-sym{font-family:var(--mono);font-size:9px;color:var(--amber);}
+.tr-side{font-family:var(--mono);font-size:8px;}
+.tr-side.l{color:var(--emerald);}
+.tr-side.s{color:var(--crimson);}
+.tr-pnl{font-family:var(--mono);font-size:9px;}
+.tr-pnl.pos{color:var(--emerald);}
+.tr-pnl.neg{color:var(--crimson);}
+
+/* AI comm panel */
+.ai-comm{width:280px;flex-shrink:0;border-left:1px solid var(--bdr);padding:6px 8px;overflow-y:auto;}
+.ai-comm::-webkit-scrollbar{width:1px;}
+.ai-msg{
+  background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.1);
+  padding:6px 8px;margin-bottom:4px;font-family:var(--mono);font-size:8px;color:var(--txt2);line-height:1.5;
+  border-radius:0 2px 2px 0;border-left:2px solid var(--cyan);
+}
+.ai-msg-agent{font-family:var(--orb);font-size:8px;color:var(--cyan);margin-bottom:3px;letter-spacing:1px;}
+
+/* ── ANIMATIONS ──────────────────────────────────────────────────────────────── */
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
+@keyframes scan-v{0%{top:-1px;opacity:0;}10%{opacity:.6;}90%{opacity:.6;}100%{top:100%;opacity:0;}}
+@keyframes shimmer-h{0%,100%{opacity:.4;transform:scaleX(.3);}50%{opacity:1;transform:scaleX(1);}}
+@keyframes breathe{0%,100%{opacity:.6;transform:scale(1);}50%{opacity:1;transform:scale(1.02);}}
+@keyframes breathe-bar{0%,100%{opacity:.7;}50%{opacity:1;}}
+@keyframes fadein{from{opacity:0;transform:translateX(-4px);}to{opacity:1;transform:translateX(0);}}
+@keyframes orbit{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+@keyframes orbit-rev{from{transform:rotate(360deg);}to{transform:rotate(0deg);}}
+@keyframes arc-pulse{0%,100%{opacity:.4;stroke-width:1;}50%{opacity:1;stroke-width:1.5;}}
+@keyframes rune-spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+@keyframes rune-rev{from{transform:rotate(360deg);}to{transform:rotate(0deg);}}
+@keyframes lightning{0%,100%{opacity:.2;}50%{opacity:.8;}55%{opacity:.1;}60%{opacity:.9;}100%{opacity:.2;}}
+@keyframes gamma-pulse{0%,100%{box-shadow:0 0 4px var(--emerald),0 0 8px rgba(0,255,136,.3);}50%{box-shadow:0 0 12px var(--emerald),0 0 24px rgba(0,255,136,.6);}}
+@keyframes holo-flicker{0%,100%{opacity:1;}92%{opacity:1;}93%{opacity:.7;}94%{opacity:1;}97%{opacity:.85;}98%{opacity:1;}}
+@keyframes data-stream{0%{transform:translateY(100%);}100%{transform:translateY(-100%);}}
+@keyframes float-particle{0%,100%{transform:translate(0,0);opacity:0;}10%,90%{opacity:.4;}50%{transform:translate(var(--dx),var(--dy));}}
+@keyframes eye-scan{0%,100%{transform:scaleX(1);}50%{transform:scaleX(-1);}}
+@keyframes radar-sweep{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+
+/* Agent-specific animations */
+.av-ironman .arc-ring-1{animation:orbit 4s linear infinite;}
+.av-ironman .arc-ring-2{animation:orbit-rev 6s linear infinite;}
+.av-ironman .arc-ring-3{animation:orbit 9s linear infinite;}
+.av-strange .rune-outer{animation:rune-spin 8s linear infinite;}
+.av-strange .rune-inner{animation:rune-rev 5s linear infinite;}
+.av-strange .rune-mid{animation:rune-spin 12s linear infinite;}
+.av-thor .lightning-bolt{animation:lightning 1.5s ease-in-out infinite;}
+.av-hulk .hulk-body{animation:gamma-pulse 1.8s ease-in-out infinite;}
+.av-vision .vision-ring{animation:orbit 6s linear infinite;}
+.agent-card{animation:holo-flicker 8s ease-in-out infinite;}
+.agent-card:nth-child(2){animation-delay:1.2s;}
+.agent-card:nth-child(3){animation-delay:2.4s;}
+.agent-card:nth-child(4){animation-delay:0.6s;}
+.agent-card:nth-child(5){animation-delay:3s;}
+.agent-card:nth-child(6){animation-delay:1.8s;}
+.agent-card:nth-child(7){animation-delay:0.3s;}
+</style>
+</head>
+<body>
+
+<!-- ── TOP BAR ──────────────────────────────────────────────────────────────── -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <span class="topbar-logo">OPENCLAW</span>
+    <span class="topbar-tag">AI TRADING COMMAND CENTER // v2.0</span>
+  </div>
+  <div class="topbar-center">
+    <div class="status-pill"><div class="status-dot"></div>SYSTEMS NOMINAL</div>
+    <div class="status-pill" style="border-color:rgba(255,179,0,0.25);background:rgba(255,179,0,0.05);color:var(--amber)"><div class="status-dot" style="background:var(--amber)"></div>7 AGENTS ONLINE</div>
+    <div class="topbar-clock" id="topClock">00:00:00 UTC</div>
+  </div>
+  <div class="topbar-right">
+    <div class="tbar-stat"><div class="lbl">SESSION P&L</div><div class="val pos" id="totalPnl">+$0.00</div></div>
+    <div class="tbar-stat"><div class="lbl">SIGNALS TODAY</div><div class="val" style="color:var(--cyan)" id="sigCount">0</div></div>
+    <div class="tbar-stat"><div class="lbl">WIN RATE</div><div class="val pos" id="winRate">0%</div></div>
+    <button class="top-btn">SETTINGS</button>
+    <button class="top-btn" style="border-color:rgba(255,34,68,0.35);color:var(--crimson)">HALT</button>
+  </div>
+</div>
+
+<!-- ── COMMAND GRID ──────────────────────────────────────────────────────────── -->
+<div class="command-grid">
+
+  <!-- ── LEFT: AGENT NETWORK ─────────────────────────────────────────────────── -->
+  <div class="panel agent-network">
+    <div class="panel-corner tl"></div><div class="panel-corner tr"></div>
+    <div class="panel-corner bl"></div><div class="panel-corner br"></div>
+    <div class="panel-header">
+      <span class="panel-title">AGENT NETWORK</span>
+      <span class="panel-badge">7 / 7 ONLINE</span>
+    </div>
+    <div class="agent-scroll">
+
+      <!-- IRON MAN -->
+      <div class="agent-card active" data-agent="ironman">
+        <div class="agent-scan-line"></div>
+        <div class="agent-bg" style="--agent-color:#cc2200;"></div>
+        <div class="agent-card-inner">
+          <div class="agent-avatar av-ironman">
+            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+              <!-- Armor silhouette -->
+              <ellipse cx="26" cy="26" rx="20" ry="20" fill="none" stroke="rgba(200,50,10,0.15)" stroke-width="1"/>
+              <!-- Arc reactor rings -->
+              <circle class="arc-ring-1" cx="26" cy="26" r="16" fill="none" stroke="#cc2200" stroke-width=".8" stroke-dasharray="8 4" opacity=".7" style="transform-origin:26px 26px;"/>
+              <circle class="arc-ring-2" cx="26" cy="26" r="11" fill="none" stroke="#ffaa00" stroke-width=".7" stroke-dasharray="5 3" opacity=".6" style="transform-origin:26px 26px;"/>
+              <circle class="arc-ring-3" cx="26" cy="26" r="7" fill="none" stroke="#cc2200" stroke-width=".6" stroke-dasharray="3 2" opacity=".5" style="transform-origin:26px 26px;"/>
+              <!-- Core glow -->
+              <circle cx="26" cy="26" r="4" fill="rgba(0,180,255,0.7)" opacity=".9"/>
+              <circle cx="26" cy="26" r="2.5" fill="#00aaff" filter="url(#glow-c)"/>
+              <!-- Hex head -->
+              <polygon points="26,6 30,10 30,16 26,20 22,16 22,10" fill="rgba(180,30,0,0.4)" stroke="#cc2200" stroke-width=".5"/>
+              <!-- Eye slits -->
+              <rect x="22.5" y="11.5" width="3" height="1.2" fill="#ff6600" rx="0.5"/>
+              <rect x="26.5" y="11.5" width="3" height="1.2" fill="#ff6600" rx="0.5"/>
+              <!-- Arc reactor hex center -->
+              <polygon points="26,24 28,25.2 28,27.6 26,28.8 24,27.6 24,25.2" fill="rgba(0,180,255,0.3)" stroke="#00aaff" stroke-width=".5"/>
+              <!-- Scan overlay line -->
+              <line x1="6" y1="26" x2="46" y2="26" stroke="rgba(255,100,0,0.15)" stroke-width=".5"/>
+              <defs><filter id="glow-c"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+            </svg>
+          </div>
+          <div class="agent-info">
+            <div class="agent-name" style="color:#ff6622">IRON MAN</div>
+            <div class="agent-role">MARKET INTELLIGENCE · ENGINEERING</div>
+            <div class="agent-stat-row">
+              <div class="agent-stat"><span class="s-lbl">SIGNALS </span><span class="s-val" style="color:#ff6622" id="im-sig">0</span></div>
+              <div class="agent-stat"><span class="s-lbl">ACC </span><span class="s-val" id="im-acc">--%</span></div>
+            </div>
+            <div class="agent-status-bar"><div class="agent-status-fill" style="background:linear-gradient(90deg,#cc2200,#ffaa00);width:78%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DR. STRANGE -->
+      <div class="agent-card" data-agent="strange">
+        <div class="agent-scan-line" style="animation-delay:1s"></div>
+        <div class="agent-bg" style="--agent-color:#a855f7;"></div>
+        <div class="agent-card-inner">
+          <div class="agent-avatar av-strange">
+            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+              <!-- Outer rune ring -->
+              <circle class="rune-outer" cx="26" cy="26" r="22" fill="none" stroke="#a855f7" stroke-width=".7" stroke-dasharray="4 2 1 2" opacity=".6" style="transform-origin:26px 26px;"/>
+              <!-- Mid ring -->
+              <circle class="rune-mid" cx="26" cy="26" r="17" fill="none" stroke="#ffd700" stroke-width=".5" stroke-dasharray="2 4" opacity=".5" style="transform-origin:26px 26px;"/>
+              <!-- Inner ring -->
+              <circle class="rune-inner" cx="26" cy="26" r="12" fill="none" stroke="#a855f7" stroke-width=".8" stroke-dasharray="6 2" opacity=".7" style="transform-origin:26px 26px;"/>
+              <!-- Mandala spokes -->
+              <g opacity=".3" stroke="#a855f7" stroke-width=".5">
+                <line x1="26" y1="4" x2="26" y2="48"/>
+                <line x1="4" y1="26" x2="48" y2="26"/>
+                <line x1="9.5" y1="9.5" x2="42.5" y2="42.5"/>
+                <line x1="42.5" y1="9.5" x2="9.5" y2="42.5"/>
+              </g>
+              <!-- Energy diamonds -->
+              <polygon points="26,20 30,26 26,32 22,26" fill="rgba(168,85,247,0.2)" stroke="#a855f7" stroke-width=".8"/>
+              <polygon points="26,18 32,26 26,34 20,26" fill="none" stroke="rgba(255,215,0,0.4)" stroke-width=".5"/>
+              <!-- Core gem -->
+              <circle cx="26" cy="26" r="3.5" fill="rgba(168,85,247,0.7)" opacity=".9"/>
+              <circle cx="26" cy="26" r="2" fill="#c084fc"/>
+            </svg>
+          </div>
+          <div class="agent-info">
+            <div class="agent-name" style="color:#c084fc">DR. STRANGE</div>
+            <div class="agent-role">DIMENSIONAL RISK · MULTIVERSE ANALYSIS</div>
+            <div class="agent-stat-row">
+              <div class="agent-stat"><span class="s-lbl">RISK </span><span class="s-val" style="color:#c084fc" id="ds-sig">0</span></div>
+              <div class="agent-stat"><span class="s-lbl">EDGE </span><span class="s-val" id="ds-acc">--%</span></div>
+            </div>
+            <div class="agent-status-bar"><div class="agent-status-fill" style="background:linear-gradient(90deg,#7c3aed,#a855f7);width:65%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BLACK WIDOW -->
+      <div class="agent-card" data-agent="widow">
+        <div class="agent-scan-line" style="animation-delay:2s;background:linear-gradient(90deg,transparent,rgba(255,34,68,0.6),transparent)"></div>
+        <div class="agent-bg" style="--agent-color:#ff2244;"></div>
+        <div class="agent-card-inner">
+          <div class="agent-avatar av-widow">
+            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+              <!-- Targeting reticle -->
+              <circle cx="26" cy="26" r="20" fill="none" stroke="rgba(255,34,68,0.25)" stroke-width=".8"/>
+              <circle cx="26" cy="26" r="14" fill="none" stroke="rgba(255,34,68,0.35)" stroke-width=".6" stroke-dasharray="4 4"/>
+              <!-- Crosshair -->
+              <line x1="26" y1="4" x2="26" y2="18" stroke="#ff2244" stroke-width=".8" opacity=".7"/>
+              <line x1="26" y1="34" x2="26" y2="48" stroke="#ff2244" stroke-width=".8" opacity=".7"/>
+              <line x1="4" y1="26" x2="18" y2="26" stroke="#ff2244" stroke-width=".8" opacity=".7"/>
+              <line x1="34" y1="26" x2="48" y2="26" stroke="#ff2244" stroke-width=".8" opacity=".7"/>
+              <!-- Spider web -->
+              <circle cx="26" cy="26" r="8" fill="none" stroke="rgba(255,34,68,0.2)" stroke-width=".5"/>
+              <!-- Web lines -->
+              <g opacity=".15" stroke="#ff2244" stroke-width=".4">
+                <line x1="26" y1="18" x2="26" y2="34"/>
+                <line x1="19" y1="22" x2="33" y2="30"/>
+                <line x1="19" y1="30" x2="33" y2="22"/>
+              </g>
+              <!-- Center dot -->
+              <circle cx="26" cy="26" r="3" fill="rgba(255,34,68,0.6)"/>
+              <circle cx="26" cy="26" r="1.5" fill="#ff4466"/>
+              <!-- Corner brackets of reticle -->
+              <path d="M8,8 L8,13 M8,8 L13,8" stroke="#ff2244" stroke-width="1" fill="none" opacity=".6"/>
+              <path d="M44,8 L44,13 M44,8 L39,8" stroke="#ff2244" stroke-width="1" fill="none" opacity=".6"/>
+              <path d="M8,44 L8,39 M8,44 L13,44" stroke="#ff2244" stroke-width="1" fill="none" opacity=".6"/>
+              <path d="M44,44 L44,39 M44,44 L39,44" stroke="#ff2244" stroke-width="1" fill="none" opacity=".6"/>
+            </svg>
+          </div>
+          <div class="agent-info">
+            <div class="agent-name" style="color:#ff4466">BLACK WIDOW</div>
+            <div class="agent-role">STEALTH INTEL · ENCRYPTED FEEDS</div>
+            <div class="agent-stat-row">
+              <div class="agent-stat"><span class="s-lbl">OPS </span><span class="s-val" style="color:#ff4466" id="bw-sig">0</span></div>
+              <div class="agent-stat"><span class="s-lbl">THREAT </span><span class="s-val" id="bw-acc">LOW</span></div>
+            </div>
+            <div class="agent-status-bar"><div class="agent-status-fill" style="background:linear-gradient(90deg,#99001a,#ff2244);width:52%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- THOR -->
+      <div class="agent-card" data-agent="thor">
+        <div class="agent-scan-line" style="animation-delay:.5s;background:linear-gradient(90deg,transparent,rgba(40,140,255,0.7),transparent)"></div>
+        <div class="agent-bg" style="--agent-color:#2888ff;"></div>
+        <div class="agent-card-inner">
+          <div class="agent-avatar av-thor">
+            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+              <!-- Storm rings -->
+              <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(40,140,255,0.2)" stroke-width="2"/>
+              <circle cx="26" cy="26" r="16" fill="none" stroke="rgba(40,140,255,0.3)" stroke-width="1.2" stroke-dasharray="8 3"/>
+              <!-- Lightning arcs -->
+              <polyline class="lightning-bolt" points="26,4 22,20 28,22 20,46" fill="none" stroke="#4499ff" stroke-width="1.5" stroke-linejoin="round" opacity=".8" style="transform-origin:26px 26px;"/>
+              <polyline class="lightning-bolt" points="30,8 26,22 30,24 24,44" fill="none" stroke="rgba(200,230,255,0.4)" stroke-width=".8" stroke-linejoin="round" style="animation-delay:.3s"/>
+              <!-- Power circles -->
+              <circle cx="26" cy="26" r="7" fill="rgba(40,140,255,0.15)" stroke="rgba(40,140,255,0.4)" stroke-width=".8"/>
+              <!-- Center -->
+              <circle cx="26" cy="26" r="3.5" fill="rgba(80,180,255,0.8)"/>
+              <circle cx="26" cy="26" r="2" fill="#88ccff"/>
+              <!-- Energy sparks -->
+              <circle cx="12" cy="18" r="1" fill="#4499ff" opacity=".5" style="animation:lightning 2s .4s ease-in-out infinite"/>
+              <circle cx="40" cy="34" r="1" fill="#4499ff" opacity=".5" style="animation:lightning 2s .8s ease-in-out infinite"/>
+            </svg>
+          </div>
+          <div class="agent-info">
+            <div class="agent-name" style="color:#4499ff">THOR</div>
+            <div class="agent-role">POWER METRICS · BREAKOUT DETECTION</div>
+            <div class="agent-stat-row">
+              <div class="agent-stat"><span class="s-lbl">POWER </span><span class="s-val" style="color:#4499ff" id="th-sig">0</span></div>
+              <div class="agent-stat"><span class="s-lbl">STORM </span><span class="s-val" id="th-acc">--</span></div>
+            </div>
+            <div class="agent-status-bar"><div class="agent-status-fill" style="background:linear-gradient(90deg,#0044aa,#4499ff);width:88%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISION -->
+      <div class="agent-card" data-agent="vision">
+        <div class="agent-scan-line" style="animation-delay:1.5s;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.5),transparent)"></div>
+        <div class="agent-bg" style="--agent-color:#ffd700;"></div>
+        <div class="agent-card-inner">
+          <div class="agent-avatar av-vision">
+            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+              <!-- Translucent holographic layers -->
+              <circle class="vision-ring" cx="26" cy="26" r="20" fill="none" stroke="rgba(255,215,0,0.2)" stroke-width="1.2" stroke-dasharray="12 4" style="transform-origin:26px 26px;"/>
+              <circle cx="26" cy="26" r="15" fill="rgba(255,215,0,0.04)" stroke="rgba(0,212,255,0.3)" stroke-width=".7"/>
+              <!-- Mind gem -->
+              <polygon points="26,16 32,22 32,30 26,36 20,30 20,22" fill="rgba(255,215,0,0.12)" stroke="#ffd700" stroke-width=".8"/>
+              <polygon points="26,19 30,23 30,29 26,33 22,29 22,23" fill="rgba(255,215,0,0.08)" stroke="rgba(0,212,255,0.4)" stroke-width=".5"/>
+              <!-- Sine wave -->
+              <path d="M6,26 Q12,20 18,26 Q24,32 30,26 Q36,20 42,26 Q46,30 46,26" fill="none" stroke="rgba(0,212,255,0.4)" stroke-width=".7"/>
+              <!-- Mind gem core -->
+              <circle cx="26" cy="26" r="3.5" fill="rgba(255,215,0,0.8)"/>
+              <circle cx="26" cy="26" r="2" fill="#ffd700"/>
+              <!-- Data nodes -->
+              <circle cx="10" cy="26" r="1.5" fill="rgba(0,212,255,0.5)"/>
+              <circle cx="42" cy="26" r="1.5" fill="rgba(0,212,255,0.5)"/>
+              <line x1="12" y1="26" x2="20" y2="26" stroke="rgba(0,212,255,0.2)" stroke-width=".5"/>
+              <line x1="32" y1="26" x2="40" y2="26" stroke="rgba(0,212,255,0.2)" stroke-width=".5"/>
+            </svg>
+          </div>
+          <div class="agent-info">
+            <div class="agent-name" style="color:#ffd700">VISION</div>
+            <div class="agent-role">SYNTHETIC ANALYSIS · PATTERN AI</div>
+            <div class="agent-stat-row">
+              <div class="agent-stat"><span class="s-lbl">CALC </span><span class="s-val" style="color:#ffd700" id="vi-sig">0</span></div>
+              <div class="agent-stat"><span class="s-lbl">CONF </span><span class="s-val" id="vi-acc">--%</span></div>
+            </div>
+            <div class="agent-status-bar"><div class="agent-status-fill" style="background:linear-gradient(90deg,#996600,#ffd700);width:71%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HULK -->
+      <div class="agent-card" data-agent="hulk">
+        <div class="agent-scan-line" style="animation-delay:2.5s;background:linear-gradient(90deg,transparent,rgba(0,220,80,0.6),transparent)"></div>
+        <div class="agent-bg" style="--agent-color:#00dd55;"></div>
+        <div class="agent-card-inner">
+          <div class="agent-avatar av-hulk">
+            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+              <!-- Gamma field -->
+              <circle cx="26" cy="26" r="22" fill="rgba(0,200,60,0.06)" stroke="rgba(0,200,60,0.2)" stroke-width="1.5"/>
+              <!-- Seismic rings -->
+              <circle cx="26" cy="26" r="16" fill="none" stroke="rgba(0,200,60,0.25)" stroke-width="1" stroke-dasharray="3 3"/>
+              <circle cx="26" cy="26" r="10" fill="rgba(0,150,40,0.1)" stroke="rgba(0,220,80,0.4)" stroke-width="1"/>
+              <!-- Hulk body silhouette -->
+              <ellipse cx="26" cy="30" rx="10" ry="12" fill="rgba(0,180,50,0.15)" stroke="rgba(0,220,80,0.3)" stroke-width=".7"/>
+              <ellipse cx="26" cy="18" rx="7" ry="7" fill="rgba(0,180,50,0.2)" stroke="rgba(0,220,80,0.4)" stroke-width=".7"/>
+              <!-- Energy pulses (hulk smash) -->
+              <ellipse class="hulk-body" cx="26" cy="26" r="6" fill="rgba(0,255,100,0.2)" stroke="#00ff55" stroke-width=".8"/>
+              <!-- Core -->
+              <circle cx="26" cy="26" r="3" fill="rgba(0,255,100,0.7)"/>
+              <!-- Gamma particles -->
+              <circle cx="14" cy="14" r="1" fill="#00ff55" opacity=".4" style="animation:gamma-pulse 2s .5s ease-in-out infinite;animation:lightning 2.5s .5s ease-in-out infinite"/>
+              <circle cx="38" cy="14" r="1" fill="#00ff55" opacity=".4" style="animation:lightning 2.5s 1s ease-in-out infinite"/>
+              <circle cx="14" cy="38" r="1" fill="#00ff55" opacity=".4" style="animation:lightning 2.5s 1.5s ease-in-out infinite"/>
+              <circle cx="38" cy="38" r="1" fill="#00ff55" opacity=".4" style="animation:lightning 2.5s 2s ease-in-out infinite"/>
+            </svg>
+          </div>
+          <div class="agent-info">
+            <div class="agent-name" style="color:#00ff55">HULK</div>
+            <div class="agent-role">MOMENTUM FORCE · VOLATILITY ENGINE</div>
+            <div class="agent-stat-row">
+              <div class="agent-stat"><span class="s-lbl">FORCE </span><span class="s-val" style="color:#00ff55" id="hk-sig">0</span></div>
+              <div class="agent-stat"><span class="s-lbl">VOL </span><span class="s-val" id="hk-acc">--</span></div>
+            </div>
+            <div class="agent-status-bar"><div class="agent-status-fill" style="background:linear-gradient(90deg,#004422,#00ff55);width:94%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NICK FURY -->
+      <div class="agent-card" data-agent="fury">
+        <div class="agent-scan-line" style="animation-delay:3.5s;background:linear-gradient(90deg,transparent,rgba(255,179,0,0.5),transparent)"></div>
+        <div class="agent-bg" style="--agent-color:#ffb300;"></div>
+        <div class="agent-card-inner">
+          <div class="agent-avatar av-fury">
+            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+              <!-- Tactical grid -->
+              <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,179,0,0.2)" stroke-width="1"/>
+              <!-- Grid lines -->
+              <g opacity=".12" stroke="#ffb300" stroke-width=".4">
+                <line x1="6" y1="20" x2="46" y2="20"/>
+                <line x1="6" y1="26" x2="46" y2="26"/>
+                <line x1="6" y1="32" x2="46" y2="32"/>
+                <line x1="16" y1="6" x2="16" y2="46"/>
+                <line x1="26" y1="6" x2="26" y2="46"/>
+                <line x1="36" y1="6" x2="36" y2="46"/>
+              </g>
+              <!-- SHIELD emblem outer ring -->
+              <circle cx="26" cy="26" r="14" fill="rgba(255,179,0,0.06)" stroke="rgba(255,179,0,0.3)" stroke-width=".8"/>
+              <!-- Eye/command marker -->
+              <ellipse cx="26" cy="22" rx="7" ry="5" fill="rgba(255,179,0,0.1)" stroke="rgba(255,179,0,0.4)" stroke-width=".7"/>
+              <!-- Eye patch -->
+              <rect x="23" y="19.5" width="4" height="3" fill="rgba(255,179,0,0.4)" rx="1"/>
+              <!-- Command star -->
+              <polygon points="26,28 27.9,33.8 33.8,33.8 29,37.2 30.9,43 26,39.7 21.1,43 23,37.2 18.2,33.8 24.1,33.8" fill="rgba(255,179,0,0.2)" stroke="#ffb300" stroke-width=".6" transform="translate(0,-4) scale(0.6) translate(17,10)"/>
+              <!-- Core -->
+              <circle cx="26" cy="26" r="4" fill="rgba(255,179,0,0.3)" stroke="#ffb300" stroke-width=".7"/>
+              <circle cx="26" cy="26" r="2" fill="#ffd700"/>
+            </svg>
+          </div>
+          <div class="agent-info">
+            <div class="agent-name" style="color:#ffb300">NICK FURY</div>
+            <div class="agent-role">COMMAND CONTROL · STRATEGIC OPS</div>
+            <div class="agent-stat-row">
+              <div class="agent-stat"><span class="s-lbl">CMDS </span><span class="s-val" style="color:#ffb300" id="nf-sig">0</span></div>
+              <div class="agent-stat"><span class="s-lbl">STATUS </span><span class="s-val" id="nf-acc" style="color:var(--emerald)">CMD</span></div>
+            </div>
+            <div class="agent-status-bar"><div class="agent-status-fill" style="background:linear-gradient(90deg,#664400,#ffb300);width:100%"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /agent-scroll -->
+  </div><!-- /agent-network -->
+
+  <!-- ── CENTER: INTELLIGENCE GRID ────────────────────────────────────────────── -->
+  <div class="panel intel-center">
+    <div class="panel-corner tl"></div><div class="panel-corner tr"></div>
+    <div class="panel-corner bl" style="border-color:var(--violet)"></div>
+    <div class="panel-corner br" style="border-color:var(--violet)"></div>
+
+    <!-- Ticker strip -->
+    <div class="intel-top" id="tickerStrip">
+      <div class="intel-top-item"><span class="sym">NQ</span><span class="prc" id="nq-p">--</span><span class="chg pos" id="nq-c">+0.00%</span></div>
+      <div class="intel-top-item"><span class="sym">ES</span><span class="prc" id="es-p">--</span><span class="chg pos" id="es-c">+0.00%</span></div>
+      <div class="intel-top-item"><span class="sym">YM</span><span class="prc" id="ym-p">--</span><span class="chg" id="ym-c">0.00%</span></div>
+      <div class="intel-top-item"><span class="sym">CL</span><span class="prc" id="cl-p">--</span><span class="chg neg" id="cl-c">-0.00%</span></div>
+      <div class="intel-top-item"><span class="sym">GC</span><span class="prc" id="gc-p">--</span><span class="chg pos" id="gc-c">+0.00%</span></div>
+      <div class="intel-top-item"><span class="sym">BTC</span><span class="prc" id="btc-p">--</span><span class="chg" id="btc-c">0.00%</span></div>
+    </div>
+
+    <!-- Main chart -->
+    <div class="chart-area">
+      <canvas id="mainChart"></canvas>
+      <div class="chart-overlay">
+        <div class="chart-bracket tl"></div>
+        <div class="chart-bracket tr"></div>
+        <div class="chart-bracket bl"></div>
+        <div class="chart-bracket br"></div>
+        <div class="chart-crosshair-h"></div>
+        <div class="chart-crosshair-v"></div>
+        <div class="signal-badge" id="signalBadge">
+          <div class="sig-pill bull"><div class="sig-dot"></div>EMA RIBBON BULL</div>
+          <div class="sig-pill warn"><div class="sig-dot"></div>SQUEEZE LOADING</div>
+        </div>
+      </div>
+      <div class="chart-stats">
+        <div class="cs-item"><span class="cs-lbl">RSI</span><span class="cs-val" id="cs-rsi">--</span></div>
+        <div class="cs-item"><span class="cs-lbl">STOCH-K</span><span class="cs-val" id="cs-stoch">--</span></div>
+        <div class="cs-item"><span class="cs-lbl">ATR</span><span class="cs-val" id="cs-atr">--</span></div>
+        <div class="cs-item"><span class="cs-lbl">RVOL</span><span class="cs-val" id="cs-vol">--</span></div>
+        <div class="cs-item"><span class="cs-lbl">VWAP</span><span class="cs-val" id="cs-vwap">--</span></div>
+        <div class="cs-item"><span class="cs-lbl">SQUEEZE</span><span class="cs-val" id="cs-sqz" style="color:var(--amber)">OFF</span></div>
+        <div class="cs-item" style="margin-left:auto"><span class="cs-lbl">SYMBOL</span><span class="cs-val" style="color:var(--amber)">NQ / 1M</span></div>
+      </div>
+    </div>
+
+    <!-- Mini data row -->
+    <div class="intel-bottom-row">
+      <div class="mini-panel">
+        <div class="mini-panel-title">LIQUIDITY HEATMAP</div>
+        <div class="heatmap-grid" id="heatmapGrid"></div>
+      </div>
+      <div class="mini-panel">
+        <div class="mini-panel-title">ORDER FLOW DELTA</div>
+        <div class="orderflow-bars" id="orderFlowBars"></div>
+      </div>
+      <div class="mini-panel">
+        <div class="mini-panel-title">MARKET PULSE</div>
+        <div class="pulse-meter">
+          <div class="pm-row"><span class="pm-lbl">BULL MOM</span><div class="pm-bar"><div class="pm-fill" id="pm-bull" style="background:var(--emerald);width:65%"></div></div><span class="pm-val" id="pv-bull">65</span></div>
+          <div class="pm-row"><span class="pm-lbl">BEAR MOM</span><div class="pm-bar"><div class="pm-fill" id="pm-bear" style="background:var(--crimson);width:35%"></div></div><span class="pm-val" id="pv-bear">35</span></div>
+          <div class="pm-row"><span class="pm-lbl">CONFLUENCE</span><div class="pm-bar"><div class="pm-fill" id="pm-conf" style="background:var(--cyan);width:72%"></div></div><span class="pm-val" id="pv-conf">72</span></div>
+        </div>
+      </div>
+      <div class="mini-panel">
+        <div class="mini-panel-title">CONFLUENCE ZONES</div>
+        <div class="pulse-meter">
+          <div class="pm-row"><span class="pm-lbl">SUPPORT</span><div class="pm-bar"><div class="pm-fill" style="background:var(--emerald);width:80%"></div></div><span class="pm-val" style="color:var(--emerald)">STRONG</span></div>
+          <div class="pm-row"><span class="pm-lbl">RESIST</span><div class="pm-bar"><div class="pm-fill" style="background:var(--crimson);width:45%"></div></div><span class="pm-val" style="color:var(--amber)">MEDIUM</span></div>
+          <div class="pm-row"><span class="pm-lbl">VWAP DEV</span><div class="pm-bar"><div class="pm-fill" style="background:var(--cyan);width:22%"></div></div><span class="pm-val">+0.18%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: MISSION FEED ───────────────────────────────────────────────────── -->
+  <div class="panel mission-feed">
+    <div class="panel-corner tl"></div><div class="panel-corner tr"></div>
+    <div class="panel-corner bl"></div><div class="panel-corner br"></div>
+    <div class="panel-header">
+      <span class="panel-title">MISSION FEED</span>
+      <span class="panel-badge" id="alertCount">0 ALERTS</span>
+    </div>
+    <div class="feed-scroll" id="missionFeed">
+
+      <!-- Threat matrix -->
+      <div class="threat-matrix">
+        <div class="threat-title">LIVE THREAT MATRIX</div>
+        <div class="threat-grid">
+          <div class="threat-cell"><div class="tc-label">VOLATILITY</div><div class="tc-value ok" id="thr-vol">NORMAL</div></div>
+          <div class="threat-cell"><div class="tc-label">LIQUIDITY</div><div class="tc-value ok" id="thr-liq">HIGH</div></div>
+          <div class="threat-cell"><div class="tc-label">REGIME</div><div class="tc-value warn" id="thr-reg">TREND</div></div>
+          <div class="threat-cell"><div class="tc-label">SESSION</div><div class="tc-value ok" id="thr-ses">RTH</div></div>
+        </div>
+      </div>
+
+      <!-- Risk engine -->
+      <div class="risk-block">
+        <div class="risk-title">RISK ENGINE</div>
+        <div class="risk-row"><span class="risk-lbl">DAILY LOSS LIMIT</span><div class="risk-bar-wrap"><div class="risk-bar-fill" style="background:var(--emerald);width:18%"></div></div><span class="risk-val pos">18%</span></div>
+        <div class="risk-row"><span class="risk-lbl">POSITION SIZE</span><div class="risk-bar-wrap"><div class="risk-bar-fill" style="background:var(--cyan);width:45%"></div></div><span class="risk-val" style="color:var(--cyan)">45%</span></div>
+        <div class="risk-row"><span class="risk-lbl">DRAWDOWN</span><div class="risk-bar-wrap"><div class="risk-bar-fill" style="background:var(--amber);width:12%"></div></div><span class="risk-val" style="color:var(--amber)">12%</span></div>
+        <div class="risk-row"><span class="risk-lbl">EXPOSURE</span><div class="risk-bar-wrap"><div class="risk-bar-fill" style="background:var(--violet);width:60%"></div></div><span class="risk-val" style="color:var(--violet)">60%</span></div>
+      </div>
+
+      <!-- Execution buttons -->
+      <div style="display:flex;gap:4px;">
+        <button class="exec-btn">▲ LONG NQ</button>
+        <button class="exec-btn sell-btn">▼ SHORT NQ</button>
+      </div>
+
+      <div class="feed-section-title">SIGNAL QUEUE</div>
+      <div id="signalQueue">
+        <div class="alert-card buy">
+          <div class="alert-top"><span class="alert-sym" style="color:var(--emerald)">NQ</span><span class="alert-action buy">BUY</span></div>
+          <div class="alert-meta">21,450.25 · 1M · RTH · EMA_Ribbon</div>
+          <div class="alert-analysis">All TFs aligned BULLISH — high confluence. Price above VWAP 0.18% (inside bands). Favor longs.</div>
+          <div class="alert-indicators">
+            <span class="ind-chip hot">RSI 58</span>
+            <span class="ind-chip hot">K=42</span>
+            <span class="ind-chip">ATR 12.5</span>
+            <span class="ind-chip hot">RVOL 1.8x</span>
+            <span class="ind-chip">+VWAP</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feed-section-title">AI COMMENTARY</div>
+      <div id="aiCommentary">
+        <div class="alert-card">
+          <div class="alert-top"><span style="font-family:var(--orb);font-size:8px;color:var(--amber)">IRON MAN</span><span style="font-family:var(--mono);font-size:8px;color:var(--txt3)">ANALYSIS</span></div>
+          <div class="alert-analysis">Waiting for first TradingView alert to fire full multi-timeframe analysis. Systems nominal.</div>
+        </div>
+      </div>
+
+    </div><!-- /feed-scroll -->
+  </div><!-- /mission-feed -->
+
+  <!-- ── BOTTOM: EXECUTION TIMELINE ───────────────────────────────────────────── -->
+  <div class="timeline-panel" style="grid-column:1/3">
+    <div class="timeline-header">
+      <span class="tl-title">COMMAND FEED // AI COMMUNICATIONS</span>
+      <span style="font-family:var(--mono);font-size:8px;color:var(--txt3)" id="feedCount">0 MESSAGES</span>
+    </div>
+    <div class="timeline-body">
+      <div class="cmd-feed" id="cmdFeed">
+        <div class="cmd-line">
+          <span class="cmd-time" id="bootTime">--:--:--</span>
+          <span class="cmd-agent" style="color:var(--amber)">FURY</span>
+          <span class="cmd-msg">OPENCLAW Command Center initialized. All systems nominal. 7 agents online.</span>
+          <span class="cmd-tag">BOOT</span>
+        </div>
+        <div class="cmd-line">
+          <span class="cmd-time">--:--:--</span>
+          <span class="cmd-agent" style="color:#ff6622">IRON MAN</span>
+          <span class="cmd-msg">Market data service connected. TypeScript indicator engine active. Multi-TF analysis ready.</span>
+          <span class="cmd-tag">READY</span>
+        </div>
+        <div class="cmd-line">
+          <span class="cmd-time">--:--:--</span>
+          <span class="cmd-agent" style="color:#c084fc">DR. STRANGE</span>
+          <span class="cmd-msg">Risk parameters loaded. Dimensional analysis modules calibrated. Awaiting signal input.</span>
+          <span class="cmd-tag">READY</span>
+        </div>
+      </div>
+      <div class="trade-log" id="tradeLog">
+        <div style="font-family:var(--orb);font-size:7px;letter-spacing:2px;color:var(--txt3);padding:3px 4px;border-bottom:1px solid var(--bdr);text-transform:uppercase">Trade Log</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="timeline-panel">
+    <div class="timeline-header">
+      <span class="tl-title">AI INTELLIGENCE // LIVE ROUTING</span>
+      <span style="font-family:var(--mono);font-size:8px;color:var(--txt3)">OPENCLAW.VERCEL.APP</span>
+    </div>
+    <div class="timeline-body">
+      <div class="ai-comm" id="aiComm">
+        <div class="ai-msg">
+          <div class="ai-msg-agent">SYSTEM ONLINE</div>
+          All Avengers agents connected. Railway backend nominal. TradingView webhook receiver active on /webhook endpoint. Waiting for Pine Script v6 alert triggers.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /command-grid -->
+
+<script>
+// ── Clock ──────────────────────────────────────────────────────────────────────
+function updateClock(){
+  const now = new Date();
+  const t = [now.getUTCHours(),now.getUTCMinutes(),now.getUTCSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+  document.getElementById('topClock').textContent = t + ' UTC';
+  document.getElementById('bootTime').textContent = t;
+}
+setInterval(updateClock,1000);
+updateClock();
+
+// ── Simulated market prices ────────────────────────────────────────────────────
+const prices = {NQ:{p:21450.25,c:0.42},ES:{p:5825.50,c:0.18},YM:{p:42180,c:-0.08},CL:{p:78.34,c:-0.55},GC:{p:3350.20,c:0.31},BTC:{p:103420,c:1.24}};
+function updateTicker(){
+  for(const [sym,d] of Object.entries(prices)){
+    d.p += (Math.random()-.5)*d.p*0.0002;
+    const el=document.getElementById(sym.toLowerCase()+'-p');
+    const ce=document.getElementById(sym.toLowerCase()+'-c');
+    if(el) el.textContent = d.p < 1000 ? d.p.toFixed(2) : d.p.toFixed(0);
+    if(ce){
+      const sign=d.c>=0?'+':'';
+      ce.textContent=sign+d.c.toFixed(2)+'%';
+      ce.className='chg '+(d.c>=0?'pos':'neg');
+    }
+  }
+}
+setInterval(updateTicker,1200);
+updateTicker();
+
+// ── Simulated dashboard stats ──────────────────────────────────────────────────
+let totalPnl=0,signals=0,wins=0;
+function randomizeDashStats(){
+  totalPnl+=(Math.random()-.3)*120;
+  const el=document.getElementById('totalPnl');
+  el.textContent=(totalPnl>=0?'+':'')+totalPnl.toLocaleString('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2});
+  el.className='val '+(totalPnl>=0?'pos':'neg');
+  document.getElementById('sigCount').textContent=signals;
+  document.getElementById('winRate').textContent=signals>0?Math.round(wins/signals*100)+'%':'0%';
+}
+setInterval(randomizeDashStats,8000);
+
+// ── Heatmap ────────────────────────────────────────────────────────────────────
+const hg=document.getElementById('heatmapGrid');
+const cells=[];
+for(let i=0;i<32;i++){
+  const c=document.createElement('div');
+  c.className='hm-cell';
+  hg.appendChild(c);
+  cells.push(c);
+}
+function updateHeatmap(){
+  cells.forEach(c=>{
+    const v=Math.random();
+    if(v>.7) c.style.background=`rgba(0,255,136,${.2+v*.5})`;
+    else if(v<.3) c.style.background=`rgba(255,34,68,${.2+(1-v)*.5})`;
+    else c.style.background=`rgba(255,179,0,${.1+v*.3})`;
+  });
+}
+setInterval(updateHeatmap,1800);
+updateHeatmap();
+
+// ── Order flow bars ────────────────────────────────────────────────────────────
+const ofContainer=document.getElementById('orderFlowBars');
+const ofBars=[];
+for(let i=0;i<20;i++){
+  const b=document.createElement('div');
+  b.className='of-bar';
+  ofContainer.appendChild(b);
+  ofBars.push(b);
+}
+function updateOrderFlow(){
+  ofBars.forEach(b=>{
+    const h=5+Math.random()*90;
+    const bull=Math.random()>.45;
+    b.style.height=h+'%';
+    b.style.background=bull?`rgba(0,255,136,${.3+h*.004})`:`rgba(255,34,68,${.3+h*.004})`;
+  });
+}
+setInterval(updateOrderFlow,900);
+updateOrderFlow();
+
+// ── Market pulse bars ──────────────────────────────────────────────────────────
+function updatePulse(){
+  const bull=40+Math.random()*40;
+  const bear=100-bull;
+  const conf=50+Math.random()*40;
+  document.getElementById('pm-bull').style.width=bull+'%';
+  document.getElementById('pv-bull').textContent=Math.round(bull);
+  document.getElementById('pm-bear').style.width=bear+'%';
+  document.getElementById('pv-bear').textContent=Math.round(bear);
+  document.getElementById('pm-conf').style.width=conf+'%';
+  document.getElementById('pv-conf').textContent=Math.round(conf);
+}
+setInterval(updatePulse,2500);
+
+// ── Chart stats simulation ─────────────────────────────────────────────────────
+function updateChartStats(){
+  document.getElementById('cs-rsi').textContent=(40+Math.random()*40).toFixed(1);
+  document.getElementById('cs-stoch').textContent=(Math.random()*100).toFixed(0);
+  document.getElementById('cs-atr').textContent=(8+Math.random()*10).toFixed(2);
+  document.getElementById('cs-vol').textContent=(0.8+Math.random()*1.5).toFixed(2)+'x';
+  document.getElementById('cs-vwap').textContent=(21440+Math.random()*30).toFixed(2);
+  const sqzEl=document.getElementById('cs-sqz');
+  const sqz=Math.random()>.6;
+  sqzEl.textContent=sqz?'ON':'OFF';
+  sqzEl.style.color=sqz?'#ffd700':'#8099bb';
+}
+setInterval(updateChartStats,3000);
+updateChartStats();
+
+// ── Agent stat counters ────────────────────────────────────────────────────────
+const agentStats={
+  'im-sig':0,'im-acc':'68%','ds-sig':0,'ds-acc':'74%','bw-sig':0,'bw-acc':'LOW',
+  'th-sig':0,'th-acc':'ACT','vi-sig':0,'vi-acc':'71%','hk-sig':0,'hk-acc':'HI','nf-sig':0
+};
+function bumpAgentStats(){
+  const keys=['im-sig','ds-sig','bw-sig','th-sig','vi-sig','hk-sig','nf-sig'];
+  const k=keys[Math.floor(Math.random()*keys.length)];
+  agentStats[k]=(agentStats[k]||0)+1;
+  document.getElementById(k).textContent=agentStats[k];
+}
+setInterval(bumpAgentStats,6000);
+
+// ── Command feed messages ──────────────────────────────────────────────────────
+const agents=[
+  {id:'IRON MAN',color:'#ff6622'},{id:'DR. STRANGE',color:'#c084fc'},{id:'BLACK WIDOW',color:'#ff4466'},
+  {id:'THOR',color:'#4499ff'},{id:'VISION',color:'#ffd700'},{id:'HULK',color:'#00ff55'},{id:'FURY',color:'#ffb300'}
+];
+const msgs=[
+  'Multi-timeframe confluence scan complete. 15m/5m/1m ribbon alignment detected.',
+  'VWAP deviation within tolerance. Continuation setup valid.',
+  'TTM Squeeze building pressure. Momentum positive and rising.',
+  'Risk parameters nominal. Max drawdown threshold not breached.',
+  'ATR contraction phase. Breakout imminent — monitoring.',
+  'Stochastic RSI crossover detected on 5m. K=38 below overbought.',
+  'Session overlap approaching. Liquidity increasing.',
+  'Gamma squeeze detected on options chain. Elevated RVOL confirmed.',
+  'Order flow delta positive. Institutional bid detected at support.',
+  'Pattern recognition: Bull flag forming on 15m chart.',
+];
+let msgCount=0;
+function addCmdLine(){
+  const ag=agents[Math.floor(Math.random()*agents.length)];
+  const msg=msgs[Math.floor(Math.random()*msgs.length)];
+  const now=new Date();
+  const t=[now.getUTCHours(),now.getUTCMinutes(),now.getUTCSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+  const feed=document.getElementById('cmdFeed');
+  const line=document.createElement('div');
+  line.className='cmd-line';
+  line.innerHTML=`<span class="cmd-time">${t}</span><span class="cmd-agent" style="color:${ag.color}">${ag.id}</span><span class="cmd-msg">${msg}</span>`;
+  feed.appendChild(line);
+  if(feed.children.length>40) feed.removeChild(feed.firstChild);
+  feed.scrollTop=feed.scrollHeight;
+  msgCount++;
+  document.getElementById('feedCount').textContent=msgCount+' MESSAGES';
+}
+setInterval(addCmdLine,5000);
+
+// ── AI comm panel ──────────────────────────────────────────────────────────────
+const aiInsights=[
+  {agent:'IRON MAN',msg:'1m/5m/15m ribbon all aligned bullish. EMA 8 > 13 > 21 > 34 confirmed on all timeframes. High confluence setup detected.'},
+  {agent:'DR. STRANGE',msg:'Risk/reward ratio 1:2.8 on current setup. Stop at -1 ATR below VWAP. Target at +2SD band. Probability 68%.'},
+  {agent:'BLACK WIDOW',msg:'Institutional block trade detected at 21,420. Large bid absorbed. Smart money positioning long.'},
+  {agent:'VISION',msg:'Pattern classification: Momentum continuation. Historical accuracy on this setup: 71.4% (n=847).'},
+  {agent:'THOR',msg:'Breakout energy building. TTM Squeeze on 5m. Lightning strike pattern — expect sharp move within 3-5 bars.'},
+];
+let aiIdx=0;
+function addAiMsg(){
+  const insight=aiInsights[aiIdx%aiInsights.length];
+  aiIdx++;
+  const comm=document.getElementById('aiComm');
+  const div=document.createElement('div');
+  div.className='ai-msg';
+  div.innerHTML=`<div class="ai-msg-agent">${insight.agent}</div>${insight.msg}`;
+  comm.insertBefore(div,comm.firstChild);
+  if(comm.children.length>5) comm.removeChild(comm.lastChild);
+}
+setInterval(addAiMsg,12000);
+
+// ── WebSocket connection ───────────────────────────────────────────────────────
+const WS_URL = 'wss://openclaw-production-44a4.up.railway.app/ws/market';
+let ws;
+function connectWS(){
+  try{
+    ws=new WebSocket(WS_URL);
+    ws.onopen=()=>{
+      ws.send(JSON.stringify({type:'subscribe',symbol:'NQ'}));
+      ws.send(JSON.stringify({type:'subscribe',symbol:'ES'}));
+      addCmdLine();
+    };
+    ws.onmessage=(e)=>{
+      try{
+        const d=JSON.parse(e.data);
+        if(d.type==='quote'&&d.quote){
+          const sym=d.quote.symbol;
+          const el=document.getElementById(sym.toLowerCase()+'-p');
+          if(el) el.textContent=d.quote.price.toFixed(sym==='NQ'||sym==='ES'?2:2);
+        }
+      }catch(err){}
+    };
+    ws.onclose=()=>setTimeout(connectWS,5000);
+    ws.onerror=()=>{};
+  }catch(e){}
+}
+connectWS();
+
+// ── Recent alerts API ─────────────────────────────────────────────────────────
+const ALERTS_API = 'https://openclaw-production-44a4.up.railway.app/api/alerts';
+async function fetchAlerts(){
+  try{
+    const r=await fetch(ALERTS_API,{signal:AbortSignal.timeout(4000)});
+    if(!r.ok) return;
+    const alerts=await r.json();
+    if(!Array.isArray(alerts)||!alerts.length) return;
+    const queue=document.getElementById('signalQueue');
+    queue.innerHTML='';
+    const alertCountEl=document.getElementById('alertCount');
+    alertCountEl.textContent=alerts.length+' ALERTS';
+    signals=alerts.length;
+    alerts.slice(0,6).forEach(al=>{
+      const isBuy=al.action==='BUY';
+      const card=document.createElement('div');
+      card.className=`alert-card ${isBuy?'buy':'sell'}`;
+      const inds=al.indicators||{};
+      card.innerHTML=`
+        <div class="alert-top">
+          <span class="alert-sym" style="color:${isBuy?'var(--emerald)':'var(--crimson)'}">${al.symbol||'--'}</span>
+          <span class="alert-action ${isBuy?'buy':'sell'}">${al.action}</span>
+        </div>
+        <div class="alert-meta">${al.price?.toFixed(2)||'--'} · ${al.timeframe||'1'}M · ${al.session||'--'}</div>
+        <div class="alert-analysis">${(al.analysis||'Analysis pending...').slice(0,140)}</div>
+        <div class="alert-indicators">
+          ${inds.rsi!==undefined?`<span class="ind-chip hot">RSI ${inds.rsi.toFixed(0)}</span>`:''}
+          ${inds.stoch_k!==undefined?`<span class="ind-chip hot">K=${inds.stoch_k.toFixed(0)}</span>`:''}
+          ${inds.atr!==undefined?`<span class="ind-chip">ATR ${inds.atr.toFixed(1)}</span>`:''}
+          ${inds.vol_ratio!==undefined?`<span class="ind-chip hot">RVOL ${inds.vol_ratio.toFixed(1)}x</span>`:''}
+          ${inds.ribbon_bull?`<span class="ind-chip hot">RIBBON▲</span>`:''}
+          ${inds.squeeze?`<span class="ind-chip" style="color:var(--amber);border-color:rgba(255,179,0,0.3)">SQZ</span>`:''}
+        </div>`;
+      queue.appendChild(card);
+    });
+  }catch(e){}
+}
+fetchAlerts();
+setInterval(fetchAlerts,20000);
+
+// ── Cinematic candlestick chart ────────────────────────────────────────────────
+const canvas=document.getElementById('mainChart');
+const ctx=canvas.getContext('2d');
+let candles=[];
+let animFrame=0;
+
+function resizeCanvas(){
+  const rect=canvas.parentElement.getBoundingClientRect();
+  canvas.width=rect.width;
+  canvas.height=rect.height-28; // account for stats bar
+}
+
+function generateCandles(n){
+  let price=21450;
+  const out=[];
+  for(let i=0;i<n;i++){
+    const o=price;
+    const vol=0.0015+Math.random()*0.003;
+    const dir=Math.random()>.48?1:-1;
+    const c=o+dir*price*vol;
+    const h=Math.max(o,c)+price*Math.random()*0.0008;
+    const l=Math.min(o,c)-price*Math.random()*0.0008;
+    out.push({o,h,l,c,v:0.5+Math.random()*2});
+    price=c;
+  }
+  return out;
+}
+
+function drawChart(){
+  const w=canvas.width,h=canvas.height;
+  if(!w||!h) return;
+
+  // Background
+  ctx.fillStyle='rgba(2,4,8,0.98)';
+  ctx.fillRect(0,0,w,h);
+
+  // Grid lines
+  ctx.strokeStyle='rgba(30,60,120,0.18)';
+  ctx.lineWidth=.5;
+  for(let i=0;i<8;i++){
+    const y=h*i/8;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+  }
+  for(let i=0;i<16;i++){
+    const x=w*i/16;
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
+  }
+
+  if(!candles.length) return;
+
+  // Price range with padding
+  const prices_arr=candles.flatMap(c=>[c.h,c.l]);
+  const minP=Math.min(...prices_arr),maxP=Math.max(...prices_arr);
+  const padP=(maxP-minP)*.1;
+  const lo=minP-padP,hi=maxP+padP;
+  const pY=p=>h-(p-lo)/(hi-lo)*h;
+
+  // VWAP line
+  let cumVol=0,cumVP=0;
+  const vwapPts=candles.map(c=>{cumVol+=c.v;cumVP+=((c.h+c.l+c.c)/3)*c.v;return cumVol>0?cumVP/cumVol:c.c;});
+  ctx.strokeStyle='rgba(0,212,255,0.5)';
+  ctx.lineWidth=1.2;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  vwapPts.forEach((v,i)=>{
+    const x=leftPad+i*cw+cw/2;
+    i===0?ctx.moveTo(x,pY(v)):ctx.lineTo(x,pY(v));
+  });
+  ctx.stroke();
+
+  // EMA8
+  const e8=calcEMA(candles.map(c=>c.c),8);
+  ctx.strokeStyle='rgba(0,255,136,0.55)';
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  e8.forEach((v,i)=>{
+    if(isNaN(v)) return;
+    const x=leftPad+i*cw+cw/2;
+    i<8?ctx.moveTo(x,pY(v)):ctx.lineTo(x,pY(v));
+  });
+  ctx.stroke();
+
+  // EMA21
+  const e21=calcEMA(candles.map(c=>c.c),21);
+  ctx.strokeStyle='rgba(0,180,255,0.4)';
+  ctx.lineWidth=.8;
+  ctx.beginPath();
+  e21.forEach((v,i)=>{
+    if(isNaN(v)) return;
+    const x=leftPad+i*cw+cw/2;
+    i<21?ctx.moveTo(x,pY(v)):ctx.lineTo(x,pY(v));
+  });
+  ctx.stroke();
+
+  // Candles
+  const leftPad=0,rightPad=50;
+  const cw=Math.max(4,(w-leftPad-rightPad)/candles.length);
+  candles.forEach((c,i)=>{
+    const x=leftPad+i*cw;
+    const bull=c.c>=c.o;
+    const bodyTop=pY(Math.max(c.o,c.c));
+    const bodyBot=pY(Math.min(c.o,c.c));
+    const bodyH=Math.max(1,bodyBot-bodyTop);
+
+    // Wick
+    ctx.strokeStyle=bull?'rgba(0,255,136,0.55)':'rgba(255,34,68,0.55)';
+    ctx.lineWidth=.8;
+    ctx.beginPath();
+    ctx.moveTo(x+cw/2,pY(c.h));
+    ctx.lineTo(x+cw/2,pY(c.l));
+    ctx.stroke();
+
+    // Body
+    ctx.fillStyle=bull?'rgba(0,200,100,0.75)':'rgba(220,30,60,0.75)';
+    ctx.strokeStyle=bull?'rgba(0,255,136,0.8)':'rgba(255,34,68,0.8)';
+    ctx.lineWidth=.5;
+    ctx.fillRect(x+1,bodyTop,cw-2,bodyH);
+    ctx.strokeRect(x+1,bodyTop,cw-2,bodyH);
+
+    // Glow on recent candle
+    if(i===candles.length-1){
+      ctx.fillStyle=bull?'rgba(0,255,136,0.15)':'rgba(255,34,68,0.15)';
+      ctx.fillRect(x,0,cw,h);
+      // Price label
+      ctx.fillStyle=bull?'rgba(0,255,136,0.9)':'rgba(255,34,68,0.9)';
+      ctx.font='bold 10px "IBM Plex Mono",monospace';
+      ctx.textAlign='left';
+      ctx.fillText(c.c.toFixed(2),x+cw+3,pY(c.c)+4);
+    }
+  });
+
+  // Price scale (right side labels)
+  ctx.fillStyle='rgba(100,150,200,0.5)';
+  ctx.font='9px "IBM Plex Mono",monospace';
+  ctx.textAlign='right';
+  for(let i=0;i<=5;i++){
+    const p=lo+(hi-lo)*i/5;
+    ctx.fillText(p.toFixed(0),w-2,pY(p)+3);
+  }
+
+  // Animated scan line
+  const scanY=h*(0.5+0.4*Math.sin(animFrame*.02));
+  const scanGrad=ctx.createLinearGradient(0,scanY,w,scanY);
+  scanGrad.addColorStop(0,'transparent');
+  scanGrad.addColorStop(.5,'rgba(0,212,255,0.06)');
+  scanGrad.addColorStop(1,'transparent');
+  ctx.fillStyle=scanGrad;
+  ctx.fillRect(0,scanY-1,w,2);
+}
+
+function calcEMA(vals,period){
+  const k=2/(period+1);
+  let prev=vals.slice(0,period).reduce((a,b)=>a+b,0)/period;
+  const out=[...new Array(period-1).fill(NaN),prev];
+  for(let i=period;i<vals.length;i++){prev=vals[i]*k+prev*(1-k);out.push(prev);}
+  return out;
+}
+
+// Candle variables need to be hoisted for drawChart scope
+var leftPad=0,rightPad=50,cw=6;
+
+function animateChart(){
+  animFrame++;
+  // Slowly evolve last candle
+  if(candles.length>0&&animFrame%4===0){
+    const last=candles[candles.length-1];
+    const delta=(Math.random()-.48)*last.c*0.0004;
+    last.c+=delta;
+    last.h=Math.max(last.h,last.c);
+    last.l=Math.min(last.l,last.c);
+    // New candle every ~200 frames
+    if(animFrame%200===0){
+      candles.push({o:last.c,h:last.c,l:last.c,c:last.c,v:Math.random()*2});
+      if(candles.length>80) candles.shift();
+    }
+  }
+  drawChart();
+  requestAnimationFrame(animateChart);
+}
+
+window.addEventListener('resize',()=>{resizeCanvas();});
+resizeCanvas();
+candles=generateCandles(60);
+animateChart();
+</script>
+</body>
+</html>
