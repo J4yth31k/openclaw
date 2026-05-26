@@ -8,6 +8,10 @@ yfinance>=0.2.36
 # HTTP & API
 requests==2.31.0
 
+# Agent API server (agent_api.py — called by Railway Node.js service)
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
 # Scheduling
 apscheduler>=3.10.4
 
