@@ -11,11 +11,18 @@ Run:
 from __future__ import annotations
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(__file__))   # so ict_pipeline can import iron_man / war_machine
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
+
+try:
+    from ict_pipeline import run_pipeline
+    _ICT_AVAILABLE = True
+except Exception:
+    _ICT_AVAILABLE = False
 
 app = FastAPI(title="OpenClaw Agent API", version="1.0.0")
 
@@ -69,9 +76,40 @@ async def health():
 def run_agents(payload: AlertPayload) -> str:
     """
     Call the relevant agents and concatenate their output.
+    ICT pipeline runs first and gates the trade decision.
     """
     parts: list[str] = []
     ind = payload.indicators
+
+    # ── ICT/SMC 6-node pipeline ───────────────────────────────────────────────
+    if _ICT_AVAILABLE and payload.action in ("BUY", "SELL"):
+        try:
+            pipeline_payload = {
+                "symbol":  payload.symbol,
+                "action":  payload.action,
+                "price":   payload.price,
+                "signal":  (ind.signal if ind else None) or "",
+                "tier":    payload.tier or "free",
+            }
+            result = run_pipeline(pipeline_payload)
+
+            if result.decision == "EXECUTE" and result.entry and result.confluence and result.risk:
+                e = result.entry
+                r = result.risk
+                parts.append(
+                    f"[ICT] ✅ EXECUTE ({result.confluence.score}/7) | "
+                    f"entry={e.entry_price} SL={e.stop_loss} TP={e.take_profit} "
+                    f"R:R=1:{e.rr_ratio} | type={e.entry_type} | size={r.position_size} lots | "
+                    f"state={r.daily_state}"
+                )
+            else:
+                node   = result.stopped_at_node
+                score  = result.confluence.score if result.confluence else 0
+                parts.append(
+                    f"[ICT] 🚫 BLOCKED at Node {node} ({score}/7) — {result.summary}"
+                )
+        except Exception as exc:
+            parts.append(f"[ICT] pipeline error: {exc}")
 
     # ── Iron Man: live multi-timeframe technical analysis ─────────────────────
     try:

@@ -25,6 +25,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import requests
 
+try:
+    from ict_pipeline import run_pipeline, PipelineResult
+    _ICT_AVAILABLE = True
+except ImportError:
+    _ICT_AVAILABLE = False
+    PipelineResult = None
+
 logger = logging.getLogger('hawkeye')
 
 PERSONA = "I see better from a distance. Every signal, every movement -- nothing escapes my eye."
@@ -133,33 +140,45 @@ class Hawkeye:
     and fires them off to Telegram.
     """
 
-    REQUIRED_FIELDS = ['ticker', 'action']
+    # Pine Script sends 'symbol'; legacy payloads send 'ticker' — accept either
+    REQUIRED_FIELDS = ['action']
 
-    def __init__(self, telegram_token: str = None, chat_id: str = None):
+    def __init__(
+        self,
+        telegram_token: str = None,
+        chat_id: str = None,
+        account_size: float = 10_000.0,
+        risk_pct: float = 0.01,
+    ):
         self.telegram_token = telegram_token
         self.chat_id = chat_id
+        self.account_size = account_size
+        self.risk_pct = risk_pct
         self.signal_log = SignalLog()
-        logger.info("Hawkeye online. Eyes on the target.")
+        logger.info("Hawkeye online. Eyes on the target. ICT pipeline: %s",
+                    "READY" if _ICT_AVAILABLE else "UNAVAILABLE")
 
     def validate_signal(self, payload: dict) -> tuple[bool, str]:
         """
         Validate incoming webhook payload.
 
-        Expected format from Pine Script:
+        Accepts both Pine Script format (symbol) and legacy format (ticker):
         {
-            "ticker": "BTCUSD",
-            "action": "buy",
-            "price": 104000,
-            "strategy": "EMA_RSI_Scalper",
-            "timeframe": "1m",
-            "tp": 104080,
-            "sl": 103940,
-            "timestamp": "2026-05-13T..."
+            "symbol": "NQ1!",          # Pine Script field
+            "ticker": "BTCUSD",        # legacy field (either works)
+            "action": "BUY",
+            "price": 21400,
+            "signal": "ribbon",        # Pine Script: "ribbon" | "squeeze"
+            "timeframe": "5",
+            "strategy": "EMA_Ribbon_StochRSI_VWAP_RTH"
         }
         """
         for field in self.REQUIRED_FIELDS:
             if field not in payload:
                 return False, f"Missing required field: {field}"
+
+        if 'ticker' not in payload and 'symbol' not in payload:
+            return False, "Missing required field: ticker or symbol"
 
         action = payload.get('action', '').upper()
         if action not in ('BUY', 'SELL', 'LONG', 'SHORT', 'CLOSE'):
@@ -173,15 +192,24 @@ class Hawkeye:
 
         Returns enriched signal dict.
         """
+        # Normalize: Pine Script sends 'symbol', legacy sends 'ticker'
+        ticker = (payload.get('ticker') or payload.get('symbol') or 'UNKNOWN').upper()
+
         signal = {
             'received_at': datetime.utcnow().isoformat(),
-            'ticker': payload.get('ticker', 'UNKNOWN').upper(),
+            'ticker': ticker,
+            'symbol': ticker,           # passed to ICT pipeline
             'action': payload.get('action', '').upper(),
             'price': payload.get('price'),
             'tp': payload.get('tp'),
             'sl': payload.get('sl'),
+            'signal': payload.get('signal', ''),           # ribbon | squeeze
             'strategy': payload.get('strategy', 'Unknown'),
             'timeframe': payload.get('timeframe', 'N/A'),
+            'rsi': payload.get('rsi'),
+            'atr': payload.get('atr'),
+            'vol_ratio': payload.get('vol_ratio'),
+            'tier': payload.get('tier', 'free'),
             'source_timestamp': payload.get('timestamp', ''),
             'message': payload.get('message', ''),
         }
@@ -216,42 +244,71 @@ class Hawkeye:
 
         return signal
 
-    def format_telegram_alert(self, signal: dict) -> str:
-        """Format signal as a Telegram message."""
+    def format_telegram_alert(self, signal: dict, pipeline_result=None) -> str:
+        """Format signal as a Telegram message, including ICT pipeline decision."""
         action = signal['action']
         ticker = signal['ticker']
-        price = signal.get('price', 'N/A')
+        price  = signal.get('price', 'N/A')
 
-        # Direction emoji
         if action in ('BUY', 'LONG'):
-            emoji = '🟢🔺'
-            direction = 'LONG'
+            dir_emoji, direction = '🟢🔺', 'LONG'
         elif action in ('SELL', 'SHORT'):
-            emoji = '🔴🔻'
-            direction = 'SHORT'
+            dir_emoji, direction = '🔴🔻', 'SHORT'
         else:
-            emoji = '⚪'
-            direction = action
+            dir_emoji, direction = '⚪', action
 
         lines = [
             f"🏹 *HAWKEYE ALERT*",
             f"_\"I never miss.\"_",
             f"",
-            f"{emoji} *{direction} {ticker}*",
-            f"",
-            f"📍 Entry: `{price}`",
+            f"{dir_emoji} *{direction} {ticker}*",
+            f"📍 Price: `{price}`",
         ]
 
-        if signal.get('tp'):
-            lines.append(f"🎯 Take Profit: `{signal['tp']}`")
-        if signal.get('sl'):
-            lines.append(f"🛑 Stop Loss: `{signal['sl']}`")
-        if signal.get('risk_reward'):
-            lines.append(f"⚖️ Risk:Reward: `1:{signal['risk_reward']}`")
+        if signal.get('rsi'):
+            lines.append(f"📊 RSI: `{signal['rsi']}`")
+        if signal.get('vol_ratio'):
+            lines.append(f"📦 Vol: `{signal['vol_ratio']}x avg`")
+        if signal.get('signal'):
+            lines.append(f"📡 Signal: `{signal['signal'].upper()}`")
+
+        # ICT pipeline section
+        lines.append(f"")
+        if pipeline_result is not None:
+            decision = pipeline_result.decision
+            dec_emoji = '✅' if decision == 'EXECUTE' else '🚫'
+            lines.append(f"{dec_emoji} *ICT: {decision}*")
+
+            if decision == 'EXECUTE' and pipeline_result.entry and pipeline_result.risk:
+                e = pipeline_result.entry
+                r = pipeline_result.risk
+                lines.append(f"📍 Entry: `{e.entry_price}`")
+                lines.append(f"🛑 SL: `{e.stop_loss}`")
+                lines.append(f"🎯 TP: `{e.take_profit}`")
+                lines.append(f"⚖️ R:R: `1:{e.rr_ratio}`")
+                lines.append(f"📐 Size: `{r.position_size} lots`")
+                lines.append(f"🔢 Type: `{e.entry_type}`")
+            elif decision == 'BLOCKED':
+                node = pipeline_result.stopped_at_node
+                lines.append(f"🔒 Blocked at Node {node}")
+                lines.append(f"💬 _{pipeline_result.summary}_")
+
+            if pipeline_result.confluence:
+                score = pipeline_result.confluence.score
+                bar   = '█' * score + '░' * (7 - score)
+                lines.append(f"📈 Score: `{score}/7` `{bar}`")
+        else:
+            lines.append(f"⚠️ ICT pipeline not available")
+            if signal.get('tp'):
+                lines.append(f"🎯 TP: `{signal['tp']}`")
+            if signal.get('sl'):
+                lines.append(f"🛑 SL: `{signal['sl']}`")
+            if signal.get('risk_reward'):
+                lines.append(f"⚖️ R:R: `1:{signal['risk_reward']}`")
 
         lines.append(f"")
         lines.append(f"📊 Strategy: {signal.get('strategy', 'N/A')}")
-        lines.append(f"⏱️ Timeframe: {signal.get('timeframe', 'N/A')}")
+        lines.append(f"⏱️ TF: {signal.get('timeframe', 'N/A')}m")
         lines.append(f"🕐 {signal['received_at'][:19]} UTC")
 
         return "\n".join(lines)
@@ -300,16 +357,35 @@ class Hawkeye:
         if not valid:
             return {'status': 'error', 'message': reason}
 
-        # Process
+        # Process + log
         signal = self.process_signal(payload)
 
-        # Alert via Telegram
-        alert_msg = self.format_telegram_alert(signal)
+        # ICT pipeline gate — runs all 6 nodes
+        pipeline_result = None
+        if _ICT_AVAILABLE and signal['action'] in ('BUY', 'SELL'):
+            try:
+                pipeline_result = run_pipeline(
+                    payload={**payload, 'symbol': signal['symbol'], 'action': signal['action']},
+                    account_size=self.account_size,
+                    risk_pct=self.risk_pct,
+                )
+                signal['ict_decision']    = pipeline_result.decision
+                signal['ict_score']       = pipeline_result.confluence.score if pipeline_result.confluence else None
+                signal['ict_stopped_at']  = pipeline_result.stopped_at_node
+                signal['ict_summary']     = pipeline_result.summary
+                logger.info("ICT pipeline: %s — %s", pipeline_result.decision, pipeline_result.summary)
+            except Exception as exc:
+                logger.warning("ICT pipeline error: %s", exc)
+                signal['ict_decision'] = 'ERROR'
+
+        # Telegram alert (includes ICT result)
+        alert_msg = self.format_telegram_alert(signal, pipeline_result)
         self.send_telegram(alert_msg)
 
         return {
             'status': 'ok',
-            'signal': signal
+            'signal': signal,
+            'ict': pipeline_result.to_dict() if pipeline_result else None,
         }
 
 
@@ -402,6 +478,8 @@ Examples:
     parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to bind to (default: 0.0.0.0)')
     parser.add_argument('--telegram-token', type=str, help='Telegram Bot API token')
     parser.add_argument('--chat-id', type=str, help='Telegram chat ID')
+    parser.add_argument('--account-size', type=float, default=10_000.0, help='Account size for position sizing (default: 10000)')
+    parser.add_argument('--risk-pct', type=float, default=0.01, help='Risk per trade as decimal (default: 0.01 = 1%%)')
 
     args = parser.parse_args()
 
@@ -412,7 +490,9 @@ Examples:
 
     _hawkeye_instance = Hawkeye(
         telegram_token=args.telegram_token,
-        chat_id=args.chat_id
+        chat_id=args.chat_id,
+        account_size=args.account_size,
+        risk_pct=args.risk_pct,
     )
 
     server = HTTPServer((args.host, args.port), WebhookHandler)
