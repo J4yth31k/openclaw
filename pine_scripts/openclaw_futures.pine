@@ -1,9 +1,13 @@
 //@version=6
-// OpenClaw Futures Pro - NQ, ES, YM, RTY, CL, GC
-// Scalping stack: EMA Ribbon + Stoch RSI + VWAP bands + TTM Squeeze + RVOL
-indicator("OpenClaw Futures Pro", overlay=true, max_bars_back=500)
+// OpenClaw Futures Pro v2 -- ICT/SMC Edition
+// Instruments: NQ, ES, YM, RTY, CL, GC
+// Base stack : EMA Ribbon + Stoch RSI + VWAP bands + TTM Squeeze + RVOL
+// ICT layer  : PxH/PxL + NWOG zone + EQL/EQH + CT session opens + AMD phase
+// All session times are CENTRAL TIME (America/Chicago)
+indicator("OpenClaw Futures Pro v2", overlay=true, max_bars_back=500)
 
-// --- Inputs ------------------------------------------------------------------
+// ── Inputs ────────────────────────────────────────────────────────────────────
+
 e8_len      = input.int(8,     "EMA 8",                group="EMA Ribbon")
 e13_len     = input.int(13,    "EMA 13",               group="EMA Ribbon")
 e21_len     = input.int(21,    "EMA 21",               group="EMA Ribbon")
@@ -11,8 +15,8 @@ e34_len     = input.int(34,    "EMA 34",               group="EMA Ribbon")
 e55_len     = input.int(55,    "EMA 55",               group="EMA Ribbon")
 show_ribbon = input.bool(true, "Show Ribbon",           group="EMA Ribbon")
 
-use_vwap   = input.bool(true, "VWAP Filter",            group="VWAP")
-show_bands = input.bool(true, "Show VWAP Bands",        group="VWAP")
+use_vwap    = input.bool(true, "VWAP Filter",           group="VWAP")
+show_bands  = input.bool(true, "Show VWAP Bands",       group="VWAP")
 
 srsi_rsi_len   = input.int(14, "RSI Length",            group="Stoch RSI")
 srsi_stoch_len = input.int(14, "Stoch Length",          group="Stoch RSI")
@@ -26,11 +30,18 @@ sqz_bb_mult = input.float(2.0, "BB Mult",               group="TTM Squeeze")
 sqz_kc_len  = input.int(20,    "KC Length",             group="TTM Squeeze")
 sqz_kc_mult = input.float(1.5, "KC Mult",               group="TTM Squeeze")
 
-vol_mult = input.float(1.2, "RVOL Threshold",           group="Filters", step=0.1)
-use_rth  = input.bool(true, "RTH Only (9:30-16:00 ET)", group="Filters")
-tier     = input.string("premium", "Tier", options=["premium","free"])
+vol_mult  = input.float(1.2,   "RVOL Threshold",        group="Filters", step=0.1)
+use_rth   = input.bool(true,   "RTH Only (CT 8:30-15:00)", group="Filters")
+has_news  = input.bool(false,  "News Event at 8:30 CT Today", group="Filters")
+tier      = input.string("premium", "Tier",             group="Filters", options=["premium","free"])
 
-// --- EMA Ribbon --------------------------------------------------------------
+show_pxhl  = input.bool(true,  "Show PxH / PxL",       group="ICT Levels")
+show_nwog  = input.bool(true,  "Show NWOG Zone",        group="ICT Levels")
+show_eqhl  = input.bool(true,  "Show EQL / EQH",        group="ICT Levels")
+show_opens = input.bool(true,  "Show CT Session Opens", group="ICT Levels")
+
+// ── EMA Ribbon ────────────────────────────────────────────────────────────────
+
 ema8  = ta.ema(close, e8_len)
 ema13 = ta.ema(close, e13_len)
 ema21 = ta.ema(close, e21_len)
@@ -40,8 +51,8 @@ ema55 = ta.ema(close, e55_len)
 ribbon_bull = ema8 > ema13 and ema13 > ema21 and ema21 > ema34
 ribbon_bear = ema8 < ema13 and ema13 < ema21 and ema21 < ema34
 
-// --- VWAP with +/-1SD / +/-2SD bands ----------------------------------------
-hlc3_src = hlc3
+// ── VWAP with +/-1SD / +/-2SD bands ──────────────────────────────────────────
+
 var float cum_vol        = 0.0
 var float cum_vol_price  = 0.0
 var float cum_vol_price2 = 0.0
@@ -52,22 +63,22 @@ if ta.change(time("D")) != 0
     cum_vol_price2 := 0.0
 
 cum_vol        += volume
-cum_vol_price  += hlc3_src * volume
-cum_vol_price2 += hlc3_src * hlc3_src * volume
+cum_vol_price  += hlc3 * volume
+cum_vol_price2 += hlc3 * hlc3 * volume
 
 vwap_val = cum_vol > 0 ? cum_vol_price  / cum_vol : na
 vwap_var = cum_vol > 0 ? cum_vol_price2 / cum_vol - vwap_val * vwap_val : na
 vwap_sd  = vwap_var > 0 ? math.sqrt(vwap_var) : 0.0
-
-vwap_u1 = vwap_val + vwap_sd
-vwap_l1 = vwap_val - vwap_sd
-vwap_u2 = vwap_val + 2.0 * vwap_sd
-vwap_l2 = vwap_val - 2.0 * vwap_sd
+vwap_u1  = vwap_val + vwap_sd
+vwap_l1  = vwap_val - vwap_sd
+vwap_u2  = vwap_val + 2.0 * vwap_sd
+vwap_l2  = vwap_val - 2.0 * vwap_sd
 
 above_vwap = close > vwap_val
 below_vwap = close < vwap_val
 
-// --- Stochastic RSI ----------------------------------------------------------
+// ── Stochastic RSI ────────────────────────────────────────────────────────────
+
 rsi_raw   = ta.rsi(close, srsi_rsi_len)
 stoch_raw = ta.stoch(rsi_raw, rsi_raw, rsi_raw, srsi_stoch_len)
 stoch_k   = ta.sma(stoch_raw, srsi_k_smooth)
@@ -76,7 +87,8 @@ stoch_d   = ta.sma(stoch_k,   srsi_d_smooth)
 srsi_bull = ta.crossover(stoch_k,  stoch_d) and stoch_k < srsi_ob
 srsi_bear = ta.crossunder(stoch_k, stoch_d) and stoch_k > srsi_os
 
-// --- TTM Squeeze (LazyBear) --------------------------------------------------
+// ── TTM Squeeze ───────────────────────────────────────────────────────────────
+
 bb_upper = ta.sma(close, sqz_bb_len) + sqz_bb_mult * ta.stdev(close, sqz_bb_len)
 bb_lower = ta.sma(close, sqz_bb_len) - sqz_bb_mult * ta.stdev(close, sqz_bb_len)
 kc_mid   = ta.ema(close, sqz_kc_len)
@@ -95,15 +107,69 @@ mom_falling = momentum < nz(momentum[1])
 mom_bull    = momentum > 0 and mom_rising
 mom_bear    = momentum < 0 and mom_falling
 
-// --- Relative Volume ---------------------------------------------------------
+// ── Relative Volume ───────────────────────────────────────────────────────────
+
 atr_val   = ta.atr(14)
 vol_ratio = volume / ta.sma(volume, 20)
 
-// --- Session -----------------------------------------------------------------
-in_rth  = not na(time("1", "0930-1600", "America/New_York"))
+// ── Previous Day High / Low (PxH / PxL) ──────────────────────────────────────
+// Used by ICT pipeline Node 1 as the daily bias target
+
+prev_high = request.security(syminfo.tickerid, "D", high[1])
+prev_low  = request.security(syminfo.tickerid, "D", low[1])
+
+// ── NWOG (New Week Opening Gap) ───────────────────────────────────────────────
+// Gap between last Friday close and Sunday/Monday open
+// Displayed on chart; also sent in alert payload for Node 1 confirmation
+
+prev_week_close = request.security(syminfo.tickerid, "W", close[1])
+curr_week_open  = request.security(syminfo.tickerid, "W", open, barmerge.gaps_off, barmerge.lookahead_on)
+nwog_raw_gap    = math.abs(curr_week_open - prev_week_close)
+nwog_present    = nwog_raw_gap > atr_val * 0.2
+nwog_top        = math.max(curr_week_open, prev_week_close)
+nwog_bot        = math.min(curr_week_open, prev_week_close)
+nwog_mid        = (nwog_top + nwog_bot) / 2.0
+
+// ── Equal Highs / Equal Lows (EQL / EQH) ─────────────────────────────────────
+// Two consecutive swing highs/lows within 0.1% = engineered liquidity pool
+
+swing_high = ta.pivothigh(high, 5, 5)
+swing_low  = ta.pivotlow(low,  5, 5)
+
+var float sh_prev = na
+var float sh_curr = na
+var float sl_prev = na
+var float sl_curr = na
+
+if not na(swing_high)
+    sh_prev := sh_curr
+    sh_curr := swing_high
+
+if not na(swing_low)
+    sl_prev := sl_curr
+    sl_curr := swing_low
+
+eqh_tol = 0.001
+eqh = not na(sh_prev) and not na(sh_curr) and sh_curr != sh_prev and math.abs(sh_curr - sh_prev) / sh_prev < eqh_tol
+eql = not na(sl_prev) and not na(sl_curr) and sl_curr != sl_prev and math.abs(sl_curr - sl_prev) / sl_prev < eqh_tol
+
+// ── CT Session Gates (Central Time / America/Chicago) ─────────────────────────
+// These times match the ICT pipeline Node 2 session agent exactly
+
+in_830_ct  = not na(time("1", "0830-0844", "America/Chicago"))
+in_900_ct  = not na(time("1", "0900-0914", "America/Chicago"))
+in_930_ct  = not na(time("1", "0930-0944", "America/Chicago"))
+in_1000_ct = not na(time("1", "1000-1014", "America/Chicago"))
+in_1300_ct = not na(time("1", "1300-1314", "America/Chicago"))
+
+// RTH in CT: CME equity futures 8:30 CT - 15:00 CT
+in_rth  = not na(time("1", "0830-1500", "America/Chicago"))
 sess_ok = use_rth ? in_rth : true
 
-// --- Signal Logic ------------------------------------------------------------
+// ── Signal Logic ──────────────────────────────────────────────────────────────
+// EMA + Stoch RSI + VWAP + RVOL signals fire here.
+// ICT confluence filtering (OB, FVG, CISD, score) handled by Python pipeline.
+
 vwap_bull_ok = use_vwap ? above_vwap : true
 vwap_bear_ok = use_vwap ? below_vwap : true
 
@@ -112,7 +178,8 @@ bear     = ribbon_bear and srsi_bear and vwap_bear_ok and vol_ratio >= vol_mult 
 sqz_bull = squeeze_off and mom_bull and above_vwap and vol_ratio >= vol_mult and sess_ok
 sqz_bear = squeeze_off and mom_bear and below_vwap and vol_ratio >= vol_mult and sess_ok
 
-// --- Plots -------------------------------------------------------------------
+// ── EMA Ribbon Plots ──────────────────────────────────────────────────────────
+
 p8  = plot(show_ribbon ? ema8  : na, "EMA 8",  color.new(color.lime,   15), 1)
 plot(show_ribbon ? ema13 : na, "EMA 13", color.new(color.green,  25), 1)
 plot(show_ribbon ? ema21 : na, "EMA 21", color.new(color.aqua,   20), 1)
@@ -122,11 +189,15 @@ p55 = plot(show_ribbon ? ema55 : na, "EMA 55", color.new(color.red,   35), 1)
 ribbon_fill = ribbon_bull ? color.new(color.lime, 88) : ribbon_bear ? color.new(color.red, 88) : na
 fill(p8, p55, ribbon_fill, "Ribbon Fill")
 
+// ── VWAP Plots ────────────────────────────────────────────────────────────────
+
 plot(vwap_val,                  "VWAP",     color.new(color.white,  10), 2)
 plot(show_bands ? vwap_u1 : na, "VWAP+1SD", color.new(color.blue,   35), 1)
 plot(show_bands ? vwap_l1 : na, "VWAP-1SD", color.new(color.blue,   35), 1)
 plot(show_bands ? vwap_u2 : na, "VWAP+2SD", color.new(color.purple, 35), 1)
 plot(show_bands ? vwap_l2 : na, "VWAP-2SD", color.new(color.purple, 35), 1)
+
+// ── Signal Shapes ─────────────────────────────────────────────────────────────
 
 plotshape(bull,     "BUY",      shape.triangleup,   location.belowbar, color.lime,   size=size.small)
 plotshape(bear,     "SELL",     shape.triangledown, location.abovebar, color.red,    size=size.small)
@@ -134,23 +205,61 @@ plotshape(sqz_bull, "SQZ BUY",  shape.diamond,      location.belowbar, color.yel
 plotshape(sqz_bear, "SQZ SELL", shape.diamond,      location.abovebar, color.yellow, size=size.tiny)
 
 bg_color = bull or sqz_bull ? color.new(color.lime, 93) : bear or sqz_bear ? color.new(color.red, 93) : na
-bgcolor(bg_color)
+bgcolor(bg_color, title="Signal Background")
 
-// --- Alert payload -----------------------------------------------------------
-strat_name = "EMA_Ribbon_StochRSI" + (use_vwap ? "_VWAP" : "") + (use_rth ? "_RTH" : "")
+// ── ICT: PxH / PxL ───────────────────────────────────────────────────────────
+// Dashed orange lines at previous day high and low — AMD distribution targets
+
+p_pxh = plot(show_pxhl ? prev_high : na, "PxH", color.new(color.orange, 10), 1, plot.style_linebr)
+p_pxl = plot(show_pxhl ? prev_low  : na, "PxL", color.new(color.orange, 10), 1, plot.style_linebr)
+
+// ── ICT: NWOG Zone ────────────────────────────────────────────────────────────
+// Teal shaded zone between weekly open and prior week close
+
+p_nwog_top = plot(show_nwog and nwog_present ? nwog_top : na, "NWOG Top", color.new(color.teal, 40), 1, plot.style_linebr)
+p_nwog_bot = plot(show_nwog and nwog_present ? nwog_bot : na, "NWOG Bot", color.new(color.teal, 40), 1, plot.style_linebr)
+fill(p_nwog_top, p_nwog_bot, color.new(color.teal, 88), title="NWOG Fill")
+
+// ── ICT: EQL / EQH Markers ───────────────────────────────────────────────────
+// Yellow labels at equal highs and equal lows (engineered liquidity)
+
+plotshape(show_eqhl and eqh, "EQH", shape.labeldown, location.abovebar, color.new(color.yellow, 10), text="EQH", textcolor=color.black, size=size.tiny)
+plotshape(show_eqhl and eql, "EQL", shape.labelup,   location.belowbar, color.new(color.yellow, 10), text="EQL", textcolor=color.black, size=size.tiny)
+
+// ── ICT: CT Session Open Windows ─────────────────────────────────────────────
+// Colored backgrounds mark the 15-min entry windows around each key open
+
+bgcolor(show_opens and in_930_ct                     ? color.new(color.lime,   78) : na, title="9:30 CT Primary")
+bgcolor(show_opens and in_900_ct                     ? color.new(color.aqua,   84) : na, title="9:00 CT High")
+bgcolor(show_opens and in_1000_ct                    ? color.new(color.silver, 88) : na, title="10:00 CT Medium")
+bgcolor(show_opens and in_1300_ct                    ? color.new(color.silver, 88) : na, title="13:00 CT Medium")
+bgcolor(show_opens and in_830_ct and has_news        ? color.new(color.red,    80) : na, title="8:30 CT News")
+
+// ── Alert Payload ─────────────────────────────────────────────────────────────
+// All fields consumed by the ICT pipeline nodes are included.
+// New fields vs v1: prev_high, prev_low, nwog_present, nwog_level,
+//                   news_event, eqh, eql
+
+strat_name = "EMA_Ribbon_StochRSI" + (use_vwap ? "_VWAP" : "") + (use_rth ? "_RTH" : "") + "_ICTv2"
 
 msg(action, signal_type) =>
-    j1  = '{"symbol":"' + syminfo.ticker + '","timeframe":"' + timeframe.period + '",'
-    j2  = '"action":"' + action + '","signal":"' + signal_type + '",'
-    j3  = '"price":' + str.tostring(close) + ',"bid":' + str.tostring(math.round(close - atr_val * 0.01, 2)) + ',"ask":' + str.tostring(math.round(close + atr_val * 0.01, 2)) + ','
-    j4  = '"volume":' + str.tostring(volume) + ',"rsi":' + str.tostring(math.round(rsi_raw, 2)) + ','
-    j5  = '"stoch_k":' + str.tostring(math.round(stoch_k, 2)) + ',"stoch_d":' + str.tostring(math.round(stoch_d, 2)) + ','
-    j6  = '"atr":' + str.tostring(math.round(atr_val, 2)) + ',"vol_ratio":' + str.tostring(math.round(vol_ratio, 2)) + ','
-    j7  = '"ema8":' + str.tostring(math.round(ema8, 2)) + ',"ema21":' + str.tostring(math.round(ema21, 2)) + ',"ema55":' + str.tostring(math.round(ema55, 2)) + ','
-    j8  = '"vwap":' + str.tostring(math.round(vwap_val, 2)) + ',"vwap_u1":' + str.tostring(math.round(vwap_u1, 2)) + ',"vwap_l1":' + str.tostring(math.round(vwap_l1, 2)) + ','
-    j9  = '"momentum":' + str.tostring(math.round(momentum, 4)) + ',"squeeze":' + str.tostring(squeeze_on) + ',"ribbon_bull":' + str.tostring(ribbon_bull) + ','
-    j10 = '"strategy":"' + strat_name + '","tier":"' + tier + '","source":"tradingview"}'
-    j1 + j2 + j3 + j4 + j5 + j6 + j7 + j8 + j9 + j10
+    j1  = '{"symbol":"'      + syminfo.ticker                                       + '","timeframe":"' + timeframe.period + '",'
+    j2  = '"action":"'       + action                                               + '","signal":"'    + signal_type      + '",'
+    j3  = '"price":'         + str.tostring(close)                                  + ',"bid":'         + str.tostring(math.round(close - atr_val * 0.01, 2)) + ',"ask":' + str.tostring(math.round(close + atr_val * 0.01, 2)) + ','
+    j4  = '"volume":'        + str.tostring(volume)                                 + ',"rsi":'         + str.tostring(math.round(rsi_raw,   2)) + ','
+    j5  = '"stoch_k":'       + str.tostring(math.round(stoch_k, 2))                + ',"stoch_d":'     + str.tostring(math.round(stoch_d,   2)) + ','
+    j6  = '"atr":'           + str.tostring(math.round(atr_val,   2))              + ',"vol_ratio":'   + str.tostring(math.round(vol_ratio, 2)) + ','
+    j7  = '"ema8":'          + str.tostring(math.round(ema8,  2))                  + ',"ema21":'       + str.tostring(math.round(ema21, 2))     + ',"ema55":' + str.tostring(math.round(ema55, 2)) + ','
+    j8  = '"vwap":'          + str.tostring(math.round(vwap_val, 2))               + ',"vwap_u1":'     + str.tostring(math.round(vwap_u1, 2))   + ',"vwap_l1":' + str.tostring(math.round(vwap_l1, 2)) + ','
+    j9  = '"momentum":'      + str.tostring(math.round(momentum, 4))               + ',"squeeze":'     + str.tostring(squeeze_on)               + ',"ribbon_bull":' + str.tostring(ribbon_bull) + ','
+    j10 = '"prev_high":'     + str.tostring(math.round(prev_high, 2))              + ',"prev_low":'    + str.tostring(math.round(prev_low,  2)) + ','
+    j11 = '"nwog_present":'  + str.tostring(nwog_present)                          + ',"nwog_level":'  + str.tostring(math.round(nwog_mid,  2)) + ','
+    j12 = '"news_event":'    + str.tostring(has_news)                              + ',"eqh":'         + str.tostring(eqh)                      + ',"eql":' + str.tostring(eql) + ','
+    j13 = '"strategy":"'     + strat_name                                          + '","tier":"'      + tier                                    + '","source":"tradingview"}'
+    j1 + j2 + j3 + j4 + j5 + j6 + j7 + j8 + j9 + j10 + j11 + j12 + j13
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+// Condition must be set to "Any alert() function call" in TradingView
 
 if bull
     alert(msg("BUY",  "ribbon"),  alert.freq_once_per_bar)

@@ -270,23 +270,32 @@ class ICTPipeline:
 
         direction = "BULLISH" if action == "BUY" else "BEARISH"
 
-        # Daily candle direction from yfinance
+        # Daily candle direction — use Pine's prev_high/prev_low if sent, else yfinance
+        pine_prev_high = payload.get("prev_high")
+        pine_prev_low  = payload.get("prev_low")
+
         daily_candle = "NEUTRAL"
         target_level: Optional[float] = None
         if df_daily is not None and len(df_daily) >= 2:
             last = df_daily.iloc[-1]
             if last["close"] > last["open"]:
                 daily_candle = "BULLISH"
-                target_level = float(df_daily["high"].rolling(5).max().iloc[-1])
+                target_level = float(pine_prev_high) if pine_prev_high else float(df_daily["high"].rolling(5).max().iloc[-1])
             elif last["close"] < last["open"]:
                 daily_candle = "BEARISH"
-                target_level = float(df_daily["low"].rolling(5).min().iloc[-1])
+                target_level = float(pine_prev_low) if pine_prev_low else float(df_daily["low"].rolling(5).min().iloc[-1])
 
         # AMD: squeeze signal = momentum just released from compression = manipulation done
         amd_phase = "DISTRIBUTION" if signal == "ribbon" else "MANIPULATION"
 
-        # NWOG
-        nwog_present, nwog_level = self._detect_nwog(df_daily)
+        # NWOG — use Pine's calculation if present, else derive from yfinance
+        pine_nwog_present = payload.get("nwog_present", False)
+        pine_nwog_level   = payload.get("nwog_level")
+        if pine_nwog_present and pine_nwog_level:
+            nwog_present = bool(pine_nwog_present)
+            nwog_level   = float(pine_nwog_level)
+        else:
+            nwog_present, nwog_level = self._detect_nwog(df_daily)
 
         reason = (
             f"direction={direction}, daily={daily_candle}, "
@@ -496,6 +505,11 @@ class ICTPipeline:
         cisd_point = structure.cisd_confirmed or structure.cisd_fvg_inversion
         ifvg_point = ifvg_present or structure.cisd_fvg_inversion  # inversion doubles as IFVG confirm
 
+        # EQL/EQH: prefer Pine's chart-accurate detection if present
+        pine_eqh = bool(payload.get("eqh", False))
+        pine_eql = bool(payload.get("eql", False))
+        eql_eqh_point = structure.eql_eqh_present or pine_eqh or pine_eql
+
         checks: Dict[str, bool] = {
             "nwog_aligns":     bias.nwog_present,
             "ob_valid":        structure.ob_valid,
@@ -503,7 +517,7 @@ class ICTPipeline:
             "cisd_confirmed":  cisd_point,
             "key_open_active": session.window_active,
             "amd_confirmed":   bias.amd_phase in ("MANIPULATION", "DISTRIBUTION"),
-            "eql_eqh_swept":   structure.eql_eqh_present,
+            "eql_eqh_swept":   eql_eqh_point,
         }
         score = sum(checks.values())
 
