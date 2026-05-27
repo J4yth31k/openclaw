@@ -1,19 +1,49 @@
-import type { SimState, CreativeStudioStats, TradingStats, EventLogEntry } from '../types'
-import { CREATIVE_EVENTS, TRADE_EVENTS } from '../data/businessData'
-import { timeLabel } from './TimeSystem'
-import { simMinuteOfDay } from './TimeSystem'
+import type {
+  SimState, CreativeStudioStats, TradingStats,
+  EventLogEntry, EtsyProduct,
+} from '../types'
+import { TRADE_EVENTS, TRENDING_NICHES, makeProduct, makeProductId } from '../data/businessData'
+import { timeLabel, simMinuteOfDay } from './TimeSystem'
 
-let creativeEventIdx = 0
-let tradeEventIdx = 0
-let creativeTimer = 0      // sim-seconds until next creative event
-let tradeTimer = 0
+// ── Unique ID util ────────────────────────────────────────────────────────────
 let uniqueId = 0
-
 function uid() { return `evt_${++uniqueId}` }
+
+// ── Trade event cycling ───────────────────────────────────────────────────────
+let tradeEventIdx = 0
+let tradeTimer    = 0
+
+// ── Etsy pipeline stage durations (sim-seconds of agent work needed) ──────────
+// At 1×, 1 sim-second ≈ 0.8 real-ms → stages feel quick but visible
+const STAGE_DURATION: Record<EtsyProduct['stage'], number> = {
+  idea:    0,    // idea is instant (Reya generates it)
+  design:  1400, // ~23 sim-min of Dani working
+  qc:      700,  // ~12 sim-min of Quinn working
+  listing: 400,  // ~7 sim-min of Uly working
+  selling: 0,    // passive forever
+}
+
+// How often Reya spawns a new idea (sim-seconds of her work accumulated)
+const IDEA_INTERVAL = 1800  // ~30 sim-min
+let reserachAccum = 0       // sim-sec of Reya's work
+
+// Passive sales: each selling product has a per-sim-minute chance of a sale
+// Base rate * trend multiplier * price coefficient
+function saleChancePerMinute(product: EtsyProduct, trendMult: number): number {
+  const base = 0.06  // 6% chance per sim-minute per product at normal trend
+  const trendBonus = product.trend === 'hot' ? trendMult : product.trend === 'cooling' ? 0.4 : 1.0
+  // Cheaper products sell more often
+  const priceCoeff = 1 + (20 - Math.min(20, product.price)) / 20 * 0.5
+  return Math.min(0.98, base * trendBonus * priceCoeff)
+}
+
+// Trend rotation — changes every ~5 sim-days (7200 sim-minutes)
+let trendTimer = 0
+let trendIdx   = Math.floor(Math.random() * TRENDING_NICHES.length)
 
 export interface BusinessUpdate {
   creative?: Partial<CreativeStudioStats>
-  trading?: Partial<TradingStats>
+  trading?:  Partial<TradingStats>
   logEntries: EventLogEntry[]
   completedDelta: number
 }
@@ -21,73 +51,251 @@ export interface BusinessUpdate {
 export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate {
   const result: BusinessUpdate = { logEntries: [], completedDelta: 0 }
   const minuteOfDay = simMinuteOfDay(state.time)
+  const workHours   = minuteOfDay >= 8 * 60 && minuteOfDay < 17 * 60
 
-  // Only fire events during work hours
-  const workHours = minuteOfDay >= 8 * 60 && minuteOfDay < 17 * 60
-
-  // ── Creative Studio ───────────────────────────────────────────────────────
-  creativeTimer -= dtSec
-  if (workHours && creativeTimer <= 0) {
-    creativeTimer = 45 + Math.random() * 75  // 45–120 sec between events
-
-    const ev = CREATIVE_EVENTS[creativeEventIdx % CREATIVE_EVENTS.length]
-    creativeEventIdx++
-
-    const cs = state.creative
-    const newRevenue = cs.dailyRevenue + ev.revenueDelta
-    const newProfit  = newRevenue - cs.dailyExpenses
-    const patch: Partial<CreativeStudioStats> = {
-      dailyRevenue: newRevenue,
-      dailyProfit: newProfit,
-      lifetimeProfit: cs.lifetimeProfit + ev.revenueDelta,
-      cash: cs.cash + ev.revenueDelta,
-      draftsInProgress: Math.max(0, cs.draftsInProgress + ev.draftDelta),
-      mockSales: cs.mockSales + ev.salesDelta,
-      completedProducts: ev.draftDelta < 0 ? cs.completedProducts + 1 : cs.completedProducts,
-    }
-    result.creative = patch
-    result.completedDelta += ev.salesDelta
+  // ── Trend rotation ──────────────────────────────────────────────────────────
+  trendTimer -= dtSec
+  if (trendTimer <= 0) {
+    trendTimer = 7200 + Math.random() * 3600  // 5–8 sim-days between shifts
+    trendIdx = (trendIdx + 1) % TRENDING_NICHES.length
+    const niche = TRENDING_NICHES[trendIdx]
     result.logEntries.push({
       id: uid(),
       simMinute: state.time.day * 1440 + minuteOfDay,
       timeLabel: timeLabel(state.time),
-      message: ev.message,
-      type: ev.revenueDelta > 0 ? 'success' : 'creative',
+      message: `📈 Trending on Etsy: ${niche.name}! Sales boost incoming.`,
+      type: 'success',
     })
+    result.creative = {
+      ...result.creative,
+      currentTrend: niche.name,
+      trendMultiplier: niche.multiplier,
+    }
   }
 
-  // ── Trading Office ────────────────────────────────────────────────────────
+  const currentTrend  = result.creative?.currentTrend  ?? state.creative.currentTrend
+  const trendMult     = result.creative?.trendMultiplier ?? state.creative.trendMultiplier
+  const activeTrend   = TRENDING_NICHES.find(n => n.name === currentTrend) ?? TRENDING_NICHES[0]
+
+  // ── Agent availability ──────────────────────────────────────────────────────
+  const reyaWorking   = workHours && state.agents.find(a => a.id === 'research_agent')?.state === 'working'
+  const daniWorking   = workHours && state.agents.find(a => a.id === 'design_agent')?.state === 'working'
+  const quinnWorking  = workHours && state.agents.find(a => a.id === 'qc_agent')?.state === 'working'
+  const ulyWorking    = workHours && state.agents.find(a => a.id === 'upload_agent')?.state === 'working'
+
+  // ── Build mutable product list ──────────────────────────────────────────────
+  const products: EtsyProduct[] = state.creative.products.map(p => ({ ...p }))
+
+  let cashDelta    = 0
+  let revenueDelta = 0
+  let salesDelta   = 0
+  let completedDelta = 0
+
+  // ── 1. RESEARCH: Reya accumulates work toward a new idea ───────────────────
+  if (reyaWorking) {
+    reserachAccum += dtSec
+    if (reserachAccum >= IDEA_INTERVAL) {
+      reserachAccum = 0
+      // Only add idea if we don't have too many in the pipeline
+      const inPipeline = products.filter(p => p.stage !== 'selling').length
+      if (inPipeline < 4) {
+        const newProduct = makeProduct('idea')
+        // Mark as trending if category matches
+        if (activeTrend.categories.includes(newProduct.category)) {
+          newProduct.trend = 'hot'
+        }
+        products.push(newProduct)
+        result.logEntries.push({
+          id: uid(),
+          simMinute: state.time.day * 1440 + minuteOfDay,
+          timeLabel: timeLabel(state.time),
+          message: `💡 Reya researched: "${newProduct.name}" — ${newProduct.category} ${newProduct.trend === 'hot' ? '🔥' : ''}`,
+          type: 'creative',
+        })
+      }
+    }
+  }
+
+  // ── 2. DESIGN: Dani works on the first 'idea' product ─────────────────────
+  if (daniWorking) {
+    const ideaProduct = products.find(p => p.stage === 'idea')
+    if (ideaProduct) {
+      ideaProduct.stageProgress += (dtSec / STAGE_DURATION.design) * 100
+      if (ideaProduct.stageProgress >= 100) {
+        ideaProduct.stage = 'qc'
+        ideaProduct.stageProgress = 0
+        result.logEntries.push({
+          id: uid(),
+          simMinute: state.time.day * 1440 + minuteOfDay,
+          timeLabel: timeLabel(state.time),
+          message: `✏️ Dani finished design: "${ideaProduct.name}" — ready for QC`,
+          type: 'creative',
+        })
+      }
+    }
+  }
+
+  // ── 3. QC: Quinn checks the first 'qc' product ────────────────────────────
+  if (quinnWorking) {
+    const qcProduct = products.find(p => p.stage === 'qc')
+    if (qcProduct) {
+      qcProduct.stageProgress += (dtSec / STAGE_DURATION.qc) * 100
+      if (qcProduct.stageProgress >= 100) {
+        // 85% pass rate — occasionally send back
+        if (Math.random() < 0.85) {
+          qcProduct.stage = 'listing'
+          qcProduct.stageProgress = 0
+          result.logEntries.push({
+            id: uid(),
+            simMinute: state.time.day * 1440 + minuteOfDay,
+            timeLabel: timeLabel(state.time),
+            message: `✅ Quinn approved: "${qcProduct.name}" — ready to list`,
+            type: 'creative',
+          })
+        } else {
+          // Send back to design
+          qcProduct.stage = 'idea'
+          qcProduct.stageProgress = 0
+          result.logEntries.push({
+            id: uid(),
+            simMinute: state.time.day * 1440 + minuteOfDay,
+            timeLabel: timeLabel(state.time),
+            message: `❌ Quinn rejected: "${qcProduct.name}" — back to Dani for revision`,
+            type: 'warning',
+          })
+        }
+      }
+    }
+  }
+
+  // ── 4. LISTING: Uly uploads the first 'listing' product ───────────────────
+  if (ulyWorking) {
+    const listProduct = products.find(p => p.stage === 'listing')
+    if (listProduct) {
+      listProduct.stageProgress += (dtSec / STAGE_DURATION.listing) * 100
+      if (listProduct.stageProgress >= 100) {
+        listProduct.stage = 'selling'
+        listProduct.stageProgress = 100
+        completedDelta++
+        result.logEntries.push({
+          id: uid(),
+          simMinute: state.time.day * 1440 + minuteOfDay,
+          timeLabel: timeLabel(state.time),
+          message: `🚀 Uly listed: "${listProduct.name}" — $${listProduct.price.toFixed(2)} on Etsy! ${listProduct.trend === 'hot' ? '🔥' : ''}`,
+          type: 'success',
+        })
+      }
+    }
+  }
+
+  // ── 5. PASSIVE SALES: all selling products earn revenue ───────────────────
+  const dtMin = dtSec / 60  // convert sim-seconds → sim-minutes
+  const sellingProducts = products.filter(p => p.stage === 'selling')
+
+  for (const product of sellingProducts) {
+    // Apply trend tag
+    if (activeTrend.categories.includes(product.category)) {
+      if (product.trend !== 'hot') product.trend = 'hot'
+    } else if (product.trend === 'hot') {
+      product.trend = 'cooling'
+    } else if (product.trend === 'cooling') {
+      product.trend = 'normal'
+    }
+
+    const chance = saleChancePerMinute(product, trendMult) * dtMin
+    if (Math.random() < chance) {
+      const earnedRaw = product.price * 0.92  // ~8% fees
+      product.salesCount++
+      product.revenue    += earnedRaw
+      product.views      += 3 + Math.floor(Math.random() * 12)
+      cashDelta          += earnedRaw
+      revenueDelta       += earnedRaw
+      salesDelta++
+
+      // Accumulate reviews (roughly 1 review per 12 sales)
+      if (product.salesCount % 12 === 0) {
+        product.reviewCount++
+        const newRating = 4.1 + Math.random() * 0.85  // 4.1–4.95
+        product.rating = (product.rating * (product.reviewCount - 1) + newRating) / product.reviewCount
+      }
+
+      // Only log notable sales (top products or first sale of a new listing)
+      const isBigSeller = product.salesCount <= 3 || product.salesCount % 25 === 0
+      if (isBigSeller || sellingProducts.length <= 5) {
+        result.logEntries.push({
+          id: uid(),
+          simMinute: state.time.day * 1440 + minuteOfDay,
+          timeLabel: timeLabel(state.time),
+          message: `🛒 Sale! "${product.name}" — +$${earnedRaw.toFixed(2)} ${product.trend === 'hot' ? '🔥' : ''}`,
+          type: 'success',
+        })
+      }
+    }
+  }
+
+  // ── 6. Update shop stats ─────────────────────────────────────────────────
+  if (cashDelta > 0 || completedDelta > 0 || result.logEntries.some(e => e.type === 'creative' || e.type === 'warning')) {
+    const cs = state.creative
+    const totalReviews = products.reduce((s, p) => s + p.reviewCount, 0)
+    const ratedProducts = products.filter(p => p.reviewCount > 0)
+    const shopRating = ratedProducts.length > 0
+      ? ratedProducts.reduce((s, p) => s + p.rating * p.reviewCount, 0) / Math.max(1, totalReviews)
+      : cs.shopRating
+
+    const totalSales = cs.mockSales + salesDelta
+    // Star Seller: need 20+ sales, 4.8+ rating → progress 0–100
+    const starSellerPct = Math.min(100, Math.round(
+      (Math.min(totalSales, 20) / 20) * 50 +
+      (Math.max(0, shopRating - 4.0) / 1.0) * 50
+    ))
+
+    const newRevenue = cs.dailyRevenue + revenueDelta
+    result.creative = {
+      ...result.creative,
+      cash:             cs.cash + cashDelta,
+      dailyRevenue:     newRevenue,
+      dailyProfit:      newRevenue - cs.dailyExpenses,
+      lifetimeProfit:   cs.lifetimeProfit + cashDelta,
+      mockSales:        totalSales,
+      completedProducts: cs.completedProducts + completedDelta,
+      draftsInProgress: products.filter(p => p.stage === 'idea' || p.stage === 'design').length,
+      pendingQC:        products.filter(p => p.stage === 'qc').length,
+      products:         products.slice(-30),   // keep max 30 (old selling products get archived)
+      shopRating:       +shopRating.toFixed(2),
+      totalReviews,
+      starSellerPct,
+    }
+    result.completedDelta += completedDelta + salesDelta
+  }
+
+  // ── 7. Trading ────────────────────────────────────────────────────────────
   tradeTimer -= dtSec
   if (workHours && tradeTimer <= 0) {
-    tradeTimer = 60 + Math.random() * 90  // 60–150 sec
+    tradeTimer = 60 + Math.random() * 90
 
     const ev = TRADE_EVENTS[tradeEventIdx % TRADE_EVENTS.length]
     tradeEventIdx++
 
     const tr = state.trading
-    const newPL = tr.dailyPL + ev.plDelta
+    const newPL      = tr.dailyPL + ev.plDelta
     const newBalance = tr.accountBalance + ev.plDelta
-    const newOpen = Math.max(0, tr.openTrades + ev.openDelta)
-    const newClosed = tr.closedTrades + ev.closeDelta
-    const newWins = ev.won === true ? tr.wins + 1 : tr.wins
-    const newLosses = ev.won === false ? tr.losses + 1 : tr.losses
-    const totalTrades = newWins + newLosses
-    const winRate = totalTrades > 0 ? Math.round((newWins / totalTrades) * 100) : tr.winRate
-    const newDrawdown = ev.plDelta < 0 ? Math.min(25, tr.drawdown + Math.abs(ev.plDelta) / 100) : Math.max(0, tr.drawdown - 0.5)
+    const newOpen    = Math.max(0, tr.openTrades + ev.openDelta)
+    const newClosed  = tr.closedTrades + ev.closeDelta
+    const newWins    = ev.won === true  ? tr.wins   + 1 : tr.wins
+    const newLosses  = ev.won === false ? tr.losses + 1 : tr.losses
+    const total      = newWins + newLosses
+    const winRate    = total > 0 ? Math.round((newWins / total) * 100) : tr.winRate
+    const newDD      = ev.plDelta < 0
+      ? Math.min(25, tr.drawdown + Math.abs(ev.plDelta) / 100)
+      : Math.max(0, tr.drawdown - 0.5)
 
-    const patch: Partial<TradingStats> = {
-      dailyPL: newPL,
-      accountBalance: newBalance,
-      openTrades: newOpen,
-      closedTrades: newClosed,
-      wins: newWins,
-      losses: newLosses,
-      winRate,
-      drawdown: newDrawdown,
-      ...(ev.mood ? { marketMood: ev.mood } : {}),
+    result.trading = {
+      dailyPL: newPL, accountBalance: newBalance,
+      openTrades: newOpen, closedTrades: newClosed,
+      wins: newWins, losses: newLosses, winRate, drawdown: newDD,
+      ...(ev.mood   ? { marketMood:   ev.mood   } : {}),
       ...(ev.action ? { traderAction: ev.action } : {}),
     }
-    result.trading = patch
     result.completedDelta += ev.closeDelta
     result.logEntries.push({
       id: uid(),
@@ -98,15 +306,21 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
     })
   }
 
-  // ── Daily reset at midnight ───────────────────────────────────────────────
-  if (minuteOfDay === 0) {
-    result.creative = { ...result.creative, dailyRevenue: 0, dailyExpenses: 85, dailyProfit: 0, mockSales: 0 }
-    result.trading = { ...result.trading, dailyPL: 0, openTrades: 0, closedTrades: 0, wins: 0, losses: 0 }
+  // ── 8. Daily reset at midnight ────────────────────────────────────────────
+  if (minuteOfDay < 1) {
+    result.creative = {
+      ...result.creative,
+      dailyRevenue: 0, dailyExpenses: 85, dailyProfit: 0,
+    }
+    result.trading = {
+      ...result.trading,
+      dailyPL: 0, openTrades: 0, closedTrades: 0, wins: 0, losses: 0,
+    }
     result.logEntries.push({
       id: uid(),
       simMinute: state.time.day * 1440,
       timeLabel: timeLabel(state.time),
-      message: `🌅 Day ${state.time.day + 1} begins! Resetting daily stats.`,
+      message: `🌅 Day ${state.time.day + 1} begins! Etsy shop open for business.`,
       type: 'info',
     })
   }

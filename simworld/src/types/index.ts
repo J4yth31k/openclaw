@@ -121,6 +121,26 @@ export interface WorldMap {
   buildings: Building[]
 }
 
+// ── Etsy shop ─────────────────────────────────────────────────────────────────
+
+export type ProductCategory = 'Templates' | 'Printables' | 'SVG' | 'Digital Art' | 'Notion' | 'Clip Art'
+export type ProductStage    = 'idea' | 'design' | 'qc' | 'listing' | 'selling'
+
+export interface EtsyProduct {
+  id: string
+  name: string
+  category: ProductCategory
+  price: number
+  stage: ProductStage
+  stageProgress: number   // 0–100, progress through current stage
+  salesCount: number
+  revenue: number
+  views: number
+  trend: 'hot' | 'normal' | 'cooling'
+  rating: number          // 0–5
+  reviewCount: number
+}
+
 // ── Business / financials ────────────────────────────────────────────────────
 
 export interface TradeRecord {
@@ -140,11 +160,19 @@ export interface CreativeStudioStats {
   dailyExpenses: number
   dailyProfit: number
   lifetimeProfit: number
+  // counts (derived from products[] but kept for quick access)
   draftsInProgress: number
   completedProducts: number
   pendingQC: number
-  mockSales: number
+  mockSales: number          // total all-time sales
   recentIdeas: string[]
+  // Etsy shop
+  products: EtsyProduct[]
+  shopRating: number         // weighted avg 0–5
+  totalReviews: number
+  starSellerPct: number      // 0–100 progress toward Star Seller badge
+  currentTrend: string       // active trending niche
+  trendMultiplier: number    // 1.0–2.5 sales-rate boost
 }
 
 export interface TradingStats {
