@@ -5,50 +5,70 @@ import AgentInspector from './components/AgentInspector'
 import ProfitPanel from './components/ProfitPanel'
 import TradingPanel from './components/TradingPanel'
 import EventLog from './components/EventLog'
+import HQPanel from './components/HQPanel'
+import CommandPanel from './components/CommandPanel'
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
 function Toolbar() {
-  const time = useSimStore(s => s.time)
-  const setSpeed   = useSimStore(s => s.setSpeed)
+  const time      = useSimStore(s => s.time)
+  const setSpeed  = useSimStore(s => s.setSpeed)
   const togglePause = useSimStore(s => s.togglePause)
   const save  = useSimStore(s => s.save)
   const load  = useSimStore(s => s.load)
   const reset = useSimStore(s => s.reset)
+  const agents = useSimStore(s => s.agents)
 
   const h = String(time.hour).padStart(2, '0')
   const m = String(Math.floor(time.minute)).padStart(2, '0')
 
+  const avengersActive = agents.filter(a => a.isAvenger && a.state === 'working').length
+  const totalAvengers  = agents.filter(a => a.isAvenger).length
+
   const btn = (active = false): React.CSSProperties => ({
-    padding: '4px 10px', borderRadius: 6, border: 'none',
-    background: active ? '#3a4bff' : '#2a2d3a',
-    color: '#e0e6f0', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+    padding: '3px 9px', borderRadius: 5, border: 'none',
+    background: active ? '#3a4bff' : '#1e2130',
+    color: '#e0e6f0', cursor: 'pointer', fontSize: 10, fontWeight: 600,
   })
 
   return (
     <div style={{
-      height: 40, background: 'rgba(10,12,20,0.98)', borderBottom: '1px solid #2a2d3a',
+      height: 40, background: 'rgba(4,6,14,0.99)',
+      borderBottom: '1px solid rgba(0,212,255,0.1)',
       display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', flexShrink: 0,
     }}>
-      <span style={{ fontSize: 14, fontWeight: 700, color: '#7f8fff', letterSpacing: 1, marginRight: 6 }}>
+      <span style={{ fontSize: 14, fontWeight: 700, background: 'linear-gradient(90deg,#00d4ff,#7c3aed)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: 1, marginRight: 4 }}>
         🌍 SimWorld
       </span>
-      <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#f5c842', minWidth: 120 }}>
+      <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#f5c842', minWidth: 120 }}>
         🕐 Day {time.day} {h}:{m}
       </span>
       <button style={btn(time.paused)} onClick={togglePause}>
         {time.paused ? '▶ Play' : '⏸ Pause'}
       </button>
-      <span style={{ color: '#4a5060', fontSize: 11 }}>Speed:</span>
+      <span style={{ color: '#2a3040', fontSize: 10 }}>Speed:</span>
       {[1, 2, 4, 8].map(spd => {
         const active = Math.round(800 / time.speed) === spd
         return <button key={spd} style={btn(active)} onClick={() => setSpeed(800 / spd)}>{spd}×</button>
       })}
+
+      {/* Avengers status pill */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 5, padding: '2px 8px',
+        border: '1px solid rgba(124,58,237,0.3)', borderRadius: 4,
+        background: 'rgba(124,58,237,0.06)', marginLeft: 4,
+      }}>
+        <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#10b981' }} />
+        <span style={{ fontSize: 9, color: '#a78bfa', fontFamily: 'monospace' }}>
+          🛡️ {avengersActive}/{totalAvengers} on duty
+        </span>
+      </div>
+
       <div style={{ flex: 1 }} />
       <button style={btn()} onClick={save}>💾 Save</button>
       <button style={btn()} onClick={load}>📂 Load</button>
       <button
-        style={{ ...btn(), background: '#3a1515', color: '#e74c3c' }}
+        style={{ ...btn(), background: '#2a1010', color: '#e74c3c' }}
         onClick={() => { if (confirm('Reset simulation?')) reset() }}
       >
         ↺ Reset
@@ -59,23 +79,33 @@ function Toolbar() {
 
 // ── Sidebar tabs ──────────────────────────────────────────────────────────────
 
-type Tab = 'agents' | 'profit' | 'trading'
+type Tab = 'agents' | 'profit' | 'trading' | 'hq' | 'command'
 
 const TAB_LABELS: Record<Tab, string> = {
-  agents:  '👥 Agents',
-  profit:  '📊 Profit',
-  trading: '📈 Trading',
+  agents:  '👥',
+  profit:  '📊',
+  trading: '📈',
+  hq:      '🛡️',
+  command: '⚡',
+}
+
+const TAB_TITLES: Record<Tab, string> = {
+  agents:  'Agents',
+  profit:  'Profit',
+  trading: 'Trading',
+  hq:      'HQ',
+  command: 'Command',
 }
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('profit')
+  const [tab, setTab] = useState<Tab>('hq')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', userSelect: 'none', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', userSelect: 'none', overflow: 'hidden', background: '#020408' }}>
       <Toolbar />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* World canvas — takes all remaining horizontal space */}
+        {/* World canvas */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <WorldCanvas />
@@ -83,23 +113,30 @@ export default function App() {
           <EventLog />
         </div>
 
-        {/* Right sidebar — fixed 270px */}
-        <div style={{ width: 270, flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #2a2d3a', overflow: 'hidden' }}>
+        {/* Right sidebar — fixed 280px */}
+        <div style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(0,212,255,0.08)', overflow: 'hidden' }}>
           {/* Tab strip */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #2a2d3a', flexShrink: 0 }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, background: 'rgba(4,6,14,0.99)' }}>
             {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
+                title={TAB_TITLES[t]}
                 style={{
-                  flex: 1, border: 'none', padding: '7px 4px',
-                  background: tab === t ? 'rgba(255,255,255,0.07)' : 'transparent',
-                  color: tab === t ? '#e0e6f0' : '#5a6070',
-                  fontSize: 10, fontWeight: tab === t ? 700 : 400,
-                  cursor: 'pointer', borderBottom: tab === t ? '2px solid #5060ff' : '2px solid transparent',
+                  flex: 1, border: 'none', padding: '7px 2px',
+                  background: tab === t ? 'rgba(255,255,255,0.05)' : 'transparent',
+                  color: tab === t
+                    ? (t === 'hq' ? '#a78bfa' : t === 'command' ? '#00d4ff' : '#e0e6f0')
+                    : '#3a4860',
+                  fontSize: 14, cursor: 'pointer',
+                  borderBottom: tab === t
+                    ? `2px solid ${t === 'hq' ? '#7c3aed' : t === 'command' ? '#00d4ff' : '#5060ff'}`
+                    : '2px solid transparent',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
                 }}
               >
                 {TAB_LABELS[t]}
+                <span style={{ fontSize: 7, fontWeight: tab === t ? 700 : 400, letterSpacing: 0.5 }}>{TAB_TITLES[t]}</span>
               </button>
             ))}
           </div>
@@ -109,6 +146,8 @@ export default function App() {
             {tab === 'agents'  && <AgentInspector />}
             {tab === 'profit'  && <ProfitPanel />}
             {tab === 'trading' && <TradingPanel />}
+            {tab === 'hq'      && <HQPanel />}
+            {tab === 'command' && <CommandPanel />}
           </div>
         </div>
       </div>

@@ -228,13 +228,20 @@ function drawAgent(ctx: CanvasRenderingContext2D, agent: Agent, selected: boolea
 
   ctx.restore()
 
+  // Avengers emoji badge
+  if (agent.emoji) {
+    ctx.font = '13px system-ui'
+    ctx.textAlign = 'center'
+    ctx.fillText(agent.emoji, x, y - 24 + bounce)
+  }
+
   // Name label
   ctx.font = '10px system-ui'
   ctx.textAlign = 'center'
   ctx.fillStyle = '#fff'
   ctx.shadowColor = 'rgba(0,0,0,0.8)'
   ctx.shadowBlur = 3
-  ctx.fillText(agent.name, x, y - 32 + bounce)
+  ctx.fillText(agent.name, x, y - 34 + bounce)
   ctx.shadowBlur = 0
 
   // Speech bubble

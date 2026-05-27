@@ -1,12 +1,23 @@
 import { useSimStore } from '../store'
 
 const ROLE_LABELS: Record<string, string> = {
-  research_agent: 'Research Agent',
-  design_agent:   'Design Agent',
-  qc_agent:       'QC Agent',
-  upload_agent:   'Upload Agent',
-  trader_agent:   'Trader Agent',
-  risk_manager:   'Risk Manager',
+  research_agent:     'Research Agent',
+  design_agent:       'Design Agent',
+  qc_agent:           'QC Agent',
+  upload_agent:       'Upload Agent',
+  trader_agent:       'Trader Agent',
+  risk_manager:       'Risk Manager',
+  tech_analyst:       'Tech Analyst',
+  fundamentals_agent: 'Fundamentals',
+  sentiment_agent:    'Sentiment',
+  orderflow_agent:    'Order Flow',
+  correlation_agent:  'Correlations',
+  director_agent:     'Director',
+  tradeideas_agent:   'Trade Ideas',
+  news_agent:         'News Intel',
+  webhook_agent:      'Webhooks',
+  hq_risk_manager:    'Risk Mgmt',
+  backtest_agent:     'Backtesting',
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -69,13 +80,18 @@ export default function AgentInspector() {
               borderRadius: 6,
               cursor: 'pointer',
               background: a.id === selectedId ? 'rgba(255,255,255,0.08)' : 'transparent',
-              marginBottom: 2,
+              marginBottom: 1,
               transition: 'background 0.15s',
+              borderLeft: a.isAvenger ? `2px solid ${a.color}` : 'none',
+              paddingLeft: a.isAvenger ? 4 : 6,
             }}
           >
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: a.color, flexShrink: 0 }} />
-            <span style={{ fontSize: 11, color: a.id === selectedId ? '#fff' : '#b0b8c0' }}>{a.name}</span>
-            <span style={{ fontSize: 10, marginLeft: 'auto', color: '#6a7080' }}>{MOOD_EMOJI[a.mood]}</span>
+            {a.emoji
+              ? <span style={{ fontSize: 13, flexShrink: 0 }}>{a.emoji}</span>
+              : <div style={{ width: 9, height: 9, borderRadius: '50%', background: a.color, flexShrink: 0 }} />
+            }
+            <span style={{ fontSize: 10, color: a.id === selectedId ? '#fff' : '#b0b8c0' }}>{a.name}</span>
+            <span style={{ fontSize: 9, marginLeft: 'auto', color: '#6a7080' }}>{MOOD_EMOJI[a.mood]}</span>
           </div>
         ))}
       </div>
@@ -88,10 +104,16 @@ export default function AgentInspector() {
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <div style={{ width: 24, height: 24, borderRadius: '50%', background: agent.color, border: `2px solid ${agent.accentColor}` }} />
+              {agent.emoji
+                ? <span style={{ fontSize: 24 }}>{agent.emoji}</span>
+                : <div style={{ width: 24, height: 24, borderRadius: '50%', background: agent.color, border: `2px solid ${agent.accentColor}` }} />
+              }
               <div>
-                <div style={{ fontWeight: 700, color: '#fff', fontSize: 13 }}>{agent.name}</div>
-                <div style={{ color: '#6a7080', fontSize: 10 }}>{ROLE_LABELS[agent.role]}</div>
+                <div style={{ fontWeight: 700, color: agent.color, fontSize: 13 }}>{agent.name}</div>
+                <div style={{ color: '#6a7080', fontSize: 10 }}>{ROLE_LABELS[agent.role] ?? agent.role}</div>
+                {agent.isAvenger && (
+                  <div style={{ fontSize: 8, color: '#7c3aed', fontWeight: 600, marginTop: 1 }}>AVENGERS HQ</div>
+                )}
               </div>
             </div>
 
@@ -139,6 +161,18 @@ export default function AgentInspector() {
                 marginBottom: 6,
               }}>
                 "{agent.speech}"
+              </div>
+            )}
+
+            {/* Avengers-specific stats */}
+            {agent.isAvenger && agent.agentSkill && (
+              <div style={{ marginTop: 6, padding: '6px 8px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.18)' }}>
+                <div style={{ fontSize: 9, color: '#7c3aed', fontWeight: 600, marginBottom: 4 }}>{agent.agentSkill.name} — Lv{agent.agentSkill.level}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#5a6070' }}>
+                  <span>🎯 Acc: <span style={{ color: '#c8ccd8' }}>{Math.round((agent.accuracy ?? 0) * 100)}%</span></span>
+                  <span>📊 {agent.signalsHit}/{agent.signalsGiven}</span>
+                  <span>🔥 {agent.streak ?? 0} streak</span>
+                </div>
               </div>
             )}
 

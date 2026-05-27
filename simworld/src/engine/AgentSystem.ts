@@ -1,7 +1,7 @@
 import type { Agent, SimState, GameTime } from '../types'
 import { simMinuteOfDay, timeLabel } from './TimeSystem'
 import { buildPath } from './MovementSystem'
-import { worldMap, AGENT_DEFS } from '../data/worldData'
+import { worldMap, ALL_AGENT_DEFS } from '../data/worldData'
 import { AGENT_SPEECHES } from '../data/businessData'
 import { bus } from './EventBus'
 import type { Vec2 } from '../types'
@@ -137,7 +137,7 @@ export function updateAgent(
 
     case 'commuting_home':
       if (agent.path.length === 0 || minuteOfDay >= HOME_MINUTE) {
-        const def = AGENT_DEFS.find(d => d.id === agent.id)
+        const def = ALL_AGENT_DEFS.find(d => d.id === agent.id)
         if (def) {
           patches.state = 'arriving_home'
           patches.path = buildPath(agent.gridPos, def.spawnTile)
@@ -189,12 +189,24 @@ function pickNextRoom(agent: Agent): Vec2 {
 
 function roleTaskName(role: string): string {
   const map: Record<string, string> = {
-    research_agent: 'Researching trends',
-    design_agent: 'Designing product',
-    qc_agent: 'Quality checking',
-    upload_agent: 'Uploading drafts',
-    trader_agent: 'Analyzing market',
-    risk_manager: 'Reviewing risk',
+    research_agent:    'Researching trends',
+    design_agent:      'Designing product',
+    qc_agent:          'Quality checking',
+    upload_agent:      'Uploading drafts',
+    trader_agent:      'Analyzing market',
+    risk_manager:      'Reviewing risk',
+    // Avengers
+    tech_analyst:      'Scanning EMAs & MACD',
+    fundamentals_agent:'Tracking Fed & ECB',
+    sentiment_agent:   'Reading Fear & Greed',
+    orderflow_agent:   'Scanning order books',
+    correlation_agent: 'Running cross-asset matrix',
+    director_agent:    'Inspecting agents',
+    tradeideas_agent:  'Scoring confluence',
+    news_agent:        'Parsing headlines',
+    webhook_agent:     'Monitoring webhooks',
+    hq_risk_manager:   'Sizing positions',
+    backtest_agent:    'Smashing history data',
   }
   return map[role] ?? 'Working'
 }

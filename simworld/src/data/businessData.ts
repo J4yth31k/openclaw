@@ -85,4 +85,16 @@ export const AGENT_SPEECHES: Record<string, string[]> = {
   upload_agent: ['Uploading now! 🚀', 'Mock listing live!', 'SEO tags added!', 'Draft ready to go!'],
   trader_agent: ['Watching the charts 👀', 'ICT setup forming!', 'Entry confirmed!', 'Risk looks good!'],
   risk_manager: ['Risk approved ✅', 'Too much drawdown ⚠️', 'Checking SL levels...', 'Position size OK.'],
+  // ── Avengers ────────────────────────────────────────────────────────────────
+  tech_analyst:      ['EMAs aligned! 🦾', 'MACD cross confirmed!', 'RSI approaching OB...', 'Bollinger squeeze!'],
+  fundamentals_agent:['Fed holds rates! 🛡️', 'NFP beats forecast!', 'ECB hawkish pivot...', 'Rates differential widening!'],
+  sentiment_agent:   ['Fear & Greed at 72! 🔮', 'Whales accumulating!', 'Options flow bullish!', 'Social sentiment shifting...'],
+  orderflow_agent:   ['Order book imbalance! 👁️', 'VWAP computed!', 'Large bid wall forming!', 'Liquidations incoming!'],
+  correlation_agent: ['Bifrost open! ⚡', 'DXY diverging!', 'VIX spiking — be careful!', 'Gold-USD correlation flipped!'],
+  director_agent:    ['Assemble! 🎯', 'Status check in progress...', 'Colony morale rising!', 'All agents report!'],
+  tradeideas_agent:  ['Setup confirmed! 🕷️', 'Confluence: 5/6 ✅', 'Entry zone mapped!', 'Filtering noise...'],
+  news_agent:        ['Breaking news! 🕸️', 'Headline parsed!', 'Sentiment: BULLISH!', 'High-impact event incoming!'],
+  webhook_agent:     ['Signal received! 🏹', 'Webhook fired!', 'Alert forwarded!', 'Pine script triggered!'],
+  hq_risk_manager:   ['Position sized! 🔯', 'Monte Carlo: green!', 'Kelly criterion OK!', 'Drawdown within limits ✅'],
+  backtest_agent:    ['SMASH! History crunched! 💪', '89% win rate found!', 'Optimizing params...', 'Walk-forward passed!'],
 }

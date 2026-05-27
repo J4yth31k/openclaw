@@ -3,9 +3,9 @@
 export interface Vec2 { x: number; y: number }
 
 export type AgentId = string
-export type BuildingId = 'home1' | 'home2' | 'creative_studio' | 'trading_office'
+export type BuildingId = 'home1' | 'home2' | 'hq_quarters' | 'creative_studio' | 'trading_office' | 'avengers_hq'
 export type RoomId = string
-export type BusinessId = 'creative_studio' | 'trading_office'
+export type BusinessId = 'creative_studio' | 'trading_office' | 'avengers_hq'
 
 export type AgentRole =
   | 'research_agent'
@@ -14,6 +14,18 @@ export type AgentRole =
   | 'upload_agent'
   | 'trader_agent'
   | 'risk_manager'
+  // ── Avengers roles ───────────────────────────────────────────────────────────
+  | 'tech_analyst'
+  | 'fundamentals_agent'
+  | 'sentiment_agent'
+  | 'orderflow_agent'
+  | 'correlation_agent'
+  | 'director_agent'
+  | 'tradeideas_agent'
+  | 'news_agent'
+  | 'webhook_agent'
+  | 'hq_risk_manager'
+  | 'backtest_agent'
 
 export type AgentState =
   | 'sleeping'
@@ -31,6 +43,20 @@ export type Mood = 'happy' | 'neutral' | 'stressed' | 'excited' | 'tired'
 export type TileType = 'grass' | 'road' | 'path' | 'building_floor' | 'sidewalk'
 
 // ── Agent ────────────────────────────────────────────────────────────────────
+
+export interface AgentNeeds {
+  dataFreshness: number   // 0–100
+  apiHealth: number       // 0–100
+  rest: number            // 0–100
+  morale: number          // 0–100
+}
+
+export interface AgentSkill {
+  name: string
+  level: number
+  xp: number
+  xpToNext: number
+}
 
 export interface Agent {
   id: AgentId
@@ -53,6 +79,16 @@ export interface Agent {
   speech: string | null
   speechTimer: number     // sim-seconds remaining
   currentRoom: RoomId | null
+  // ── Avengers-specific (optional, Avengers agents only) ────────────────────
+  emoji?: string
+  agentNeeds?: AgentNeeds
+  agentSkill?: AgentSkill
+  accuracy?: number       // 0–1 hit rate
+  signalsGiven?: number
+  signalsHit?: number
+  streak?: number
+  bestStreak?: number
+  isAvenger?: boolean
 }
 
 // ── World ────────────────────────────────────────────────────────────────────
