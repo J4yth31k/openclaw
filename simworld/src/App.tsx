@@ -9,6 +9,7 @@ import HQPanel from './components/HQPanel'
 import CommandPanel from './components/CommandPanel'
 import UpgradesPanel from './components/UpgradesPanel'
 import LaunchPlanPanel from './components/LaunchPlanPanel'
+import N8nPlanPanel from './components/N8nPlanPanel'
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,39 @@ const TAB_TITLES: Record<Tab, string> = {
   launch:  'Launch',
 }
 
+// ── Launch sub-tabs (Etsy Plan | n8n Automation) ─────────────────────────────
+
+function LaunchSubTabs() {
+  const [sub, setSub] = useState<'etsy' | 'n8n'>('etsy')
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, background: 'rgba(4,6,14,0.99)' }}>
+        {([
+          { id: 'etsy', label: '🧶 Etsy Plan' },
+          { id: 'n8n',  label: '⚡ n8n Auto' },
+        ] as const).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setSub(t.id)}
+            style={{
+              flex: 1, border: 'none', padding: '6px 4px', fontSize: 9, fontWeight: 700,
+              background: sub === t.id ? 'rgba(255,255,255,0.05)' : 'transparent',
+              color: sub === t.id ? (t.id === 'n8n' ? '#00d4ff' : '#f97316') : '#3a4860',
+              cursor: 'pointer',
+              borderBottom: sub === t.id ? `2px solid ${t.id === 'n8n' ? '#00d4ff' : '#f97316'}` : '2px solid transparent',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {sub === 'etsy' ? <LaunchPlanPanel /> : <N8nPlanPanel />}
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('hq')
 
@@ -155,7 +189,7 @@ export default function App() {
             {tab === 'trading'  && <TradingPanel />}
             {tab === 'hq'       && <HQPanel />}
             {tab === 'command'  && <CommandPanel />}
-            {tab === 'launch'   && <LaunchPlanPanel />}
+            {tab === 'launch'   && <LaunchSubTabs />}
           </div>
         </div>
       </div>
