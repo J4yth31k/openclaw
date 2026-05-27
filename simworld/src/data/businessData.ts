@@ -145,6 +145,7 @@ export function makeInitialCreative(): CreativeStudioStats {
     recentIdeas:      ['Minimal Resume Pack', 'Boho Moon SVG', 'Ultimate Life OS'],
     products,
     ownedUpgrades:    [],
+    launchProgress:   [],
     shopRating:       4.7,
     totalReviews:     Math.floor(totalSales / 8),
     starSellerPct:    68,

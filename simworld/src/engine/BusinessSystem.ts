@@ -357,5 +357,80 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
     })
   }
 
+  // ── 9. Launch plan: agents work through real Etsy tasks over 2-3 sim days ────
+  {
+    const done     = new Set(state.creative.launchProgress ?? [])
+    const newly: string[] = []
+    const t        = state.time
+    const completed = result.creative?.completedProducts ?? state.creative.completedProducts
+    const sales     = result.creative?.mockSales ?? state.creative.mockSales
+    const reviews   = result.creative?.totalReviews ?? state.creative.totalReviews
+
+    // Helper: mark item done + emit event log entry once
+    function launch(id: string, msg: string, agentId?: string) {
+      if (done.has(id)) return
+      newly.push(id)
+      done.add(id)
+      result.logEntries.push({
+        id: uid(), simMinute: simMin, timeLabel: timeLabel(t),
+        message: `🧶 ${msg}`, type: 'creative', agentId,
+      })
+    }
+
+    // ── FOUNDATION (Day 1 morning) ────────────────────────────────────────
+    if (t.day >= 1 && t.hour >= 9) {
+      launch('etsy_account',  'Reya registered the OpenClaw Crafts Etsy seller account!',       'research_agent')
+      launch('shop_name',     'Shop name "OpenClaw Crafts" confirmed — available on Etsy!',     'research_agent')
+      launch('canva_pro',     'Dani set up the Canva Pro Brand Kit — colors & fonts locked in!','design_agent')
+    }
+    if (t.day >= 1 && t.hour >= 11) {
+      launch('competitor',    'Reya analyzed 10 top planner shops — price & tag strategy mapped!', 'research_agent')
+    }
+    if (completed >= 18) {
+      launch('shop_banner',   'Dani designed the shop banner — lifestyle planner aesthetic!',    'design_agent')
+    }
+    if (t.day >= 1 && t.hour >= 14) {
+      launch('about_section', 'Uly wrote the shop About page with full SEO keywords!',          'upload_agent')
+    }
+
+    // ── FIRST PRODUCTS (Day 1–2, driven by pipeline completions) ─────────
+    if (completed >= 18)  launch('daily_planner',     'Dani completed Daily Planner Pages — A4 + US Letter! ✏️',       'design_agent')
+    if (completed >= 19)  launch('weekly_tracker',    'Dani designed the Weekly Habit Tracker!',                        'design_agent')
+    if (completed >= 20)  launch('budget_tracker',    'Budget Tracker + Bill Pay Calendar bundle ready!',               'design_agent')
+    if (completed >= 21)  launch('gratitude_journal', 'Gratitude Journal Pages — 30-day edition complete! 🌸',          'design_agent')
+    if (completed >= 22)  launch('goal_workbook',     'Goal Setting Workbook with vision board page — done!',           'design_agent')
+    if (completed >= 19)  launch('mockups',           'Quinn finalized iPad + desk mockup images for all listings! 🖼️', 'qc_agent')
+
+    // ── SEO & LISTINGS (Day 2, driven by time + pipeline count) ──────────
+    if (t.day >= 2 && t.hour >= 9)  launch('keyword_research', 'Reya mapped low-competition, high-volume planner keywords! 🔎', 'research_agent')
+    if (t.day >= 2 && t.hour >= 10) launch('erank',            'eRank free tier installed — keyword data feeding in!',          'research_agent')
+    if (completed >= 20)            launch('titles',            'Uly wrote SEO-optimized titles — keyword-first format!',        'upload_agent')
+    if (completed >= 21)            launch('tags',              'Uly filled all 13 tags on every listing!',                      'upload_agent')
+    if (completed >= 22)            launch('pricing',           'Uly set prices: singles $3.99–$6.99, bundles $9.99–$14.99',    'upload_agent')
+    if (completed >= 22 && t.day >= 2) launch('descriptions',  'Uly wrote keyword-rich descriptions — "instant download" in every listing!', 'upload_agent')
+
+    // ── FREE TRAFFIC (Day 2–3) ─────────────────────────────────────────────
+    if (t.day >= 2 && t.hour >= 14) launch('pinterest_biz',   'Reya created Pinterest Business account + Rich Pins enabled! 📌', 'research_agent')
+    if (t.day >= 3 && t.hour >= 9)  launch('pinterest_pins',  'Reya pinned all products — 3 pins per listing, scheduled!',      'research_agent')
+    if (t.day >= 3 && t.hour >= 10) launch('pinterest_boards','Reya built SEO-targeted boards: "Daily Planner Printables" etc.', 'research_agent')
+    if (t.day >= 3 && t.hour >= 11) launch('instagram',       'Dani launched the OpenClaw Instagram — lifestyle mockups live! 📸','design_agent')
+    if (t.day >= 3 && t.hour >= 12) launch('etsy_share',      'Uly shared all listings via Etsy\'s social tools — shop announced!','upload_agent')
+
+    // ── SCALE (Day 3+ / milestone-driven) ─────────────────────────────────
+    if (sales > 1059)               launch('first_sale',     '🎉 First NEW product sale landed! Buyer messaged for a review!', undefined)
+    if (completed >= 25)            launch('bundles',        'Dani bundled top 3 planners → $12.99 Ultimate Planner Pack! 🎁', 'design_agent')
+    if (reviews > 130)              launch('reviews',        'Uly sent review follow-ups — response rate +40%!',               'upload_agent')
+    if (t.day >= 4)                 launch('etsy_ads_test',  'Test Etsy Ads at $1/day started — 30-day experiment running! 📢', undefined)
+    if (completed >= 28)            launch('seasonal_packs', 'Dani launched Back-to-School seasonal collection! 🏫',           'design_agent')
+    if (completed >= 30)            launch('new_products',   '30 listings milestone! Shop is publishing 2–3 new designs/week!', 'research_agent')
+
+    if (newly.length > 0) {
+      result.creative = {
+        ...result.creative,
+        launchProgress: [...(state.creative.launchProgress ?? []), ...newly],
+      }
+    }
+  }
+
   return result
 }

@@ -203,6 +203,7 @@ export interface CreativeStudioStats {
   // Etsy shop
   products: EtsyProduct[]
   ownedUpgrades: OwnedUpgrade[]
+  launchProgress: string[]     // ids of launch-plan items completed by agents
   shopRating: number         // weighted avg 0–5
   totalReviews: number
   starSellerPct: number      // 0–100 progress toward Star Seller badge
