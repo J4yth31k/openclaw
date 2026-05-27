@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "simworld",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5174"],
+      "cwd": "/Users/jjplatt/Downloads/forex_scalper_bot/simworld",
+      "port": 5174
+    }
+  ]
+}

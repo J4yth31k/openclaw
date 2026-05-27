@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(open /Users/jjplatt/Downloads/forex_scalper_bot/avengers_hq_unified.html)",
+      "Bash(npm run *)",
+      "Bash(git -C /Users/jjplatt/Downloads/forex_scalper_bot add market-data-service/src/indicators.ts market-data-service/src/webhook/agentBridge.ts)",
+      "Bash(git -C /Users/jjplatt/Downloads/forex_scalper_bot commit -m ' *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('agents/ict_pipeline.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('agents/ict_pipeline.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('agents/hawkeye.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('agents/agent_api.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(git -C /Users/jjplatt/Downloads/forex_scalper_bot add agents/ict_pipeline.py agents/hawkeye.py agents/agent_api.py)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('scripts:', list\\(d.get\\('scripts',{}\\).keys\\(\\)\\)\\); print\\('start:', d.get\\('scripts',{}\\).get\\('start',''\\)\\)\")",
+      "Bash(git -C /Users/jjplatt/Downloads/forex_scalper_bot add market-data-service/Dockerfile market-data-service/docker-start.sh requirements.txt)"
+    ]
+  }
+}
