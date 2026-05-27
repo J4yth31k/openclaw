@@ -48,11 +48,34 @@ export function buildWebhookRouter(): Router {
   router.get('/health', (_req, res) => {
     res.json({
       ok:              true,
+      filterVersion:   '2.1.0',     // confirms new filter code is live
       discord:         !!(DISCORD_WEBHOOK_URL || (DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID)),
       discordMode:     DISCORD_BOT_TOKEN ? 'bot' : DISCORD_WEBHOOK_URL ? 'webhook' : 'none',
       alertLog:        ALERT_LOG_PATH,
       secretProtected: !!WEBHOOK_SECRET,
     });
+  });
+
+  /** GET /webhook/test?symbol=ES1!&action=BUY&price=5250 — fire a dry-run analysis (no Discord) */
+  router.get('/test', async (req: Request, res: Response) => {
+    const symbol    = String(req.query['symbol']    ?? 'ES1!');
+    const action    = String(req.query['action']    ?? 'BUY') as TradingViewAlert['action'];
+    const price     = parseFloat(String(req.query['price'] ?? '5250'));
+    const timeframe = String(req.query['tf']        ?? '1');
+
+    const fakeAlert: TradingViewAlert = {
+      symbol, action, price, timeframe,
+      rsi: 48, atr: 8.5, ema21: 5240, ema55: 5220,
+      vwap: 5245, prev_high: 5280, prev_low: 5210,
+      stoch_k: 35, stoch_d: 30, ribbon_bull: true,
+      rsi_context: 'mid', level_hint: 'above_VWAP',
+      strategy: 'OpenClaw_v2', tier: 'free',
+    };
+    const { getSessionForSymbol } = await import('./session');
+    const session  = getSessionForSymbol(symbol);
+    const { getAgentAnalysis } = await import('./agentBridge');
+    const analysis = await getAgentAnalysis(fakeAlert, session);
+    res.json({ symbol, action, price, session: session.name, analysis });
   });
 
   return router;

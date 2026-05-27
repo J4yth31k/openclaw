@@ -97,7 +97,13 @@ app.get('/api/market/contracts', (_req, res) => {
 
 /** GET /api/health */
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, providerName: provider.name, ...provider.getStatus() });
+  res.json({
+    ok:           true,
+    version:      '2.1.0',          // bump each deploy to confirm new code is live
+    build:        '2026-05-27',
+    providerName: provider.name,
+    ...provider.getStatus(),
+  });
 });
 
 // ─── TradingView UDF datafeed ────────────────────────────────────────────────
