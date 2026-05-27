@@ -121,6 +121,40 @@ export interface WorldMap {
   buildings: Building[]
 }
 
+// ── Upgrades ─────────────────────────────────────────────────────────────────
+
+export type UpgradeCategory = 'tools' | 'agent' | 'ads' | 'milestone'
+
+export interface UpgradeEffect {
+  saleRateBoost?: number       // additive fraction per level (0.2 = +20%)
+  designSpeedBoost?: number    // fraction faster per level (0.4 = 2× faster at level 1)
+  qcSpeedBoost?: number
+  listingSpeedBoost?: number
+  qcPassBoost?: number         // additive to base 0.85 pass rate per level
+  ideaSpeedBoost?: number      // fraction faster per level (0.25 = 25% sooner)
+  viewsBoost?: number          // fraction more views per level
+  maxProductsBoost?: number    // raise pipeline cap by this per level
+  dailyCost?: number           // extra $/sim-day (ads spend)
+}
+
+export interface UpgradeDef {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: UpgradeCategory
+  cost: number
+  maxLevel: number
+  requires?: string
+  effect: UpgradeEffect
+}
+
+export interface OwnedUpgrade {
+  id: string
+  level: number
+  purchasedAt: number          // sim-minute
+}
+
 // ── Etsy shop ─────────────────────────────────────────────────────────────────
 
 export type ProductCategory = 'Templates' | 'Printables' | 'SVG' | 'Digital Art' | 'Notion' | 'Clip Art'
@@ -168,6 +202,7 @@ export interface CreativeStudioStats {
   recentIdeas: string[]
   // Etsy shop
   products: EtsyProduct[]
+  ownedUpgrades: OwnedUpgrade[]
   shopRating: number         // weighted avg 0–5
   totalReviews: number
   starSellerPct: number      // 0–100 progress toward Star Seller badge

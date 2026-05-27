@@ -7,6 +7,8 @@ import TradingPanel from './components/TradingPanel'
 import EventLog from './components/EventLog'
 import HQPanel from './components/HQPanel'
 import CommandPanel from './components/CommandPanel'
+import UpgradesPanel from './components/UpgradesPanel'
+import LaunchPlanPanel from './components/LaunchPlanPanel'
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
@@ -79,22 +81,26 @@ function Toolbar() {
 
 // ── Sidebar tabs ──────────────────────────────────────────────────────────────
 
-type Tab = 'agents' | 'profit' | 'trading' | 'hq' | 'command'
+type Tab = 'agents' | 'profit' | 'upgrades' | 'trading' | 'hq' | 'command' | 'launch'
 
 const TAB_LABELS: Record<Tab, string> = {
   agents:  '👥',
   profit:  '📊',
+  upgrades:'🔧',
   trading: '📈',
   hq:      '🛡️',
   command: '⚡',
+  launch:  '🧶',
 }
 
 const TAB_TITLES: Record<Tab, string> = {
   agents:  'Agents',
   profit:  'Profit',
+  upgrades:'Upgrades',
   trading: 'Trading',
   hq:      'HQ',
   command: 'Command',
+  launch:  'Launch',
 }
 
 export default function App() {
@@ -126,11 +132,11 @@ export default function App() {
                   flex: 1, border: 'none', padding: '7px 2px',
                   background: tab === t ? 'rgba(255,255,255,0.05)' : 'transparent',
                   color: tab === t
-                    ? (t === 'hq' ? '#a78bfa' : t === 'command' ? '#00d4ff' : '#e0e6f0')
+                    ? (t === 'hq' ? '#a78bfa' : t === 'command' ? '#00d4ff' : t === 'launch' ? '#f97316' : t === 'upgrades' ? '#f5c842' : '#e0e6f0')
                     : '#3a4860',
                   fontSize: 14, cursor: 'pointer',
                   borderBottom: tab === t
-                    ? `2px solid ${t === 'hq' ? '#7c3aed' : t === 'command' ? '#00d4ff' : '#5060ff'}`
+                    ? `2px solid ${t === 'hq' ? '#7c3aed' : t === 'command' ? '#00d4ff' : t === 'launch' ? '#f97316' : t === 'upgrades' ? '#f5c842' : '#5060ff'}`
                     : '2px solid transparent',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
                 }}
@@ -143,11 +149,13 @@ export default function App() {
 
           {/* Tab content */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {tab === 'agents'  && <AgentInspector />}
-            {tab === 'profit'  && <ProfitPanel />}
-            {tab === 'trading' && <TradingPanel />}
-            {tab === 'hq'      && <HQPanel />}
-            {tab === 'command' && <CommandPanel />}
+            {tab === 'agents'   && <AgentInspector />}
+            {tab === 'profit'   && <ProfitPanel />}
+            {tab === 'upgrades' && <UpgradesPanel />}
+            {tab === 'trading'  && <TradingPanel />}
+            {tab === 'hq'       && <HQPanel />}
+            {tab === 'command'  && <CommandPanel />}
+            {tab === 'launch'   && <LaunchPlanPanel />}
           </div>
         </div>
       </div>

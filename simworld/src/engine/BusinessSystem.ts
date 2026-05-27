@@ -1,8 +1,9 @@
 import type {
   SimState, CreativeStudioStats, TradingStats,
-  EventLogEntry, EtsyProduct,
+  EventLogEntry, EtsyProduct, OwnedUpgrade,
 } from '../types'
 import { TRADE_EVENTS, TRENDING_NICHES, makeProduct, makeProductId } from '../data/businessData'
+import { UPGRADE_DEFS, computeEffects } from '../data/upgradeData'
 import { timeLabel, simMinuteOfDay } from './TimeSystem'
 
 // ── Unique ID util ────────────────────────────────────────────────────────────
@@ -83,6 +84,34 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
   const quinnWorking  = workHours && state.agents.find(a => a.id === 'qc_agent')?.state === 'working'
   const ulyWorking    = workHours && state.agents.find(a => a.id === 'upload_agent')?.state === 'working'
 
+  // ── Upgrade effects ─────────────────────────────────────────────────────────
+  const fx = computeEffects(state.creative.ownedUpgrades ?? [])
+
+  // ── Auto-unlock milestones ──────────────────────────────────────────────────
+  const ownedIds = new Set((state.creative.ownedUpgrades ?? []).map(u => u.id))
+  const newMilestones: OwnedUpgrade[] = []
+  const simMin = state.time.day * 1440 + minuteOfDay
+
+  if (state.creative.starSellerPct >= 100 && !ownedIds.has('star_seller')) {
+    newMilestones.push({ id: 'star_seller', level: 1, purchasedAt: simMin })
+    result.logEntries.push({ id: uid(), simMinute: simMin, timeLabel: timeLabel(state.time),
+      message: '⭐ OpenClaw Crafts earned the Star Seller badge! +10% sales boost!', type: 'success' })
+  }
+  if (state.creative.mockSales >= 100 && !ownedIds.has('milestone_100')) {
+    newMilestones.push({ id: 'milestone_100', level: 1, purchasedAt: simMin })
+    result.logEntries.push({ id: uid(), simMinute: simMin, timeLabel: timeLabel(state.time),
+      message: '🏅 100 Sales milestone hit! Etsy algorithm is warming to the shop.', type: 'success' })
+  }
+  if (state.creative.mockSales >= 1000 && !ownedIds.has('milestone_1000')) {
+    newMilestones.push({ id: 'milestone_1000', level: 1, purchasedAt: simMin })
+    result.logEntries.push({ id: uid(), simMinute: simMin, timeLabel: timeLabel(state.time),
+      message: '🏆 1000 Sales milestone! Elite seller status unlocked!', type: 'success' })
+  }
+  if (newMilestones.length > 0) {
+    const updatedOwned = [...(state.creative.ownedUpgrades ?? []), ...newMilestones]
+    result.creative = { ...result.creative, ownedUpgrades: updatedOwned }
+  }
+
   // ── Build mutable product list ──────────────────────────────────────────────
   const products: EtsyProduct[] = state.creative.products.map(p => ({ ...p }))
 
@@ -94,11 +123,12 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
   // ── 1. RESEARCH: Reya accumulates work toward a new idea ───────────────────
   if (reyaWorking) {
     reserachAccum += dtSec
-    if (reserachAccum >= IDEA_INTERVAL) {
+    const effectiveIdleInterval = IDEA_INTERVAL / fx.ideaIntervalDivisor
+    if (reserachAccum >= effectiveIdleInterval) {
       reserachAccum = 0
       // Only add idea if we don't have too many in the pipeline
       const inPipeline = products.filter(p => p.stage !== 'selling').length
-      if (inPipeline < 4) {
+      if (inPipeline < fx.pipelineCap) {
         const newProduct = makeProduct('idea')
         // Mark as trending if category matches
         if (activeTrend.categories.includes(newProduct.category)) {
@@ -120,7 +150,7 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
   if (daniWorking) {
     const ideaProduct = products.find(p => p.stage === 'idea')
     if (ideaProduct) {
-      ideaProduct.stageProgress += (dtSec / STAGE_DURATION.design) * 100
+      ideaProduct.stageProgress += (dtSec / (STAGE_DURATION.design / fx.designDivisor)) * 100
       if (ideaProduct.stageProgress >= 100) {
         ideaProduct.stage = 'qc'
         ideaProduct.stageProgress = 0
@@ -139,10 +169,10 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
   if (quinnWorking) {
     const qcProduct = products.find(p => p.stage === 'qc')
     if (qcProduct) {
-      qcProduct.stageProgress += (dtSec / STAGE_DURATION.qc) * 100
+      qcProduct.stageProgress += (dtSec / (STAGE_DURATION.qc / fx.qcDivisor)) * 100
       if (qcProduct.stageProgress >= 100) {
-        // 85% pass rate — occasionally send back
-        if (Math.random() < 0.85) {
+        // Pass rate boosted by QC upgrades (base 85%)
+        if (Math.random() < fx.qcPassRate) {
           qcProduct.stage = 'listing'
           qcProduct.stageProgress = 0
           result.logEntries.push({
@@ -172,7 +202,7 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
   if (ulyWorking) {
     const listProduct = products.find(p => p.stage === 'listing')
     if (listProduct) {
-      listProduct.stageProgress += (dtSec / STAGE_DURATION.listing) * 100
+      listProduct.stageProgress += (dtSec / (STAGE_DURATION.listing / fx.listingDivisor)) * 100
       if (listProduct.stageProgress >= 100) {
         listProduct.stage = 'selling'
         listProduct.stageProgress = 100
@@ -202,12 +232,12 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
       product.trend = 'normal'
     }
 
-    const chance = saleChancePerMinute(product, trendMult) * dtMin
+    const chance = saleChancePerMinute(product, trendMult) * dtMin * fx.saleRateMultiplier
     if (Math.random() < chance) {
       const earnedRaw = product.price * 0.92  // ~8% fees
       product.salesCount++
       product.revenue    += earnedRaw
-      product.views      += 3 + Math.floor(Math.random() * 12)
+      product.views      += Math.round((3 + Math.floor(Math.random() * 12)) * fx.viewsMultiplier)
       cashDelta          += earnedRaw
       revenueDelta       += earnedRaw
       salesDelta++
@@ -308,9 +338,11 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
 
   // ── 8. Daily reset at midnight ────────────────────────────────────────────
   if (minuteOfDay < 1) {
+    const totalDailyExpenses = 85 + fx.extraDailyCost
     result.creative = {
       ...result.creative,
-      dailyRevenue: 0, dailyExpenses: 85, dailyProfit: 0,
+      dailyRevenue: 0, dailyExpenses: totalDailyExpenses, dailyProfit: 0,
+      cash: (result.creative?.cash ?? state.creative.cash) - totalDailyExpenses,
     }
     result.trading = {
       ...result.trading,

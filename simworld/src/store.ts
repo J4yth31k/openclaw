@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { SimState, Agent, AgentId } from './types'
+import { UPGRADE_DEFS } from './data/upgradeData'
 import { makeInitialTime, advanceTime } from './engine/TimeSystem'
 import { makeInitialAgents, worldMap, gridToPixel } from './data/worldData'
 import { makeInitialCreative, makeInitialTrading } from './data/businessData'
@@ -43,6 +44,7 @@ interface SimStore extends SimState {
   save: () => void
   load: () => void
   reset: () => void
+  purchaseUpgrade: (id: string) => boolean   // returns true if purchase succeeded
 }
 
 export const useSimStore = create<SimStore>((set, get) => ({
@@ -91,6 +93,46 @@ export const useSimStore = create<SimStore>((set, get) => ({
       totalCash: newCash,
       completedTaskCount: state.completedTaskCount + bizUpdate.completedDelta,
     })
+  },
+
+  purchaseUpgrade: (id: string) => {
+    const state = get()
+    const def = UPGRADE_DEFS.find(u => u.id === id)
+    if (!def) return false
+
+    const ownedUpgrades = state.creative.ownedUpgrades ?? []
+    const existing = ownedUpgrades.find(u => u.id === id)
+    const currentLevel = existing?.level ?? 0
+
+    // Can't exceed max level
+    if (currentLevel >= def.maxLevel) return false
+
+    // Check prerequisite
+    if (def.requires && !ownedUpgrades.find(u => u.id === def.requires)) return false
+
+    // Check funds (deduct from creative cash first, then trading if needed)
+    const totalCash = state.creative.cash + state.trading.accountBalance
+    if (totalCash < def.cost) return false
+
+    const simMin = state.time.day * 1440 + state.time.hour * 60 + Math.floor(state.time.minute)
+    const updatedOwned = existing
+      ? ownedUpgrades.map(u => u.id === id ? { ...u, level: u.level + 1 } : u)
+      : [...ownedUpgrades, { id, level: 1, purchasedAt: simMin }]
+
+    // Deduct cost from creative.cash, overflow to trading.accountBalance
+    let newCreativeCash = state.creative.cash - def.cost
+    let newTradingBalance = state.trading.accountBalance
+    if (newCreativeCash < 0) {
+      newTradingBalance += newCreativeCash
+      newCreativeCash = 0
+    }
+
+    set({
+      creative: { ...state.creative, cash: newCreativeCash, ownedUpgrades: updatedOwned },
+      trading:  { ...state.trading, accountBalance: newTradingBalance },
+      totalCash: newCreativeCash + newTradingBalance,
+    })
+    return true
   },
 
   selectAgent: (id) => set({ selectedAgentId: id }),
