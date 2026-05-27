@@ -1,0 +1,234 @@
+//@version=6
+// OpenClaw Scalper v2 — ICT/SMC confluence strategy
+// Sends BUY/SELL/OVERSOLD/OVERBOUGHT webhook payloads with full indicator context.
+// Set alert to "Once Per Bar Close" on each symbol.
+strategy("OpenClaw Scalper v2", shorttitle="OClaw v2",
+  overlay             = true,
+  default_qty_type    = strategy.percent_of_equity,
+  default_qty_value   = 2,
+  commission_type     = strategy.commission.cash_per_contract,
+  commission_value    = 0.35,
+  slippage            = 2,
+  initial_capital     = 10000,
+  process_orders_on_close = true,
+  calc_on_every_tick  = false)
+
+// ── Inputs ─────────────────────────────────────────────────────────────────────
+var g_ind = "Indicators"
+rsi_len      = input.int(14,   "RSI Length",         group=g_ind)
+atr_len      = input.int(14,   "ATR Length",         group=g_ind)
+ema_fast     = input.int(21,   "EMA Fast",           group=g_ind)
+ema_slow     = input.int(55,   "EMA Slow",           group=g_ind)
+stoch_len    = input.int(14,   "Stoch Length",       group=g_ind)
+stoch_smooth = input.int(3,    "Stoch Smooth K",     group=g_ind)
+
+var g_risk = "Risk"
+sl_mult      = input.float(1.5, "SL ATR Multiple",  group=g_risk, step=0.1)
+tp_mult      = input.float(3.0, "TP ATR Multiple",  group=g_risk, step=0.1, tooltip="Default 1:2 R:R")
+use_squeeze  = input.bool(false, "Require Squeeze Release for Entry", group=g_risk)
+
+var g_vis = "Display"
+show_labels  = input.bool(true,  "Signal Labels",   group=g_vis)
+show_sl_tp   = input.bool(true,  "SL/TP Lines",     group=g_vis)
+show_bands   = input.bool(true,  "VWAP ±1σ Bands",  group=g_vis)
+
+// ── Core indicators ────────────────────────────────────────────────────────────
+rsi_val  = ta.rsi(close, rsi_len)
+atr_val  = ta.atr(atr_len)
+ema21    = ta.ema(close, ema_fast)
+ema55    = ta.ema(close, ema_slow)
+
+// Volume ratio (vs 20-bar average)
+vol_avg   = ta.sma(volume, 20)
+vol_ratio = vol_avg > 0 ? volume / vol_avg : 1.0
+
+// VWAP — intraday, resets daily
+var float cvp    = 0.0
+var float cv     = 0.0
+var float sum_sq = 0.0
+if ta.change(time("D")) != 0
+    cvp    := 0.0
+    cv     := 0.0
+    sum_sq := 0.0
+cvp    += hlc3 * volume
+cv     += volume
+sum_sq += math.pow(close - (cv > 0 ? cvp / cv : close), 2) * volume
+vwap_val = cv > 0 ? cvp / cv : close
+vwap_std = cv > 0 ? math.sqrt(sum_sq / cv) : 0.0
+vwap_u1  = vwap_val + vwap_std
+vwap_l1  = vwap_val - vwap_std
+
+// Stochastic (price-based, not RSI-based — better for entry timing)
+stoch_raw = ta.stoch(close, high, low, stoch_len)
+stoch_k   = ta.sma(stoch_raw, stoch_smooth)
+stoch_d   = ta.sma(stoch_k, stoch_smooth)
+
+// TTM Squeeze + Momentum
+bb_upper  = ta.sma(close, 20) + 2.0 * ta.stdev(close, 20)
+bb_lower  = ta.sma(close, 20) - 2.0 * ta.stdev(close, 20)
+kc_upper  = ta.sma(close, 20) + 1.5 * atr_val
+kc_lower  = ta.sma(close, 20) - 1.5 * atr_val
+squeeze   = bb_upper < kc_upper and bb_lower > kc_lower
+mom_val   = ta.linreg(
+  close - math.avg(math.avg(ta.highest(high, 20), ta.lowest(low, 20)), ta.sma(close, 20)),
+  20, 0)
+
+// Previous day high/low
+pdh = request.security(syminfo.tickerid, "D", high[1])
+pdl = request.security(syminfo.tickerid, "D", low[1])
+
+// ── Conditions ─────────────────────────────────────────────────────────────────
+above_vwap = close > vwap_val
+ema_bull   = close > ema21 and ema21 > ema55
+ema_bear   = close < ema21 and ema21 < ema55
+near_pdh   = math.abs(close - pdh) < atr_val * 0.5
+near_pdl   = math.abs(close - pdl) < atr_val * 0.5
+
+k_cross_up   = ta.crossover(stoch_k, stoch_d)
+k_cross_down = ta.crossunder(stoch_k, stoch_d)
+
+// Squeeze filter: if enabled, only enter after squeeze releases in the right direction
+sqz_long  = not use_squeeze or (not squeeze[0] and squeeze[1] and mom_val > 0)
+sqz_short = not use_squeeze or (not squeeze[0] and squeeze[1] and mom_val < 0)
+
+flat = strategy.position_size == 0
+
+long_signal  = flat and ema_bull  and above_vwap       and rsi_val > 45 and rsi_val < 68 and k_cross_up   and stoch_k < 65 and sqz_long
+short_signal = flat and ema_bear  and not above_vwap   and rsi_val < 55 and rsi_val > 32 and k_cross_down and stoch_k > 35 and sqz_short
+
+// Extreme alerts — notify but do NOT auto-enter (wait for confirmation)
+os_alert = flat and rsi_val < 30 and near_pdl and not long_signal
+ob_alert = flat and rsi_val > 70 and near_pdh and not short_signal
+
+// ── Risk levels ────────────────────────────────────────────────────────────────
+sl_dist = atr_val * sl_mult
+tp_dist = atr_val * tp_mult
+
+long_sl  = close - sl_dist
+long_tp  = close + tp_dist
+short_sl = close + sl_dist
+short_tp = close - tp_dist
+
+// ── Execution ──────────────────────────────────────────────────────────────────
+if long_signal
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long Exit", "Long", stop=long_sl, limit=long_tp)
+
+if short_signal
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short Exit", "Short", stop=short_sl, limit=short_tp)
+
+// ── Context strings (match agent_api.py expectations) ─────────────────────────
+rsi_ctx =
+     rsi_val < 30 ? "oversold" :
+     rsi_val < 40 ? "low" :
+     rsi_val > 70 ? "overbought" :
+     rsi_val > 60 ? "high" : "mid"
+
+lvl_hint =
+     near_pdh ? "near_PDH" :
+     near_pdl ? "near_PDL" :
+     above_vwap ? "above_VWAP" : "below_VWAP"
+
+// ── Webhook payloads ───────────────────────────────────────────────────────────
+// Full payload — agent_api.py reads every field via _ind() helper
+_sym = '"symbol":"'    + syminfo.ticker       + '",'
+_tf  = '"timeframe":"' + timeframe.period     + '",'
+_p   = '"price":'      + str.tostring(close)  + ','
+_bid = '"bid":'        + str.tostring(math.round(close - atr_val * 0.01, 5)) + ','
+_ask = '"ask":'        + str.tostring(math.round(close + atr_val * 0.01, 5)) + ','
+_vol = '"volume":'     + str.tostring(volume) + ','
+_rsi = '"rsi":'        + str.tostring(math.round(rsi_val, 2))    + ','
+_atr = '"atr":'        + str.tostring(math.round(atr_val, 5))    + ','
+_e21 = '"ema21":'      + str.tostring(math.round(ema21, 5))      + ','
+_e55 = '"ema55":'      + str.tostring(math.round(ema55, 5))      + ','
+_vwp = '"vwap":'       + str.tostring(math.round(vwap_val, 5))   + ','
+_vu1 = '"vwap_u1":'    + str.tostring(math.round(vwap_u1, 5))    + ','
+_vl1 = '"vwap_l1":'    + str.tostring(math.round(vwap_l1, 5))    + ','
+_skk = '"stoch_k":'    + str.tostring(math.round(stoch_k, 2))    + ','
+_sdd = '"stoch_d":'    + str.tostring(math.round(stoch_d, 2))    + ','
+_pdh = '"prev_high":'  + str.tostring(math.round(pdh, 5))        + ','
+_pdl = '"prev_low":'   + str.tostring(math.round(pdl, 5))        + ','
+_mom = '"momentum":'   + str.tostring(math.round(mom_val, 5))    + ','
+_vrt = '"vol_ratio":'  + str.tostring(math.round(vol_ratio, 2))  + ','
+_sqz = '"squeeze":'    + (squeeze ? "true" : "false")            + ','
+_rbt = '"ribbon_bull":' + (ema_bull ? "true" : "false")          + ','
+_rsc = '"rsi_context":"' + rsi_ctx  + '",'
+_lvh = '"level_hint":"'  + lvl_hint + '",'
+_src = '"strategy":"OpenClaw_v2","source":"tradingview"}'
+
+_base = _sym + _tf + _p + _bid + _ask + _vol + _rsi + _atr + _e21 + _e55
+      + _vwp + _vu1 + _vl1 + _skk + _sdd + _pdh + _pdl + _mom + _vrt
+      + _sqz + _rbt + _rsc + _lvh + _src
+
+long_payload  = '{' + '"action":"BUY",'  + _base
+short_payload = '{' + '"action":"SELL",' + _base
+
+os_payload = '{"action":"OVERSOLD",'  + _sym + _tf + _p + _rsi + _atr + _pdl + _rsc + '"level_hint":"near_PDL",' + _src
+ob_payload = '{"action":"OVERBOUGHT",' + _sym + _tf + _p + _rsi + _atr + _pdh + _rsc + '"level_hint":"near_PDH",' + _src
+
+if long_signal
+    alert(long_payload, alert.freq_once_per_bar_close)
+
+if short_signal
+    alert(short_payload, alert.freq_once_per_bar_close)
+
+if os_alert
+    alert(os_payload, alert.freq_once_per_bar_close)
+
+if ob_alert
+    alert(ob_payload, alert.freq_once_per_bar_close)
+
+// ── Plots ──────────────────────────────────────────────────────────────────────
+plot(ema21, "EMA 21", color=color.new(color.blue, 0),   linewidth=1)
+plot(ema55, "EMA 55", color=color.new(color.orange, 0), linewidth=2)
+plot(vwap_val, "VWAP", color=color.new(color.purple, 0), linewidth=1)
+
+vwap_u1_plot = plot(show_bands ? vwap_u1 : na, "VWAP +1σ", color=color.new(color.purple, 65), linewidth=1)
+vwap_l1_plot = plot(show_bands ? vwap_l1 : na, "VWAP -1σ", color=color.new(color.purple, 65), linewidth=1)
+fill(vwap_u1_plot, vwap_l1_plot, color=color.new(color.purple, 90))
+
+plot(pdh, "PDH", color=color.new(color.teal, 45), linewidth=1, style=plot.style_stepline)
+plot(pdl, "PDL", color=color.new(color.red,  45), linewidth=1, style=plot.style_stepline)
+
+// Signal labels
+if show_labels and long_signal
+    label.new(bar_index, low - atr_val * 0.6,
+      "▲ LONG\nRSI " + str.tostring(math.round(rsi_val, 1)) + " | K=" + str.tostring(math.round(stoch_k, 0)),
+      style=label.style_label_up, color=color.new(color.green, 5), textcolor=color.white, size=size.small)
+
+if show_labels and short_signal
+    label.new(bar_index, high + atr_val * 0.6,
+      "▼ SHORT\nRSI " + str.tostring(math.round(rsi_val, 1)) + " | K=" + str.tostring(math.round(stoch_k, 0)),
+      style=label.style_label_down, color=color.new(color.red, 5), textcolor=color.white, size=size.small)
+
+if show_labels and os_alert
+    label.new(bar_index, low - atr_val * 0.3,
+      "⚠ OVERSOLD\n" + str.tostring(math.round(rsi_val, 1)),
+      style=label.style_label_up, color=color.new(color.yellow, 5), textcolor=color.black, size=size.small)
+
+if show_labels and ob_alert
+    label.new(bar_index, high + atr_val * 0.3,
+      "⚠ OVERBOUGHT\n" + str.tostring(math.round(rsi_val, 1)),
+      style=label.style_label_down, color=color.new(color.yellow, 5), textcolor=color.black, size=size.small)
+
+// SL/TP lines for current open position
+var line sl_line = na
+var line tp_line = na
+
+if show_sl_tp
+    if long_signal
+        sl_line := line.new(bar_index, long_sl, bar_index + 20, long_sl,
+          color=color.new(color.red, 0), width=1, style=line.style_dashed)
+        tp_line := line.new(bar_index, long_tp, bar_index + 20, long_tp,
+          color=color.new(color.green, 0), width=1, style=line.style_dashed)
+    else if short_signal
+        sl_line := line.new(bar_index, short_sl, bar_index + 20, short_sl,
+          color=color.new(color.red, 0), width=1, style=line.style_dashed)
+        tp_line := line.new(bar_index, short_tp, bar_index + 20, short_tp,
+          color=color.new(color.green, 0), width=1, style=line.style_dashed)
+
+// Background: green tint = full bull confluence, red = full bear
+bgcolor(ema_bull and above_vwap and rsi_val > 50 ? color.new(color.green, 94) :
+        ema_bear and not above_vwap and rsi_val < 50 ? color.new(color.red, 94) : na,
+        title="Bias Background")

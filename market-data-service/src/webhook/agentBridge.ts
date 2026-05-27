@@ -23,15 +23,25 @@ export async function getAgentAnalysis(
   const merged = mergeIndicators(alert, snap);
 
   const payload = JSON.stringify({
-    symbol:    alert.symbol,
-    action:    alert.action,
-    price:     alert.price,
-    timeframe: alert.timeframe,
-    session:   session.name,
-    overlap:   session.overlap ?? null,
+    symbol:     alert.symbol,
+    action:     alert.action,
+    price:      alert.price,
+    timeframe:  alert.timeframe,
+    session:    session.name,
+    overlap:    session.overlap ?? null,
     indicators: merged,
-    strategy:  alert.strategy,
-    tier:      alert.tier,
+    strategy:   alert.strategy,
+    tier:       alert.tier,
+    // Flat PriceFeed v2 fields — agent_api.py reads these via _ind() helper
+    rsi:        alert.rsi        ?? null,
+    atr:        alert.atr        ?? null,
+    ema21:      alert.ema21      ?? null,
+    ema55:      alert.ema55      ?? null,
+    vwap:       alert.vwap       ?? null,
+    prev_high:  alert.prev_high  ?? null,
+    prev_low:   alert.prev_low   ?? null,
+    rsi_context: alert.rsi_context ?? null,
+    level_hint:  alert.level_hint  ?? null,
   });
 
   try {
@@ -46,21 +56,30 @@ export async function getAgentAnalysis(
 // ── Merge alert payload fields with live-computed snapshot ────────────────────
 function mergeIndicators(alert: TradingViewAlert, snap: TFSnapshot | null) {
   return {
-    rsi:         alert.rsi         ?? snap?.rsi,
-    atr:         alert.atr         ?? snap?.atr,
-    vol_ratio:   alert.vol_ratio   ?? snap?.vol_ratio,
-    stoch_k:     alert.stoch_k     ?? snap?.stoch_k,
-    stoch_d:     alert.stoch_d     ?? snap?.stoch_d,
-    ema8:        alert.ema8        ?? snap?.ema8,
-    ema21:       alert.ema21       ?? snap?.ema21,
-    ema55:       alert.ema55       ?? snap?.ema55,
-    vwap:        alert.vwap        ?? snap?.vwap,
-    vwap_u1:     alert.vwap_u1     ?? snap?.vwap_u1,
-    vwap_l1:     alert.vwap_l1     ?? snap?.vwap_l1,
-    momentum:    alert.momentum    ?? snap?.momentum,
-    squeeze:     alert.squeeze     ?? snap?.squeeze_on,
-    ribbon_bull: alert.ribbon_bull ?? snap?.ribbon_bull,
-    signal:      alert.signal,
+    rsi:          alert.rsi         ?? snap?.rsi,
+    atr:          alert.atr         ?? snap?.atr,
+    vol_ratio:    alert.vol_ratio   ?? snap?.vol_ratio,
+    stoch_k:      alert.stoch_k     ?? snap?.stoch_k,
+    stoch_d:      alert.stoch_d     ?? snap?.stoch_d,
+    ema8:         alert.ema8        ?? snap?.ema8,
+    ema21:        alert.ema21       ?? snap?.ema21,
+    ema55:        alert.ema55       ?? snap?.ema55,
+    vwap:         alert.vwap        ?? snap?.vwap,
+    vwap_u1:      alert.vwap_u1     ?? snap?.vwap_u1,
+    vwap_l1:      alert.vwap_l1     ?? snap?.vwap_l1,
+    momentum:     alert.momentum    ?? snap?.momentum,
+    squeeze:      alert.squeeze     ?? snap?.squeeze_on,
+    ribbon_bull:  alert.ribbon_bull ?? snap?.ribbon_bull,
+    signal:       alert.signal,
+    // PriceFeed v2 extras
+    prev_high:    alert.prev_high   ?? null,
+    prev_low:     alert.prev_low    ?? null,
+    nwog_present: alert.nwog_present ?? null,
+    nwog_level:   alert.nwog_level   ?? null,
+    eqh:          alert.eqh          ?? null,
+    eql:          alert.eql          ?? null,
+    rsi_context:  alert.rsi_context  ?? null,
+    level_hint:   alert.level_hint   ?? null,
   };
 }
 

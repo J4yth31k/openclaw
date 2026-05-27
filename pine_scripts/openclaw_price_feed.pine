@@ -1,38 +1,88 @@
 //@version=6
-// OpenClaw Price Feed — broadcasts every bar close to the OpenClaw server.
-// Add this to EVERY symbol chart you want live prices on (NQ, ES, CL, etc.)
-// Set the alert to fire "On Bar Close" for 1-minute bars.
-indicator("OpenClaw Price Feed", overlay = true)
+// OpenClaw Price Feed v2 — sends market context every bar close.
+// action is now computed (BULLISH / BEARISH / NEUTRAL) based on price structure.
+// Add this to every symbol chart. Alert: "On Bar Close", 1-minute bars.
+indicator("OpenClaw Price Feed v2", overlay = true)
 
-// ─── Calculations ─────────────────────────────────────────────────────────────
-float spread  = syminfo.mintick * 2
-float bid_est = close - spread / 2
-float ask_est = close + spread / 2
-float rsi_val = ta.rsi(close, 14)
-float atr_val = ta.atr(14)
-float bar_o   = open
-float bar_h   = high
-float bar_l   = low
-float bar_v   = volume
+// ── Calculations ──────────────────────────────────────────────────────────────
+float rsi_val  = ta.rsi(close, 14)
+float atr_val  = ta.atr(14)
+float ema21    = ta.ema(close, 21)
+float ema55    = ta.ema(close, 55)
 
-// ─── JSON payload ─────────────────────────────────────────────────────────────
+// VWAP (intraday, resets daily)
+var float cvp  = 0.0
+var float cv   = 0.0
+if ta.change(time("D")) != 0
+    cvp := 0.0
+    cv  := 0.0
+cvp += hlc3 * volume
+cv  += volume
+float vwap_val = cv > 0 ? cvp / cv : close
+
+// Previous day high/low for key level proximity
+float pdh = request.security(syminfo.tickerid, "D", high[1])
+float pdl = request.security(syminfo.tickerid, "D", low[1])
+
+// ── Bias logic ────────────────────────────────────────────────────────────────
+// Bullish: price above VWAP + above EMA21 + RSI > 50
+// Bearish: price below VWAP + below EMA21 + RSI < 50
+// Oversold/Overbought extreme: flag even if structure mixed
+bool above_vwap  = close > vwap_val
+bool ema_bull    = close > ema21 and ema21 > ema55
+bool ema_bear    = close < ema21 and ema21 < ema55
+bool rsi_bull    = rsi_val > 50
+bool rsi_bear    = rsi_val < 50
+bool rsi_extreme_low  = rsi_val < 32
+bool rsi_extreme_high = rsi_val > 68
+
+// Near key levels (within 0.2 ATR)
+bool near_pdh = math.abs(close - pdh) < atr_val * 0.2
+bool near_pdl = math.abs(close - pdl) < atr_val * 0.2
+
+string bias_action =
+     (ema_bull and above_vwap and rsi_bull) ? "BULLISH" :
+     (ema_bear and not above_vwap and rsi_bear) ? "BEARISH" :
+     rsi_extreme_low  ? "OVERSOLD" :
+     rsi_extreme_high ? "OVERBOUGHT" :
+     "NEUTRAL"
+
+// RSI divergence hint
+string rsi_context =
+     rsi_val < 30 ? "oversold" :
+     rsi_val < 40 ? "low" :
+     rsi_val > 70 ? "overbought" :
+     rsi_val > 60 ? "high" :
+     "mid"
+
+string level_hint =
+     near_pdh ? "near_PDH" :
+     near_pdl ? "near_PDL" :
+     above_vwap ? "above_VWAP" :
+     "below_VWAP"
+
+// ── Payload ───────────────────────────────────────────────────────────────────
 string feed_msg =
-     '{"symbol":'    + '"' + syminfo.ticker    + '",'
-   + '"timeframe":'  + '"' + timeframe.period  + '",'
-   + '"action":"NEUTRAL",'
-   + '"price":'      + str.tostring(close)                      + ','
-   + '"bid":'        + str.tostring(bid_est)                    + ','
-   + '"ask":'        + str.tostring(ask_est)                    + ','
-   + '"volume":'     + str.tostring(bar_v)                      + ','
-   + '"open":'       + str.tostring(bar_o)                      + ','
-   + '"high":'       + str.tostring(bar_h)                      + ','
-   + '"low":'        + str.tostring(bar_l)                      + ','
-   + '"rsi":'        + str.tostring(math.round(rsi_val, 2))     + ','
-   + '"atr":'        + str.tostring(math.round(atr_val, 4))     + ','
+     '{"symbol":'        + '"' + syminfo.ticker         + '",'
+   + '"timeframe":'      + '"' + timeframe.period       + '",'
+   + '"action":'         + '"' + bias_action            + '",'
+   + '"price":'          + str.tostring(close)                          + ','
+   + '"bid":'            + str.tostring(math.round(close - atr_val * 0.01, 2)) + ','
+   + '"ask":'            + str.tostring(math.round(close + atr_val * 0.01, 2)) + ','
+   + '"volume":'         + str.tostring(volume)                         + ','
+   + '"open":'           + str.tostring(open)                           + ','
+   + '"high":'           + str.tostring(high)                           + ','
+   + '"low":'            + str.tostring(low)                            + ','
+   + '"rsi":'            + str.tostring(math.round(rsi_val, 2))         + ','
+   + '"atr":'            + str.tostring(math.round(atr_val, 4))         + ','
+   + '"ema21":'          + str.tostring(math.round(ema21, 2))           + ','
+   + '"ema55":'          + str.tostring(math.round(ema55, 2))           + ','
+   + '"vwap":'           + str.tostring(math.round(vwap_val, 2))        + ','
+   + '"prev_high":'      + str.tostring(math.round(pdh, 2))             + ','
+   + '"prev_low":'       + str.tostring(math.round(pdl, 2))             + ','
+   + '"rsi_context":'    + '"' + rsi_context             + '",'
+   + '"level_hint":'     + '"' + level_hint              + '",'
    + '"strategy":"PriceFeed",'
    + '"source":"tradingview"}'
 
-// Fires on every bar close — wires live prices into OpenClaw dashboard
-// NOTE: Create the alert by selecting this script as the condition in TradingView.
-// The webhook URL goes in the alert's Notifications tab.
 alert(feed_msg, alert.freq_once_per_bar_close)

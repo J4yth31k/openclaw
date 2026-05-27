@@ -105,6 +105,13 @@ async function processAlert(alert: TradingViewAlert): Promise<void> {
     return;
   }
 
+  // PriceFeed alerts are data updates only — no Discord, just dashboard price injection
+  if ((alert.strategy === 'PriceFeed') || (alert.action === 'NEUTRAL' && !alert.strategy?.includes('ICT'))) {
+    console.log(`[webhook] PriceFeed/NEUTRAL — price updated, skipping Discord for ${alert.symbol}`);
+    logAlert(alert, session.name, 'PRICE_UPDATE');
+    return;
+  }
+
   const analysis = await getAgentAnalysis(alert, session);
 
   const hasBot     = !!(DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID);

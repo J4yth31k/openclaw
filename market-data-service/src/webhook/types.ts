@@ -1,7 +1,8 @@
 export interface TradingViewAlert {
   symbol:       string;
   timeframe:    string;
-  action:       'BUY' | 'SELL' | 'NEUTRAL';
+  // Expanded action set — PriceFeed v2 sends BULLISH/BEARISH/OVERSOLD/OVERBOUGHT
+  action:       'BUY' | 'SELL' | 'NEUTRAL' | 'BULLISH' | 'BEARISH' | 'OVERSOLD' | 'OVERBOUGHT';
   price:        number;
   bid?:         number;
   ask?:         number;
@@ -28,6 +29,16 @@ export interface TradingViewAlert {
   momentum?:    number;
   squeeze?:     boolean;
   ribbon_bull?: boolean;
+  // ICT / PriceFeed v2 extras
+  prev_high?:   number;
+  prev_low?:    number;
+  nwog_present?: boolean;
+  nwog_level?:  number;
+  eqh?:         boolean;
+  eql?:         boolean;
+  rsi_context?: string;
+  level_hint?:  string;
+  // Meta
   strategy?:    string;
   session?:     string;
   tier?:        'free' | 'premium';
