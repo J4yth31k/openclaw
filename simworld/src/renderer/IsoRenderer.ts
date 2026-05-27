@@ -179,131 +179,178 @@ function drawSmallDiamond(ctx: CanvasRenderingContext2D, pos: Vec2, size: number
   ctx.fill()
 }
 
+// ── Agent animation helpers ───────────────────────────────────────────────────
+
+/** Stable per-agent phase: unique float [0, 2π] derived from id string */
+function agentPhase(id: string): number {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff
+  return (h / 0xffff) * Math.PI * 2
+}
+
 // ── Agent drawing ─────────────────────────────────────────────────────────────
 
 function drawAgent(ctx: CanvasRenderingContext2D, agent: Agent, selected: boolean) {
   const { x, y } = agent.pixelPos
-  const isMoving = agent.path.length > 0
+  const isMoving   = agent.path.length > 0
+  const isSleeping = agent.state === 'sleeping'
 
-  // Shadow
+  const phase = agentPhase(agent.id)
+  const now   = Date.now()
+
+  // ── Walk cycle: heel-strike pattern (abs-sine = two bounces per full period)
+  const walkT   = now / 280 + phase      // ~4.5 step-pairs per second
+  const walkAmt = isMoving ? Math.abs(Math.sin(walkT)) : 0
+  const walkY   = walkAmt * -5           // lift up to 5px (negative = up)
+
+  // ── Idle breathing (slow, very small, unique per agent)
+  const breathAmt = isSleeping ? 0 : Math.sin(now / 1800 + phase) * 0.7
+  const idleY  = isMoving ? 0 : breathAmt
+
+  // ── Combined vertical offset
+  const bounceY = walkY + idleY
+
+  // ── Left-right body sway during walk
+  const swayAngle = isMoving ? Math.sin(walkT * 2 + phase) * 0.04 : 0  // ±2.3°
+
+  // ── Leg swing offsets
+  const legSwing = isMoving ? Math.sin(walkT + phase) * 4 : 0  // ±4px forward/back
+
+  // ── Shadow: squashes on ground-strike, lifts when airborne
+  const shadowRx = 10 + walkAmt * 1.5
+  const shadowRy = 5  - walkAmt * 1.2
+  const shadowAlpha = 0.30 - walkAmt * 0.08
   ctx.beginPath()
-  ctx.ellipse(x, y + 4, 10, 5, 0, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  ctx.ellipse(x, y + 4, shadowRx, Math.max(1.5, shadowRy), 0, 0, Math.PI * 2)
+  ctx.fillStyle = `rgba(0,0,0,${shadowAlpha.toFixed(2)})`
   ctx.fill()
 
-  // Selection ring
+  // ── Selection ring
   if (selected) {
     ctx.beginPath()
-    ctx.arc(x, y - 14, 16, 0, Math.PI * 2)
-    ctx.strokeStyle = '#fff'
-    ctx.lineWidth = 2.5
+    ctx.arc(x, y - 14, 17, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+    ctx.lineWidth = 2
     ctx.stroke()
+    // Inner glow
+    ctx.beginPath()
+    ctx.arc(x, y - 14, 17, 0, Math.PI * 2)
+    ctx.strokeStyle = agent.color
+    ctx.lineWidth = 4
+    ctx.globalAlpha = 0.25
+    ctx.stroke()
+    ctx.globalAlpha = 1
   }
 
-  // Body
-  const bounce = isMoving ? Math.sin(Date.now() / 120) * 2 : 0
+  // ── Draw body in local space (with sway rotation)
   ctx.save()
-  ctx.translate(x, y - 14 + bounce)
+  ctx.translate(x, y - 14 + bounceY)
+  ctx.rotate(swayAngle)
 
-  // Body blob
+  // Legs (drawn first, behind body)
+  if (!isSleeping) {
+    ctx.beginPath()
+    ctx.ellipse(-3.5 + legSwing * 0.4, 17, 3, 2.2, 0, 0, Math.PI * 2)
+    ctx.fillStyle = darken(agent.color, 0.25)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.ellipse(3.5 - legSwing * 0.4, 17, 3, 2.2, 0, 0, Math.PI * 2)
+    ctx.fillStyle = darken(agent.color, 0.25)
+    ctx.fill()
+  }
+
+  // Body blob — slight squash/stretch: tall when airborne, wide on landing
+  const bodyRx = 9  - walkAmt * 0.8
+  const bodyRy = 13 + walkAmt * 1.5
   ctx.beginPath()
-  ctx.ellipse(0, 4, 9, 13, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 4, bodyRx, bodyRy, 0, 0, Math.PI * 2)
   ctx.fillStyle = agent.color
   ctx.fill()
   ctx.strokeStyle = darken(agent.color, 0.2)
   ctx.lineWidth = 1
   ctx.stroke()
 
-  // Head
+  // Head — subtle counter-bounce (lags behind body slightly)
+  const headBobY = isMoving ? Math.sin(walkT * 2 + phase + 0.4) * 0.8 : 0
   ctx.beginPath()
-  ctx.arc(0, -10, 9, 0, Math.PI * 2)
+  ctx.arc(0, -10 + headBobY, 9, 0, Math.PI * 2)
   ctx.fillStyle = agent.accentColor
   ctx.fill()
   ctx.strokeStyle = darken(agent.accentColor, 0.2)
   ctx.lineWidth = 1
   ctx.stroke()
 
-  // Eyes
-  drawEyes(ctx, agent.mood)
+  // Eyes (with sleeping state)
+  drawEyes(ctx, isSleeping ? 'sleeping' : agent.mood, headBobY)
 
   ctx.restore()
 
-  // Avengers emoji badge
+  // ── Emoji badge (Avengers)
   if (agent.emoji) {
     ctx.font = '13px system-ui'
     ctx.textAlign = 'center'
-    ctx.fillText(agent.emoji, x, y - 24 + bounce)
+    ctx.fillText(agent.emoji, x, y - 26 + bounceY)
   }
 
-  // Name label
+  // ── Name label
   ctx.font = '10px system-ui'
   ctx.textAlign = 'center'
   ctx.fillStyle = '#fff'
-  ctx.shadowColor = 'rgba(0,0,0,0.8)'
-  ctx.shadowBlur = 3
-  ctx.fillText(agent.name, x, y - 34 + bounce)
+  ctx.shadowColor = 'rgba(0,0,0,0.9)'
+  ctx.shadowBlur = 4
+  ctx.fillText(agent.name, x, y - (agent.emoji ? 38 : 32) + bounceY)
   ctx.shadowBlur = 0
 
-  // Speech bubble
+  // ── Speech bubble
   if (agent.speech) {
-    drawSpeechBubble(ctx, x, y - 42 + bounce, agent.speech)
+    drawSpeechBubble(ctx, x, y - (agent.emoji ? 50 : 44) + bounceY, agent.speech)
   }
 
-  // Task progress bar
+  // ── Task progress bar
   if (agent.state === 'working' && agent.taskProgress > 0) {
     drawProgressBar(ctx, x, y + 2, agent.taskProgress, agent.color)
   }
 }
 
-function drawEyes(ctx: CanvasRenderingContext2D, mood: string) {
-  const eyeY = -12
+function drawEyes(ctx: CanvasRenderingContext2D, mood: string, headBobY = 0) {
+  const eyeY  = -12 + headBobY
   const leftX = -3.5
   const rightX = 3.5
 
-  ctx.fillStyle = '#222'
+  ctx.fillStyle = '#1a1a2e'
 
-  if (mood === 'stressed') {
-    // Worried eyes (angled)
-    ctx.beginPath()
-    ctx.ellipse(leftX, eyeY, 2, 2.5, -0.3, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.ellipse(rightX, eyeY, 2, 2.5, 0.3, 0, Math.PI * 2)
-    ctx.fill()
-  } else if (mood === 'excited' || mood === 'happy') {
-    // Happy curved eyes (arcs)
-    ctx.beginPath()
-    ctx.arc(leftX, eyeY - 1, 2.5, 0, Math.PI)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(rightX, eyeY - 1, 2.5, 0, Math.PI)
-    ctx.fill()
-  } else if (mood === 'tired') {
-    // Droopy eyes
-    ctx.beginPath()
-    ctx.ellipse(leftX, eyeY, 2.5, 1.5, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.ellipse(rightX, eyeY, 2.5, 1.5, 0, 0, Math.PI * 2)
-    ctx.fill()
-  } else {
-    // Neutral dots
-    ctx.beginPath()
-    ctx.arc(leftX, eyeY, 2, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(rightX, eyeY, 2, 0, Math.PI * 2)
-    ctx.fill()
+  if (mood === 'sleeping') {
+    // Closed — horizontal squint lines
+    ctx.strokeStyle = '#1a1a2e'
+    ctx.lineWidth = 1.5
+    ctx.lineCap = 'round'
+    ctx.beginPath(); ctx.moveTo(leftX - 2, eyeY); ctx.lineTo(leftX + 2, eyeY); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(rightX - 2, eyeY); ctx.lineTo(rightX + 2, eyeY); ctx.stroke()
+    return
   }
 
-  // Shine
-  ctx.fillStyle = 'rgba(255,255,255,0.7)'
-  ctx.beginPath()
-  ctx.arc(leftX + 1, eyeY - 1, 0.8, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.beginPath()
-  ctx.arc(rightX + 1, eyeY - 1, 0.8, 0, Math.PI * 2)
-  ctx.fill()
+  if (mood === 'stressed') {
+    // Worried — angled inward
+    ctx.beginPath(); ctx.ellipse(leftX,  eyeY, 2, 2.5, -0.35, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.ellipse(rightX, eyeY, 2, 2.5,  0.35, 0, Math.PI * 2); ctx.fill()
+  } else if (mood === 'excited' || mood === 'happy') {
+    // Happy — upward arc (^_^)
+    ctx.beginPath(); ctx.arc(leftX,  eyeY - 1, 2.5, 0, Math.PI); ctx.fill()
+    ctx.beginPath(); ctx.arc(rightX, eyeY - 1, 2.5, 0, Math.PI); ctx.fill()
+  } else if (mood === 'tired') {
+    // Droopy — wide flat ovals
+    ctx.beginPath(); ctx.ellipse(leftX,  eyeY, 2.5, 1.4, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.ellipse(rightX, eyeY, 2.5, 1.4, 0, 0, Math.PI * 2); ctx.fill()
+  } else {
+    // Neutral dots
+    ctx.beginPath(); ctx.arc(leftX,  eyeY, 2, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(rightX, eyeY, 2, 0, Math.PI * 2); ctx.fill()
+  }
+
+  // Eye shine
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  ctx.beginPath(); ctx.arc(leftX  + 0.8, eyeY - 0.8, 0.9, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(rightX + 0.8, eyeY - 0.8, 0.9, 0, Math.PI * 2); ctx.fill()
 }
 
 function drawSpeechBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
