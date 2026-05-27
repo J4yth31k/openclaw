@@ -17,8 +17,8 @@ export interface TradingViewAlert {
   fast_ema?:    number;
   slow_ema?:    number;
   vwap?:        number;
-  // Scalping indicators
-  signal?:      string;   // 'ribbon' | 'squeeze'
+  // Signal Forge / Scalping
+  signal?:      string;   // Signal Forge: "5/6 (SMA|MACD|ST|STOCH|ADX)" | legacy: 'ribbon'|'squeeze'
   stoch_k?:     number;
   stoch_d?:     number;
   ema8?:        number;

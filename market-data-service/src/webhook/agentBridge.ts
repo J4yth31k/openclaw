@@ -32,14 +32,19 @@ export async function getAgentAnalysis(
     indicators: merged,
     strategy:   alert.strategy,
     tier:       alert.tier,
-    // Flat PriceFeed v2 fields — agent_api.py reads these via _ind() helper
-    rsi:        alert.rsi        ?? null,
-    atr:        alert.atr        ?? null,
-    ema21:      alert.ema21      ?? null,
-    ema55:      alert.ema55      ?? null,
-    vwap:       alert.vwap       ?? null,
-    prev_high:  alert.prev_high  ?? null,
-    prev_low:   alert.prev_low   ?? null,
+    // Flat fields — agent_api.py reads these via _ind() helper
+    // Signal Forge confluence string e.g. "5/6 (SMA|MACD|ST|STOCH|ADX)"
+    signal:      alert.signal      ?? null,
+    rsi:         alert.rsi         ?? null,
+    atr:         alert.atr         ?? null,
+    ema21:       alert.ema21       ?? null,
+    ema55:       alert.ema55       ?? null,
+    vwap:        alert.vwap        ?? null,
+    stoch_k:     alert.stoch_k     ?? null,
+    stoch_d:     alert.stoch_d     ?? null,
+    vol_ratio:   alert.vol_ratio   ?? null,
+    prev_high:   alert.prev_high   ?? null,
+    prev_low:    alert.prev_low    ?? null,
     rsi_context: alert.rsi_context ?? null,
     level_hint:  alert.level_hint  ?? null,
   });
