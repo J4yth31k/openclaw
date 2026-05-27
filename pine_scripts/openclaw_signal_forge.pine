@@ -238,17 +238,22 @@ oc_total_enabled = (enableSmaInput  ? 1 : 0) + (enableRsiInput  ? 1 : 0)
                  + (enableAdxInput  ? 1 : 0)
 
 // Which indicators are active — compact label like "SMA|MACD|ST"
-oc_sig_label = (enableSmaInput  ? 'SMA|'  : '')
-             + (enableRsiInput  ? 'RSI|'  : '')
-             + (enableMacdInput ? 'MACD|' : '')
-             + (enableStInput   ? 'ST|'   : '')
-             + (enableStochInput ? 'STOCH|' : '')
-             + (enableBbInput   ? 'BB|'   : '')
-             + (enableEmaInput  ? 'EMA|'  : '')
-             + (enableAoInput   ? 'AO|'   : '')
-             + (enableSarInput  ? 'SAR|'  : '')
-             + (enableCciInput  ? 'CCI|'  : '')
-             + (enableAdxInput  ? 'ADX'   : '')
+// Each always appends '|' so we strip trailing pipe at the end
+_oc_raw_label = (enableSmaInput   ? 'SMA|'   : '')
+              + (enableRsiInput   ? 'RSI|'   : '')
+              + (enableMacdInput  ? 'MACD|'  : '')
+              + (enableStInput    ? 'ST|'    : '')
+              + (enableStochInput ? 'STOCH|' : '')
+              + (enableBbInput    ? 'BB|'    : '')
+              + (enableEmaInput   ? 'EMA|'   : '')
+              + (enableAoInput    ? 'AO|'    : '')
+              + (enableSarInput   ? 'SAR|'   : '')
+              + (enableCciInput   ? 'CCI|'   : '')
+              + (enableAdxInput   ? 'ADX|'   : '')
+// Strip trailing '|' if present
+oc_sig_label  = str.endswith(_oc_raw_label, '|')
+              ? str.substring(_oc_raw_label, 0, str.length(_oc_raw_label) - 1)
+              : _oc_raw_label
 
 // Context strings
 oc_rsi_ctx  = rsi > 70 ? 'overbought' : rsi > 60 ? 'high' : rsi < 30 ? 'oversold' : rsi < 40 ? 'low' : 'mid'
@@ -425,7 +430,7 @@ if enableSarInput
 
 if enableCciInput
     longCond := requireAllInput ? (longCond and cciBullish) : (longCond or cciBullish)
-    shortCond := requireAllInput ? (shortCond and cciBearish) : (shortCond or shortCond)
+    shortCond := requireAllInput ? (shortCond and cciBearish) : (shortCond or cciBearish)
     anyEnabled := true
 
 if enableAdxInput
