@@ -259,6 +259,7 @@ export interface SimState {
   trading: TradingStats
   eventLog: EventLogEntry[]
   selectedAgentId: AgentId | null
+  selectedBuildingId: BuildingId | null
   totalCash: number
   completedTaskCount: number
   warnings: string[]

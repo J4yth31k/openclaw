@@ -11,6 +11,7 @@ import CommandPanel from './components/CommandPanel'
 import UpgradesPanel from './components/UpgradesPanel'
 import LaunchPlanPanel from './components/LaunchPlanPanel'
 import N8nPlanPanel from './components/N8nPlanPanel'
+import BuildingModal from './components/BuildingModal'
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
@@ -161,6 +162,7 @@ export default function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', userSelect: 'none', overflow: 'hidden', background: '#020408' }}>
       <Toolbar />
+      <BuildingModal />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* World canvas */}

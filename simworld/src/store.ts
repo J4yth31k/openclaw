@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SimState, Agent, AgentId } from './types'
+import type { SimState, Agent, AgentId, BuildingId } from './types'
 import { UPGRADE_DEFS } from './data/upgradeData'
 import { makeInitialTime, advanceTime } from './engine/TimeSystem'
 import { makeInitialAgents, worldMap, gridToPixel } from './data/worldData'
@@ -28,6 +28,7 @@ function makeInitialState(): SimState {
       },
     ],
     selectedAgentId: null,
+    selectedBuildingId: null,
     totalCash: 14900,
     completedTaskCount: 0,
     warnings: [],
@@ -39,6 +40,7 @@ function makeInitialState(): SimState {
 interface SimStore extends SimState {
   tick: (realMs: number) => void
   selectAgent: (id: AgentId | null) => void
+  selectBuilding: (id: BuildingId | null) => void
   setSpeed: (speed: number) => void
   togglePause: () => void
   save: () => void
@@ -136,6 +138,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
   },
 
   selectAgent: (id) => set({ selectedAgentId: id }),
+  selectBuilding: (id) => set({ selectedBuildingId: id }),
 
   setSpeed: (speed) => set(s => ({ time: { ...s.time, speed } })),
 
