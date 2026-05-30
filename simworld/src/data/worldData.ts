@@ -251,7 +251,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'ironman', name: 'Iron Man', role: 'tech_analyst', emoji: '🦾',
     color: '#ef4444', accentColor: '#fca5a5',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'intel_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'market_room',
     spawnTile: { x: 26, y: 1 }, startState: 'sleeping', mood: 'excited',
     isAvenger: true,
     agentNeeds: { dataFreshness: 85, apiHealth: 95, rest: 80, morale: 85 },
@@ -261,7 +261,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'captain', name: 'Capt. America', role: 'fundamentals_agent', emoji: '🛡️',
     color: '#4a6cf7', accentColor: '#a5b4fc',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'intel_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'strategy_room',
     spawnTile: { x: 27, y: 1 }, startState: 'sleeping', mood: 'happy',
     isAvenger: true,
     agentNeeds: { dataFreshness: 90, apiHealth: 92, rest: 88, morale: 92 },
@@ -271,7 +271,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'scarlet', name: 'Scarlet Witch', role: 'sentiment_agent', emoji: '🔮',
     color: '#ec4899', accentColor: '#f9a8d4',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'intel_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'market_room',
     spawnTile: { x: 28, y: 1 }, startState: 'sleeping', mood: 'neutral',
     isAvenger: true,
     agentNeeds: { dataFreshness: 78, apiHealth: 88, rest: 82, morale: 78 },
@@ -281,7 +281,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'vision', name: 'Vision', role: 'orderflow_agent', emoji: '👁️',
     color: '#a855f7', accentColor: '#d8b4fe',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'intel_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'market_room',
     spawnTile: { x: 29, y: 1 }, startState: 'sleeping', mood: 'happy',
     isAvenger: true,
     agentNeeds: { dataFreshness: 92, apiHealth: 90, rest: 92, morale: 90 },
@@ -291,7 +291,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'thor', name: 'Thor', role: 'correlation_agent', emoji: '⚡',
     color: '#06b6d4', accentColor: '#67e8f9',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'ops_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'strategy_room',
     spawnTile: { x: 26, y: 2 }, startState: 'sleeping', mood: 'excited',
     isAvenger: true,
     agentNeeds: { dataFreshness: 88, apiHealth: 95, rest: 95, morale: 95 },
@@ -301,7 +301,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'fury', name: 'Nick Fury', role: 'director_agent', emoji: '🎯',
     color: '#7c3aed', accentColor: '#c4b5fd',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'command_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'strategy_room',
     spawnTile: { x: 27, y: 2 }, startState: 'sleeping', mood: 'neutral',
     isAvenger: true,
     agentNeeds: { dataFreshness: 70, apiHealth: 80, rest: 60, morale: 70 },
@@ -311,7 +311,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'widow', name: 'Black Widow', role: 'tradeideas_agent', emoji: '🕷️',
     color: '#10b981', accentColor: '#6ee7b7',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'ops_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'strategy_room',
     spawnTile: { x: 28, y: 2 }, startState: 'sleeping', mood: 'happy',
     isAvenger: true,
     agentNeeds: { dataFreshness: 85, apiHealth: 90, rest: 75, morale: 88 },
@@ -321,7 +321,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'spiderman', name: 'Spider-Man', role: 'news_agent', emoji: '🕸️',
     color: '#f97316', accentColor: '#fdba74',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'ops_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'review_room',
     spawnTile: { x: 29, y: 2 }, startState: 'sleeping', mood: 'happy',
     isAvenger: true,
     agentNeeds: { dataFreshness: 82, apiHealth: 88, rest: 88, morale: 86 },
@@ -331,7 +331,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'hawkeye', name: 'Hawkeye', role: 'webhook_agent', emoji: '🏹',
     color: '#f59e0b', accentColor: '#fcd34d',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'backtest_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'review_room',
     spawnTile: { x: 26, y: 3 }, startState: 'sleeping', mood: 'neutral',
     isAvenger: true,
     agentNeeds: { dataFreshness: 80, apiHealth: 85, rest: 85, morale: 80 },
@@ -341,7 +341,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'strange', name: 'Dr. Strange', role: 'hq_risk_manager', emoji: '🔯',
     color: '#14b8a6', accentColor: '#5eead4',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'hq_risk_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'risk_room',
     spawnTile: { x: 27, y: 3 }, startState: 'sleeping', mood: 'neutral',
     isAvenger: true,
     agentNeeds: { dataFreshness: 88, apiHealth: 92, rest: 78, morale: 82 },
@@ -351,7 +351,7 @@ export const AVENGERS_DEFS: AgentDef[] = [
   {
     id: 'hulk', name: 'Hulk', role: 'backtest_agent', emoji: '💪',
     color: '#84cc16', accentColor: '#bef264',
-    homeBuilding: 'hq_quarters', workBuilding: 'avengers_hq', workRoom: 'backtest_room',
+    homeBuilding: 'hq_quarters', workBuilding: 'trading_office', workRoom: 'review_room',
     spawnTile: { x: 28, y: 3 }, startState: 'sleeping', mood: 'excited',
     isAvenger: true,
     agentNeeds: { dataFreshness: 90, apiHealth: 95, rest: 99, morale: 96 },
