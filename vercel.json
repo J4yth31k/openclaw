@@ -1,8 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd simworld && npm ci && npm run build && mkdir -p ../public/simworld && cp -r dist/* ../public/simworld/",
   "outputDirectory": ".",
-  "installCommand": "",
   "routes": [
     { "src": "/simworld/assets/(.*)", "dest": "/public/simworld/assets/$1" },
     { "src": "/simworld",             "dest": "/public/simworld/index.html" },
