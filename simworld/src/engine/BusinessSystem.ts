@@ -5,6 +5,20 @@ import type {
 import { TRADE_EVENTS, TRENDING_NICHES, makeProduct, makeProductId } from '../data/businessData'
 import { UPGRADE_DEFS, computeEffects } from '../data/upgradeData'
 import { timeLabel, simMinuteOfDay } from './TimeSystem'
+import { onTaskComplete, saveSimState } from './EtsyBridge'
+
+let _etsyAuthenticated = false
+export function setEtsyAuthenticated(v: boolean) { _etsyAuthenticated = v }
+
+// Save sim state to Railway every 60 real seconds
+let _lastSave = 0
+function maybePersist(state: SimState) {
+  const now = Date.now()
+  if (now - _lastSave > 60_000) {
+    _lastSave = now
+    saveSimState(state)
+  }
+}
 
 // ── Unique ID util ────────────────────────────────────────────────────────────
 let uniqueId = 0
@@ -366,7 +380,7 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
     const sales     = result.creative?.mockSales ?? state.creative.mockSales
     const reviews   = result.creative?.totalReviews ?? state.creative.totalReviews
 
-    // Helper: mark item done + emit event log entry once
+    // Helper: mark item done + emit event log entry once + fire real Railway action
     function launch(id: string, msg: string, agentId?: string) {
       if (done.has(id)) return
       newly.push(id)
@@ -374,6 +388,10 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
       result.logEntries.push({
         id: uid(), simMinute: simMin, timeLabel: timeLabel(t),
         message: `🧶 ${msg}`, type: 'creative', agentId,
+      })
+      // Fire real-world action asynchronously (PDF gen + Etsy listing)
+      onTaskComplete(id, _etsyAuthenticated).then(realMsg => {
+        if (realMsg) console.info('[EtsyBridge]', realMsg)
       })
     }
 
@@ -432,5 +450,6 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
     }
   }
 
+  maybePersist(state)
   return result
 }

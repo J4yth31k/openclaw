@@ -21,10 +21,32 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any
 import uvicorn
+import json
+
+try:
+    from etsy_api import (
+        build_auth_url, exchange_code, get_shop_stats,
+        create_listing, upload_digital_file, activate_listing,
+        get_listings, get_recent_transactions, is_authenticated,
+        generate_product as _etsy_gen_product,
+    )
+    _ETSY_AVAILABLE = True
+except Exception:
+    _ETSY_AVAILABLE = False
+
+try:
+    from pdf_generator import generate_product, generate_all, PRODUCT_MAP
+    _PDF_AVAILABLE = True
+except Exception:
+    _PDF_AVAILABLE = False
+
+# ── In-memory sim state store (persists across requests within a deploy) ───────
+_sim_state: dict[str, Any] = {}
 
 try:
     from ict_pipeline import run_pipeline
@@ -459,6 +481,196 @@ def run_agents(payload: AlertPayload) -> str:
         else f" {payload.session} session."
     )
     return " || ".join(parts) + session_note
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ETSY ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/etsy/auth")
+async def etsy_auth():
+    """Redirect browser to Etsy OAuth consent screen."""
+    if not _ETSY_AVAILABLE:
+        raise HTTPException(503, "etsy_api module not available")
+    if not os.getenv("ETSY_API_KEY"):
+        raise HTTPException(503, "ETSY_API_KEY not set in environment")
+    url = build_auth_url()
+    return RedirectResponse(url)
+
+
+@app.get("/etsy/callback")
+async def etsy_callback(code: str, state: str):
+    """Etsy OAuth callback — exchange code for token."""
+    if not _ETSY_AVAILABLE:
+        raise HTTPException(503, "etsy_api module not available")
+    try:
+        data = exchange_code(code, state)
+        return JSONResponse({"status": "authenticated", "expires_in": data.get("expires_in")})
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/etsy/status")
+async def etsy_status():
+    """Check if Etsy OAuth token is present."""
+    if not _ETSY_AVAILABLE:
+        return {"authenticated": False, "reason": "etsy_api module not loaded"}
+    return {
+        "authenticated": is_authenticated(),
+        "api_key_set":   bool(os.getenv("ETSY_API_KEY")),
+    }
+
+
+@app.get("/etsy/shop")
+async def etsy_shop():
+    """Return live shop stats from Etsy."""
+    if not _ETSY_AVAILABLE or not is_authenticated():
+        raise HTTPException(401, "Not authenticated — visit /etsy/auth first")
+    try:
+        return get_shop_stats()
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/etsy/listings")
+async def etsy_listings(limit: int = 25):
+    """Return active listings from the Etsy shop."""
+    if not _ETSY_AVAILABLE or not is_authenticated():
+        raise HTTPException(401, "Not authenticated — visit /etsy/auth first")
+    try:
+        return {"listings": get_listings(limit)}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/etsy/sales")
+async def etsy_sales(limit: int = 10):
+    """Return recent Etsy transactions."""
+    if not _ETSY_AVAILABLE or not is_authenticated():
+        raise HTTPException(401, "Not authenticated — visit /etsy/auth first")
+    try:
+        return {"transactions": get_recent_transactions(limit)}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class ListingRequest(BaseModel):
+    title:       str
+    description: str
+    price:       float
+    tags:        list[str]
+    category:    str = "Printables"
+
+
+@app.post("/etsy/listing")
+async def etsy_create_listing(req: ListingRequest):
+    """Create a draft listing on Etsy."""
+    if not _ETSY_AVAILABLE or not is_authenticated():
+        raise HTTPException(401, "Not authenticated — visit /etsy/auth first")
+    try:
+        return create_listing(req.title, req.description, req.price, req.tags, req.category)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class GenerateRequest(BaseModel):
+    product_key: str
+    auto_list:   bool = False   # if True, create Etsy draft + upload PDF automatically
+
+
+@app.post("/etsy/generate")
+async def etsy_generate(req: GenerateRequest):
+    """Generate a PDF product and optionally create an Etsy draft listing."""
+    if not _PDF_AVAILABLE:
+        raise HTTPException(503, "pdf_generator not available — install fpdf2")
+    try:
+        product_info = generate_product(req.product_key)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    result = {"pdf": product_info, "listing": None}
+
+    if req.auto_list and _ETSY_AVAILABLE and is_authenticated():
+        try:
+            name = product_info["name"]
+            listing = create_listing(
+                title=f"{name} | Printable PDF | Instant Download",
+                description=_default_description(name),
+                price=4.99,
+                tags=_default_tags(req.product_key),
+            )
+            upload_digital_file(
+                str(listing["listing_id"]),
+                product_info["file_path"],
+                f"{req.product_key}.pdf",
+            )
+            result["listing"] = listing
+        except Exception as e:
+            result["listing_error"] = str(e)
+
+    return result
+
+
+@app.post("/etsy/generate-all")
+async def etsy_generate_all():
+    """Generate all PDF products."""
+    if not _PDF_AVAILABLE:
+        raise HTTPException(503, "pdf_generator not available — install fpdf2")
+    products = generate_all()
+    return {"products": products, "count": len(products)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SIM STATE PERSISTENCE ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/sim/save")
+async def sim_save(payload: dict):
+    """Save simworld state. Frontend posts entire Zustand store snapshot."""
+    _sim_state.clear()
+    _sim_state.update(payload)
+    return {"status": "saved", "keys": list(payload.keys())}
+
+
+@app.get("/sim/load")
+async def sim_load():
+    """Load last saved simworld state."""
+    if not _sim_state:
+        return {"status": "empty"}
+    return {"status": "ok", "state": _sim_state}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _default_description(name: str) -> str:
+    return (
+        f"✨ {name} — Instant Digital Download\n\n"
+        "📥 What you get:\n"
+        "• High-quality PDF (A4 + US Letter)\n"
+        "• Print at home or at any print shop\n"
+        "• Minimalist, clean aesthetic\n\n"
+        "✅ How it works:\n"
+        "1. Purchase & instant download\n"
+        "2. Open in any PDF viewer\n"
+        "3. Print & use immediately\n\n"
+        "💡 No physical product is shipped. This is a digital file.\n\n"
+        "OpenClaw Crafts — Organized. Intentional. Aesthetic."
+    )
+
+
+def _default_tags(product_key: str) -> list[str]:
+    base = ["printable", "instant download", "digital download", "pdf printable", "planner"]
+    extras = {
+        "daily_planner":     ["daily planner", "time blocking", "productivity", "undated planner", "planner pages", "daily schedule", "minimalist planner", "planner printable"],
+        "weekly_tracker":    ["habit tracker", "weekly habits", "habit log", "self improvement", "wellness planner", "goal tracker", "routine tracker"],
+        "budget_tracker":    ["budget planner", "finance tracker", "money planner", "bill tracker", "expense tracker", "savings planner", "budget worksheet"],
+        "gratitude_journal": ["gratitude journal", "mindfulness", "self care", "daily journal", "wellness journal", "positive thinking", "journal pages", "30 day challenge"],
+        "goal_workbook":     ["goal setting", "vision board", "quarterly planner", "goal planner", "life planner", "achievement tracker", "success planner"],
+    }
+    all_tags = (extras.get(product_key, []) + base)[:13]
+    return all_tags
 
 
 if __name__ == "__main__":
