@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSimStore } from './store'
+import { getTzAbbr, clockString } from './engine/TimeSystem'
 import WorldCanvas from './components/WorldCanvas'
 import AgentInspector from './components/AgentInspector'
 import ProfitPanel from './components/ProfitPanel'
@@ -13,17 +14,22 @@ import N8nPlanPanel from './components/N8nPlanPanel'
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
-function Toolbar() {
-  const time      = useSimStore(s => s.time)
-  const setSpeed  = useSimStore(s => s.setSpeed)
-  const togglePause = useSimStore(s => s.togglePause)
-  const save  = useSimStore(s => s.save)
-  const load  = useSimStore(s => s.load)
-  const reset = useSimStore(s => s.reset)
-  const agents = useSimStore(s => s.agents)
+const TZ_ABBR = getTzAbbr()
 
-  const h = String(time.hour).padStart(2, '0')
-  const m = String(Math.floor(time.minute)).padStart(2, '0')
+function Toolbar() {
+  const time        = useSimStore(s => s.time)
+  const togglePause = useSimStore(s => s.togglePause)
+  const save        = useSimStore(s => s.save)
+  const load        = useSimStore(s => s.load)
+  const reset       = useSimStore(s => s.reset)
+  const agents      = useSimStore(s => s.agents)
+
+  // Tick the seconds hand every second for live clock display
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const avengersActive = agents.filter(a => a.isAvenger && a.state === 'working').length
   const totalAvengers  = agents.filter(a => a.isAvenger).length
@@ -43,23 +49,35 @@ function Toolbar() {
       <span style={{ fontSize: 14, fontWeight: 700, background: 'linear-gradient(90deg,#00d4ff,#7c3aed)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: 1, marginRight: 4 }}>
         🌍 SimWorld
       </span>
-      <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#f5c842', minWidth: 120 }}>
-        🕐 Day {time.day} {h}:{m}
-      </span>
-      <button style={btn(time.paused)} onClick={togglePause}>
-        {time.paused ? '▶ Play' : '⏸ Pause'}
-      </button>
-      <span style={{ color: '#2a3040', fontSize: 10 }}>Speed:</span>
-      {[1, 2, 4, 8].map(spd => {
-        const active = Math.round(800 / time.speed) === spd
-        return <button key={spd} style={btn(active)} onClick={() => setSpeed(800 / spd)}>{spd}×</button>
-      })}
 
-      {/* Avengers status pill */}
+      {/* Real-time clock */}
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 130 }}>
+        <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#f5c842', lineHeight: 1.2 }}>
+          🕐 {clockString(time)}
+        </span>
+        <span style={{ fontFamily: 'monospace', fontSize: 8, color: '#6a7890', lineHeight: 1 }}>
+          {TZ_ABBR} · Op Day {time.day}
+        </span>
+      </div>
+
+      <button style={btn(time.paused)} onClick={togglePause}>
+        {time.paused ? '▶ Resume' : '⏸ Pause'}
+      </button>
+
+      {/* Real-time badge */}
+      <div style={{
+        padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+        background: 'rgba(16,185,129,0.12)', color: '#10b981',
+        border: '1px solid rgba(16,185,129,0.25)', letterSpacing: 0.5,
+      }}>
+        ⏱ REAL-TIME
+      </div>
+
+      {/* Agents pill */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 5, padding: '2px 8px',
         border: '1px solid rgba(124,58,237,0.3)', borderRadius: 4,
-        background: 'rgba(124,58,237,0.06)', marginLeft: 4,
+        background: 'rgba(124,58,237,0.06)',
       }}>
         <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#10b981' }} />
         <span style={{ fontSize: 9, color: '#a78bfa', fontFamily: 'monospace' }}>
