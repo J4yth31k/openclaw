@@ -343,8 +343,16 @@ class NickFury:
                              risk parameters.  Falls back to *account_size*.
         """
         self.pairs = pairs or [
+            # Crypto
             'BTCUSD', 'ETHUSD', 'SOLUSD',
-            'EURUSD', 'XAUUSD', 'USDCAD'
+            # Forex / metals
+            'EURUSD', 'GBPUSD', 'XAUUSD', 'USDCAD',
+            # Equity index futures (ICT primary)
+            'NQ', 'ES',
+            # Energy futures
+            'CL',
+            # Rates futures
+            'ZN',
         ]
         self.run_backtest = run_backtest
         self.account_size = account_size
@@ -901,15 +909,45 @@ class NickFury:
         # ── War Machine macro signals → all pairs ────────────────────
         wm_intel = workspace.get('wm_intelligence', {})
         macro_signals = wm_intel.get('macro', {}).get('signals', [])
-        dxy_rising = any(s.get('signal') == 'DXY_RISING' for s in macro_signals)
-        high_vix   = any(s.get('signal') == 'HIGH_VIX'   for s in macro_signals)
-        if dxy_rising or high_vix:
-            for pair in self.pairs:
-                # DXY rising = USD bull → risk-off for crypto/commodities
-                if any(c in pair for c in ('BTC', 'ETH', 'SOL', 'XAU')):
+        dxy_rising  = any(s.get('signal') == 'DXY_RISING'    for s in macro_signals)
+        dxy_falling = any(s.get('signal') == 'DXY_FALLING'   for s in macro_signals)
+        high_vix    = any(s.get('signal') == 'HIGH_VIX'      for s in macro_signals)
+        low_vix     = any(s.get('signal') == 'LOW_VIX'       for s in macro_signals)
+        gold_up     = any(s.get('signal') == 'GOLD_UP'       for s in macro_signals)
+        yields_high = any(s.get('signal') == 'YIELDS_HIGH'   for s in macro_signals)
+
+        _equity_futures = {'NQ', 'ES', 'YM', 'RTY', 'MNQ', 'MES'}
+        _energy_futures = {'CL', 'NG'}
+        _bond_futures   = {'ZN', 'ZB', 'ZF', 'ZT'}
+        _crypto         = {'BTC', 'ETH', 'SOL'}
+
+        for pair in self.pairs:
+            is_crypto    = any(c in pair for c in _crypto)
+            is_xau       = 'XAU' in pair or pair == 'GC'
+            is_equity    = pair in _equity_futures
+            is_energy    = pair in _energy_futures
+            is_bond      = pair in _bond_futures
+
+            if is_crypto or is_xau or is_energy:
+                # Risk-off assets: bear on DXY strength or fear
+                if dxy_rising or high_vix:
                     votes[pair]['bear'].append('WarMachine')
-                else:
-                    votes[pair]['neutral'].append('WarMachine')
+                elif dxy_falling or low_vix or gold_up:
+                    votes[pair]['bull'].append('WarMachine')
+
+            elif is_equity:
+                # Equity index futures: fear = bear, calm = bull
+                if high_vix or yields_high:
+                    votes[pair]['bear'].append('WarMachine')
+                elif low_vix:
+                    votes[pair]['bull'].append('WarMachine')
+
+            elif is_bond:
+                # Bonds rally when yields fall / risk-off (inverse yield relationship)
+                if yields_high:
+                    votes[pair]['bear'].append('WarMachine')
+                elif high_vix:
+                    votes[pair]['bull'].append('WarMachine')
 
         return votes
 

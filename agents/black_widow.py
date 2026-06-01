@@ -38,9 +38,9 @@ SESSION_BIAS = {
                 'description': 'Range-bound, JPY/AUD driven'},
     'London':  {'bias_pairs': ['EURUSD', 'GBPUSD', 'XAUUSD', 'USDCHF'],
                 'description': 'Trend initiation, EUR/GBP driven'},
-    'NY':      {'bias_pairs': ['EURUSD', 'USDCAD', 'XAUUSD', 'BTCUSD'],
-                'description': 'Continuation/reversal, USD driven'},
-    'Overlap': {'bias_pairs': ['EURUSD', 'GBPUSD', 'XAUUSD', 'USDCAD'],
+    'NY':      {'bias_pairs': ['EURUSD', 'USDCAD', 'XAUUSD', 'BTCUSD', 'NQ', 'ES', 'CL', 'ZN'],
+                'description': 'Continuation/reversal, USD + equity futures driven'},
+    'Overlap': {'bias_pairs': ['EURUSD', 'GBPUSD', 'XAUUSD', 'USDCAD', 'NQ', 'ES'],
                 'description': 'Highest volume, strongest moves'},
 }
 
@@ -53,6 +53,13 @@ CORRELATION_MAP = {
     'BTCUSD': {'inverse': ['DXY'], 'positive': ['ETHUSD', 'SOLUSD']},
     'ETHUSD': {'inverse': ['DXY'], 'positive': ['BTCUSD', 'SOLUSD']},
     'SOLUSD': {'inverse': ['DXY'], 'positive': ['BTCUSD', 'ETHUSD']},
+    # Equity index futures — correlated with each other, inverse to VIX/bonds
+    'NQ':     {'inverse': ['ZN', 'ZB'], 'positive': ['ES', 'YM']},
+    'ES':     {'inverse': ['ZN', 'ZB'], 'positive': ['NQ', 'YM']},
+    # Energy
+    'CL':     {'inverse': ['DXY'], 'positive': ['XAUUSD']},
+    # Bonds — inverse to equities, rally on risk-off
+    'ZN':     {'inverse': ['NQ', 'ES'], 'positive': ['ZB']},
 }
 
 
