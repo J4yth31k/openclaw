@@ -16,8 +16,10 @@ import json
 import logging
 import os
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
+
+import requests
 
 logger = logging.getLogger('war_machine')
 
@@ -760,6 +762,268 @@ class WarMachine:
         logger.info(f"[WarMachine] Weekly report — {week_start} to {week_end} | "
                      f"{total} trades | P&L: ${total_pnl_dollars:.2f}")
         return report
+
+    # ------------------------------------------------------------------
+    # Data Scraper — feeds structured intelligence into the pipeline
+    # ------------------------------------------------------------------
+
+    def _safe_get(self, url: str, params: Optional[dict] = None, timeout: int = 8) -> Optional[dict]:
+        """HTTP GET with error swallowing — returns None on any failure."""
+        try:
+            resp = requests.get(url, params=params, timeout=timeout,
+                                headers={'User-Agent': 'OpenClaw/3.0 (trading research bot)'})
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.warning(f"[WarMachine] HTTP fetch failed {url}: {e}")
+            return None
+
+    def scrape_onchain(self) -> dict:
+        """
+        Pull live on-chain metrics for BTC and ETH from free public APIs.
+
+        Sources:
+          - blockchain.info  → BTC network stats (hash rate, mempool, difficulty)
+          - coincap.io       → BTC + ETH price, market cap, 24h change, volume
+          - blockchain.info/q → supply metrics
+
+        Returns structured dict with 'btc' and 'eth' sub-dicts.
+        """
+        result: dict = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'btc': {},
+            'eth': {},
+            'status': 'partial',
+        }
+
+        # ── BTC network stats ─────────────────────────────────────────
+        stats = self._safe_get('https://blockchain.info/stats', params={'format': 'json'})
+        if stats:
+            result['btc']['hash_rate_th'] = round(stats.get('hash_rate', 0) / 1e12, 2)
+            result['btc']['difficulty'] = stats.get('difficulty', 0)
+            result['btc']['n_tx_24h'] = stats.get('n_tx', 0)
+            result['btc']['miners_revenue_usd'] = stats.get('miners_revenue_usd', 0)
+            result['btc']['mempool_size'] = stats.get('mempool_size', 0)
+            result['btc']['estimated_btc_sent'] = stats.get('estimated_btc_sent', 0)
+
+        # ── CoinCap prices ────────────────────────────────────────────
+        btc_data = self._safe_get('https://api.coincap.io/v2/assets/bitcoin')
+        if btc_data and btc_data.get('data'):
+            d = btc_data['data']
+            result['btc']['price_usd'] = float(d.get('priceUsd', 0))
+            result['btc']['market_cap_usd'] = float(d.get('marketCapUsd', 0))
+            result['btc']['change_pct_24h'] = float(d.get('changePercent24Hr', 0))
+            result['btc']['volume_24h_usd'] = float(d.get('volumeUsd24Hr', 0))
+
+        eth_data = self._safe_get('https://api.coincap.io/v2/assets/ethereum')
+        if eth_data and eth_data.get('data'):
+            d = eth_data['data']
+            result['eth']['price_usd'] = float(d.get('priceUsd', 0))
+            result['eth']['market_cap_usd'] = float(d.get('marketCapUsd', 0))
+            result['eth']['change_pct_24h'] = float(d.get('changePercent24Hr', 0))
+            result['eth']['volume_24h_usd'] = float(d.get('volumeUsd24Hr', 0))
+
+        # ── Whale signal: large 24h BTC volume vs 7d avg ─────────────
+        if result['btc'].get('volume_24h_usd') and result['btc'].get('market_cap_usd'):
+            vol_to_cap = result['btc']['volume_24h_usd'] / result['btc']['market_cap_usd']
+            result['btc']['volume_to_cap_ratio'] = round(vol_to_cap, 4)
+            result['btc']['whale_signal'] = 'elevated' if vol_to_cap > 0.05 else 'normal'
+
+        if result['btc'] or result['eth']:
+            result['status'] = 'success'
+
+        logger.info(f"[WarMachine] On-chain scrape: BTC ${result['btc'].get('price_usd', 0):,.0f}, "
+                    f"ETH ${result['eth'].get('price_usd', 0):,.0f}")
+        return result
+
+    def scrape_sec_filings(self, keywords: Optional[List[str]] = None) -> dict:
+        """
+        Query SEC EDGAR full-text search for recent 8-K and 10-K filings
+        mentioning crypto/forex-relevant keywords.
+
+        Uses the free EDGAR full-text search API (no auth required).
+        Returns a list of the most recent matching filings.
+        """
+        if keywords is None:
+            keywords = ['bitcoin', 'cryptocurrency', 'digital asset', 'stablecoin',
+                        'central bank digital currency', 'forex', 'foreign exchange']
+
+        result: dict = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'filings': [],
+            'status': 'error',
+        }
+
+        since = (datetime.now(timezone.utc) - timedelta(days=7)).strftime('%Y-%m-%d')
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+
+        all_filings: List[dict] = []
+
+        for keyword in keywords[:4]:    # limit to 4 keywords to avoid rate-limiting
+            data = self._safe_get(
+                'https://efts.sec.gov/LATEST/search-index',
+                params={
+                    'q': f'"{keyword}"',
+                    'forms': '8-K',
+                    'dateRange': 'custom',
+                    'startdt': since,
+                    'enddt': today,
+                },
+            )
+            if not data:
+                continue
+
+            hits = data.get('hits', {}).get('hits', [])
+            for h in hits[:3]:
+                src = h.get('_source', {})
+                filing = {
+                    'keyword': keyword,
+                    'company': src.get('entity_name', ''),
+                    'form': src.get('file_type', '8-K'),
+                    'filed_at': src.get('period_of_report', src.get('file_date', '')),
+                    'description': src.get('period_of_report', ''),
+                    'url': f"https://www.sec.gov/Archives/{src.get('file_name', '')}",
+                }
+                if filing['company'] and filing not in all_filings:
+                    all_filings.append(filing)
+
+        result['filings'] = all_filings[:15]
+        result['total_found'] = len(all_filings)
+        result['keywords_searched'] = keywords[:4]
+        result['status'] = 'success'
+
+        logger.info(f"[WarMachine] SEC scrape: {len(all_filings)} filings found "
+                    f"across {len(keywords[:4])} keywords")
+        return result
+
+    def scrape_macro_snapshot(self) -> dict:
+        """
+        Pull DXY, VIX, Gold, and 10Y Treasury yield via yfinance.
+        These are key macro drivers that contextualize forex and crypto signals.
+        """
+        try:
+            import yfinance as yf
+        except ImportError:
+            logger.warning("[WarMachine] yfinance not installed — macro snapshot skipped")
+            return {'status': 'error', 'error': 'yfinance not available'}
+
+        tickers = {
+            'DXY':   'DX-Y.NYB',
+            'Gold':  'GC=F',
+            'VIX':   '^VIX',
+            'US10Y': '^TNX',
+            'SP500': '^GSPC',
+        }
+
+        result: dict = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'assets': {},
+            'signals': [],
+            'status': 'partial',
+        }
+
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            for label, ticker in tickers.items():
+                try:
+                    df = yf.download(ticker, period='5d', interval='1d', progress=False)
+                    if df.empty:
+                        continue
+                    if isinstance(df.columns, __import__('pandas').MultiIndex):
+                        df.columns = [c[0] for c in df.columns]
+                    df.columns = [str(c).lower() for c in df.columns]
+                    if len(df) >= 2:
+                        last  = float(df['close'].iloc[-1])
+                        prev  = float(df['close'].iloc[-2])
+                        chg   = round((last - prev) / prev * 100, 3)
+                        result['assets'][label] = {
+                            'price': round(last, 4),
+                            'change_pct': chg,
+                            'direction': 'up' if chg > 0 else 'down',
+                        }
+                except Exception as e:
+                    logger.debug(f"[WarMachine] {label} ({ticker}) failed: {e}")
+
+        assets = result['assets']
+
+        # ── Derive macro signals ──────────────────────────────────────
+        if 'DXY' in assets:
+            dxy_chg = assets['DXY']['change_pct']
+            if dxy_chg > 0.3:
+                result['signals'].append({'signal': 'DXY_RISING', 'note': f'DXY +{dxy_chg:.2f}% → USD strength, headwind for risk assets'})
+            elif dxy_chg < -0.3:
+                result['signals'].append({'signal': 'DXY_FALLING', 'note': f'DXY {dxy_chg:.2f}% → USD weakness, tailwind for commodities/crypto'})
+
+        if 'VIX' in assets:
+            vix = assets['VIX']['price']
+            if vix > 25:
+                result['signals'].append({'signal': 'HIGH_VIX', 'note': f'VIX {vix:.1f} — fear elevated, reduce risk exposure'})
+            elif vix < 15:
+                result['signals'].append({'signal': 'LOW_VIX', 'note': f'VIX {vix:.1f} — complacency, watch for reversal'})
+
+        if 'Gold' in assets:
+            gold_chg = assets['Gold']['change_pct']
+            if gold_chg > 0.5:
+                result['signals'].append({'signal': 'GOLD_UP', 'note': f'Gold +{gold_chg:.2f}% — risk-off / inflation hedge bid'})
+
+        if 'US10Y' in assets:
+            y10 = assets['US10Y']['price']
+            y10_chg = assets['US10Y']['change_pct']
+            if y10 > 4.5:
+                result['signals'].append({'signal': 'YIELDS_HIGH', 'note': f'10Y at {y10:.2f}% — restrictive financial conditions'})
+            elif y10_chg < -0.5:
+                result['signals'].append({'signal': 'YIELDS_FALLING', 'note': f'10Y -0.5% → flight to safety'})
+
+        if assets:
+            result['status'] = 'success'
+
+        logger.info(f"[WarMachine] Macro snapshot: DXY={assets.get('DXY', {}).get('price', 'N/A')}, "
+                    f"VIX={assets.get('VIX', {}).get('price', 'N/A')}, "
+                    f"Gold={assets.get('Gold', {}).get('price', 'N/A')}")
+        return result
+
+    def collect_intelligence(self) -> dict:
+        """
+        Master data collection. Runs all scrapers in sequence and returns
+        a unified intelligence packet for Nick Fury's pipeline.
+
+        Returns:
+            {
+              'onchain':   { btc, eth metrics },
+              'sec':       { recent filings },
+              'macro':     { DXY, VIX, Gold, 10Y },
+              'timestamp': ISO string,
+              'status':    'success' | 'partial' | 'error',
+            }
+        """
+        logger.info("[WarMachine] Intelligence collection cycle starting...")
+
+        onchain = self.scrape_onchain()
+        sec     = self.scrape_sec_filings()
+        macro   = self.scrape_macro_snapshot()
+
+        # Overall status
+        statuses = [onchain.get('status'), sec.get('status'), macro.get('status')]
+        if all(s == 'success' for s in statuses):
+            overall = 'success'
+        elif all(s == 'error' for s in statuses):
+            overall = 'error'
+        else:
+            overall = 'partial'
+
+        packet = {
+            'onchain':   onchain,
+            'sec':       sec,
+            'macro':     macro,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'status':    overall,
+        }
+
+        logger.info(f"[WarMachine] Intelligence collected — status={overall}, "
+                    f"macro_signals={len(macro.get('signals', []))}, "
+                    f"sec_filings={len(sec.get('filings', []))}")
+        return packet
 
     # ------------------------------------------------------------------
     # Lookups and stats

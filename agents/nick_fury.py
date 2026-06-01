@@ -808,6 +808,244 @@ class NickFury:
         return "\n".join(lines)
 
     # ==================================================================
+    # Agent Debate / Vote System
+    # ==================================================================
+
+    def _extract_votes(self, workspace: dict) -> dict[str, dict[str, list[str]]]:
+        """
+        Ask each agent to cast a bull / bear / neutral vote per pair.
+
+        Returns:
+            { pair: { 'bull': [agent, ...], 'bear': [agent, ...], 'neutral': [agent, ...] } }
+        """
+        votes: dict[str, dict[str, list[str]]] = {
+            p: {'bull': [], 'bear': [], 'neutral': []} for p in self.pairs
+        }
+
+        # ── Iron Man (Technical) ──────────────────────────────────────
+        tech = workspace.get('technical', {})
+        if tech.get('status') == 'success':
+            for pair in self.pairs:
+                tf = tech.get('pairs', {}).get(pair, {}).get('timeframes', {})
+                trend = (tf.get('1d') or tf.get('4h') or {}).get('trend', '')
+                if 'bull' in str(trend).lower() or 'up' in str(trend).lower():
+                    votes[pair]['bull'].append('IronMan')
+                elif 'bear' in str(trend).lower() or 'down' in str(trend).lower():
+                    votes[pair]['bear'].append('IronMan')
+                else:
+                    votes[pair]['neutral'].append('IronMan')
+
+        # ── Scarlet Witch (Sentiment) — applies to all pairs ─────────
+        sent = workspace.get('sentiment', {})
+        if sent.get('status') == 'success':
+            regime = sent.get('market_regime', {}).get('regime', '')
+            sent_vote = ('bull' if regime == 'Risk-On'
+                         else 'bear' if regime == 'Risk-Off' else 'neutral')
+            for pair in self.pairs:
+                # Per-pair override if available
+                pair_mom = sent.get('pairs', {}).get(pair, {}).get('momentum', {})
+                score = pair_mom.get('momentum_score', 0) if pair_mom else 0
+                if score > 6:
+                    votes[pair]['bull'].append('ScarletWitch')
+                elif score < 4:
+                    votes[pair]['bear'].append('ScarletWitch')
+                else:
+                    votes[pair][sent_vote].append('ScarletWitch')
+
+        # ── Captain America (Fundamentals) — macro, applies all ──────
+        fund = workspace.get('fundamental', {})
+        if fund.get('status') == 'success':
+            high_events = [e for e in fund.get('today_events', []) if e.get('impact', 0) >= 4]
+            macro_vote = 'neutral' if high_events else 'bull'  # news risk = neutral bias
+            for pair in self.pairs:
+                votes[pair][macro_vote].append('CaptainAmerica')
+
+        # ── Vision (Order Flow) — crypto/futures pairs only ──────────
+        of = workspace.get('order_flow', {})
+        if of.get('status') == 'success':
+            of_pairs = of.get('pairs', of)
+            if isinstance(of_pairs, dict):
+                for pair in self.pairs:
+                    pdata = of_pairs.get(pair)
+                    if not isinstance(pdata, dict):
+                        continue
+                    bid = float(pdata.get('bid_pressure', 0) or 0)
+                    ask = float(pdata.get('ask_pressure', 0) or 0)
+                    if bid > ask * 1.2:
+                        votes[pair]['bull'].append('Vision')
+                    elif ask > bid * 1.2:
+                        votes[pair]['bear'].append('Vision')
+                    else:
+                        votes[pair]['neutral'].append('Vision')
+
+        # ── Thor (Correlation) — flags risk-off correlations ─────────
+        corr = workspace.get('correlation', {})
+        if corr.get('status') == 'success':
+            divergences = corr.get('divergences', [])
+            corr_vote = 'neutral' if divergences else 'bull'
+            for pair in self.pairs:
+                votes[pair][corr_vote].append('Thor')
+
+        # ── Black Widow (Trade Ideas) — votes per idea ───────────────
+        ideas = workspace.get('trade_ideas', {})
+        if ideas.get('status') == 'success':
+            for idea in ideas.get('trade_ideas', []):
+                pair = idea.get('pair', '')
+                direction = str(idea.get('direction', '')).lower()
+                if pair in votes:
+                    if 'long' in direction or 'buy' in direction or 'bull' in direction:
+                        votes[pair]['bull'].append('BlackWidow')
+                    elif 'short' in direction or 'sell' in direction or 'bear' in direction:
+                        votes[pair]['bear'].append('BlackWidow')
+
+        # ── War Machine macro signals → all pairs ────────────────────
+        wm_intel = workspace.get('wm_intelligence', {})
+        macro_signals = wm_intel.get('macro', {}).get('signals', [])
+        dxy_rising = any(s.get('signal') == 'DXY_RISING' for s in macro_signals)
+        high_vix   = any(s.get('signal') == 'HIGH_VIX'   for s in macro_signals)
+        if dxy_rising or high_vix:
+            for pair in self.pairs:
+                # DXY rising = USD bull → risk-off for crypto/commodities
+                if any(c in pair for c in ('BTC', 'ETH', 'SOL', 'XAU')):
+                    votes[pair]['bear'].append('WarMachine')
+                else:
+                    votes[pair]['neutral'].append('WarMachine')
+
+        return votes
+
+    def _tally_votes(self, votes: dict[str, dict[str, list[str]]]) -> dict:
+        """
+        Tally agent votes and determine consensus level per pair.
+
+        Returns:
+            {
+              pair: {
+                'bull': int, 'bear': int, 'neutral': int,
+                'consensus': 'bull' | 'bear' | 'neutral',
+                'strength': 'strong' | 'moderate' | 'split' | 'conflicted',
+                'confluence_adj': int,   # +0/+1/+2 to minimum confluence requirement
+                'voters': { 'bull': [...], 'bear': [...], 'neutral': [...] },
+              }
+            }
+        """
+        tally: dict = {}
+        for pair, v in votes.items():
+            bull_n = len(v['bull'])
+            bear_n = len(v['bear'])
+            neut_n = len(v['neutral'])
+            total  = bull_n + bear_n + neut_n
+
+            if total == 0:
+                tally[pair] = {
+                    'bull': 0, 'bear': 0, 'neutral': 0,
+                    'consensus': 'neutral', 'strength': 'conflicted',
+                    'confluence_adj': 2, 'voters': v,
+                }
+                continue
+
+            if bull_n > bear_n and bull_n > neut_n:
+                consensus = 'bull'
+                leaders = bull_n
+            elif bear_n > bull_n and bear_n > neut_n:
+                consensus = 'bear'
+                leaders = bear_n
+            else:
+                consensus = 'neutral'
+                leaders = neut_n
+
+            pct = leaders / total
+
+            if pct >= 0.75:
+                strength = 'strong'
+                adj = 0     # all agree — keep normal confluence
+            elif pct >= 0.55:
+                strength = 'moderate'
+                adj = 0
+            elif pct >= 0.4:
+                strength = 'split'
+                adj = 1     # split debate — raise confluence bar by 1
+            else:
+                strength = 'conflicted'
+                adj = 2     # no consensus — effectively block the pair
+
+            tally[pair] = {
+                'bull': bull_n, 'bear': bear_n, 'neutral': neut_n,
+                'consensus': consensus, 'strength': strength,
+                'confluence_adj': adj, 'voters': v,
+            }
+
+        return tally
+
+    def _apply_debate_to_trades(self, tally: dict, trade_ideas: list) -> tuple[list, list]:
+        """
+        Filter trade ideas based on vote consensus. Returns (cleared, flagged).
+
+        - Ideas aligned with consensus vote → cleared
+        - Ideas against consensus → flagged (moved to flagged list with reason)
+        - Conflicted pairs → always flagged
+        """
+        cleared: list = []
+        flagged: list = []
+
+        for idea in trade_ideas:
+            pair = idea.get('pair', '')
+            direction = str(idea.get('direction', '')).lower()
+            t = tally.get(pair, {})
+
+            if not t:
+                cleared.append(idea)
+                continue
+
+            strength = t.get('strength', 'moderate')
+            consensus = t.get('consensus', 'neutral')
+            adj = t.get('confluence_adj', 0)
+            idea_bull = 'long' in direction or 'buy' in direction or 'bull' in direction
+
+            if strength == 'conflicted':
+                idea['debate_flag'] = f"BLOCKED — agents conflicted ({t['bull']}B/{t['bear']}Be/{t['neutral']}N)"
+                idea['min_confluence'] = idea.get('min_confluence', 3) + adj
+                flagged.append(idea)
+            elif strength == 'split':
+                against = (consensus == 'bull' and not idea_bull) or (consensus == 'bear' and idea_bull)
+                if against:
+                    idea['debate_flag'] = f"FLAGGED — going against {consensus} consensus ({t['bull']}B/{t['bear']}Be)"
+                    flagged.append(idea)
+                else:
+                    idea['debate_flag'] = f"CLEARED with caution — split vote, raise confluence +{adj}"
+                    idea['min_confluence'] = idea.get('min_confluence', 3) + adj
+                    cleared.append(idea)
+            else:
+                # Strong or moderate consensus
+                against = (consensus == 'bull' and not idea_bull) or (consensus == 'bear' and idea_bull)
+                if against and strength == 'strong':
+                    idea['debate_flag'] = f"FLAGGED — strong {consensus} vote but trade is {'bear' if idea_bull else 'bull'}"
+                    flagged.append(idea)
+                else:
+                    idea.pop('debate_flag', None)
+                    cleared.append(idea)
+
+        return cleared, flagged
+
+    def _format_debate_embed(self, tally: dict, cleared: list, flagged: list) -> dict:
+        """Build a Discord embed summarising the agent debate outcome."""
+        now = datetime.now(timezone.utc).strftime('%H:%M UTC')
+        lines = []
+        for pair, t in list(tally.items())[:8]:
+            icon = {'strong': '✅', 'moderate': '🟡', 'split': '⚠️', 'conflicted': '🔴'}.get(t['strength'], '❓')
+            lines.append(
+                f"`{pair}` {icon} {t['consensus'].upper()} "
+                f"({t['bull']}🟢/{t['bear']}🔴/{t['neutral']}⬜)"
+            )
+        return {
+            'embeds': [{
+                'color': 0x8B5CF6,
+                'title': f"🗳️ Agent Debate  ·  {len(cleared)} cleared / {len(flagged)} flagged",
+                'description': '\n'.join(lines) or 'No pairs voted on',
+                'footer': {'text': f'Nick Fury · Agent Vote System · {now}'},
+            }]
+        }
+
+    # ==================================================================
     # Pipeline
     # ==================================================================
 
@@ -823,11 +1061,20 @@ class NickFury:
         Step 6  Send Discord updates         (Fury posts embeds)
         Step 7  Log all messages & alerts    (War Machine journals)
         """
-        logger.info("=== OpenClaw Pipeline: 7-step cycle starting ===")
+        logger.info("=== OpenClaw Pipeline: 8-step cycle starting ===")
         workspace: Dict[str, Any] = {}   # central shared workspace (Step 4)
 
+        # ── STEP 0: War Machine intelligence collection ──────────────────
+        logger.info("Step 0/8 — War Machine: scraping on-chain, macro, SEC data...")
+        try:
+            wm_intel = self.journal.collect_intelligence() if hasattr(self.journal, 'collect_intelligence') else {}
+        except Exception as e:
+            logger.warning(f"War Machine intelligence failed: {e}")
+            wm_intel = {}
+        workspace['wm_intelligence'] = wm_intel
+
         # ── STEP 1: Collect Market Data ─────────────────────────────────
-        logger.info("Step 1/7 — Collecting market data (Iron Man + Spider-Man)...")
+        logger.info("Step 1/8 — Collecting market data (Iron Man + Spider-Man)...")
 
         try:
             tech_result = tech_analyze(self.pairs)
@@ -845,7 +1092,7 @@ class NickFury:
         workspace['news']      = news_result
 
         # ── STEP 2: Check Active Session & Timezone ─────────────────────
-        logger.info("Step 2/7 — Session & timezone check...")
+        logger.info("Step 2/8 — Session & timezone check...")
 
         # Extended session context (Forex + Futures) via sessions.py
         if _SESSIONS_AVAILABLE:
@@ -864,7 +1111,7 @@ class NickFury:
         workspace['session_info'] = session_info
 
         # ── STEP 3: Process Forex / Futures Separately ──────────────────
-        logger.info("Step 3/7 — Processing Forex and Futures separately...")
+        logger.info("Step 3/8 — Processing Forex and Futures separately...")
 
         # Split pairs by asset class
         if _SESSIONS_AVAILABLE:
@@ -959,10 +1206,31 @@ class NickFury:
 
         # ── STEP 4: Share Findings in Central Workspace ──────────────────
         # (workspace dict is already complete — agents above read from it)
-        logger.info("Step 4/7 — Central workspace populated.")
+        logger.info("Step 4/8 — Central workspace populated.")
+
+        # ── STEP 4b: Agent Debate — vote on every pair ───────────────────
+        logger.info("Step 4b/8 — Agent debate: casting votes...")
+        try:
+            votes  = self._extract_votes(workspace)
+            tally  = self._tally_votes(votes)
+            raw_ideas = ideas_result.get('trade_ideas', []) if ideas_result.get('status') == 'success' else []
+            cleared_ideas, flagged_ideas = self._apply_debate_to_trades(tally, list(raw_ideas))
+            # Rebuild ideas_result with only debate-cleared ideas
+            if ideas_result.get('status') == 'success':
+                ideas_result = dict(ideas_result)
+                ideas_result['trade_ideas'] = cleared_ideas
+                ideas_result['debate_flagged'] = flagged_ideas
+                ideas_result['vote_tally'] = tally
+        except Exception as e:
+            logger.error(f"Agent debate failed: {e}", exc_info=True)
+            tally = {}
+            cleared_ideas = raw_ideas if ideas_result.get('status') == 'success' else []
+            flagged_ideas = []
+
+        workspace.update({'vote_tally': tally, 'debate_flagged': flagged_ideas})
 
         # ── STEP 5: Summarize Important Changes ──────────────────────────
-        logger.info("Step 5/7 — Doctor Strange: risk validation + summary...")
+        logger.info("Step 5/8 — Doctor Strange: risk validation + summary...")
 
         try:
             risk_result = self.risk_mgr.analyze(
@@ -986,6 +1254,12 @@ class NickFury:
             summary_lines.append(f"🚨 {len(high_news)} HIGH-impact news event(s)")
         if approved_trades:
             summary_lines.append(f"🎯 {len(approved_trades)} trade signal(s) approved")
+        if flagged_ideas:
+            summary_lines.append(f"🗳️ {len(flagged_ideas)} idea(s) debate-flagged")
+        # War Machine macro signals
+        wm_signals = wm_intel.get('macro', {}).get('signals', [])
+        for sig in wm_signals[:2]:
+            summary_lines.append(f"📡 {sig.get('note', sig.get('signal', ''))}")
         if sess_ctx:
             active_fut = sess_ctx.get('active_futures', [])
             if active_fut:
@@ -1010,7 +1284,7 @@ class NickFury:
         workspace['backtest'] = backtest_result
 
         # ── STEP 6: Send Discord Updates ─────────────────────────────────
-        logger.info("Step 6/7 — Sending Discord updates...")
+        logger.info("Step 6/8 — Sending Discord updates...")
 
         if discord_webhook:
             # Session update
@@ -1024,6 +1298,13 @@ class NickFury:
             for card in high_news[:3]:
                 self.send_to_discord(
                     self.format_discord_alert('news', card),
+                    discord_webhook,
+                )
+
+            # Agent debate embed
+            if tally:
+                self.send_to_discord(
+                    self._format_debate_embed(tally, cleared_ideas, flagged_ideas),
                     discord_webhook,
                 )
 
@@ -1047,7 +1328,7 @@ class NickFury:
             logger.debug("No Discord webhook configured — Step 6 skipped")
 
         # ── STEP 7: Log All Messages & Alerts ────────────────────────────
-        logger.info("Step 7/7 — War Machine: logging trades and alerts...")
+        logger.info("Step 7/8 — War Machine: logging trades and alerts...")
 
         for trade in approved_trades:
             self.journal.log_signal({
@@ -1059,22 +1340,27 @@ class NickFury:
             })
 
         logger.info("=== Pipeline complete ===  "
-                    f"signals={len(approved_trades)}  news_cards={len(news_cards)}")
+                    f"signals={len(approved_trades)}  "
+                    f"flagged={len(flagged_ideas)}  "
+                    f"news_cards={len(news_cards)}")
 
         return {
-            'technical':     workspace['technical'],
-            'fundamental':   workspace['fundamental'],
-            'sentiment':     workspace['sentiment'],
-            'correlation':   workspace['correlation'],
-            'order_flow':    workspace['order_flow'],
-            'news':          workspace['news'],
-            'trade_ideas':   workspace['trade_ideas'],
-            'risk':          workspace['risk'],
-            'backtest':      workspace['backtest'],
-            'session':       session_info,
-            'session_ctx':   workspace['session_ctx'],
-            'session_bias':  workspace['session_bias'],
-            'summary_lines': workspace['summary_lines'],
+            'technical':       workspace['technical'],
+            'fundamental':     workspace['fundamental'],
+            'sentiment':       workspace['sentiment'],
+            'correlation':     workspace['correlation'],
+            'order_flow':      workspace['order_flow'],
+            'news':            workspace['news'],
+            'trade_ideas':     workspace['trade_ideas'],
+            'risk':            workspace['risk'],
+            'backtest':        workspace['backtest'],
+            'session':         session_info,
+            'session_ctx':     workspace['session_ctx'],
+            'session_bias':    workspace['session_bias'],
+            'summary_lines':   workspace['summary_lines'],
+            'vote_tally':      tally,
+            'debate_flagged':  flagged_ideas,
+            'wm_intelligence': wm_intel,
         }
 
 
