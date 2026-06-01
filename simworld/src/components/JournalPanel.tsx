@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import ScreenshotViewer from './ScreenshotViewer'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -267,6 +268,106 @@ function TextPasteArea({ onSubmit }: { onSubmit: (text: string) => void }) {
   )
 }
 
+// ── Agent Review (screenshot multi-agent discussion) ─────────────────────────
+
+interface AgentReviewMessage {
+  emoji: string
+  name: string
+  role: string
+  color: string
+  content: string
+  sentiment: 'positive' | 'negative' | 'neutral'
+  tags: string[]
+}
+
+function buildAgentReview(analysis: Analysis): AgentReviewMessage[] {
+  const wr = analysis.win_rate
+  const pnl = analysis.total_pnl
+  const rr = analysis.avg_rr_achieved
+
+  return [
+    {
+      emoji: '🦾', name: 'Iron Man', role: 'Tech Analyst', color: '#ef4444',
+      content: `Technical review of your trade data complete.\n\nWin rate of ${(wr * 100).toFixed(1)}% ${wr >= 0.6 ? 'is solid — above the 60% threshold I consider minimum for a positive expectancy system.' : wr >= 0.45 ? 'is acceptable but leaves room for improvement. Focus on setup quality over quantity.' : 'needs work. You are likely entering on weaker setups or getting stopped out before the move.'}`,
+      sentiment: wr >= 0.5 ? 'positive' : 'negative',
+      tags: ['#TechnicalReview', '#WinRate'],
+    },
+    {
+      emoji: '🔯', name: 'Dr. Strange', role: 'Risk Manager', color: '#14b8a6',
+      content: `Risk assessment:\n\nAverage R:R achieved: ${rr.toFixed(2)}. ${rr >= 1.5 ? 'This is excellent. You are letting winners run and cutting losses appropriately.' : rr >= 1.0 ? 'Positive R:R — you are extracting value from the market. Can you push for 2:1?' : 'Your R:R needs improvement. Consider moving to break-even at 1:1 and targeting 1:2 minimum.'}\n\nTotal PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}. ${pnl >= 0 ? 'Profitable. Keep the discipline.' : 'In drawdown. Reduce position size until you recover to breakeven.'}`,
+      sentiment: rr >= 1.0 && pnl >= 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral',
+      tags: ['#RiskManagement', '#RR'],
+    },
+    {
+      emoji: '💪', name: 'Hulk', role: 'Backtest Engine', color: '#84cc16',
+      content: `Hulk smashed ${analysis.total_trades} trades in the data.\n\n${analysis.best_session ? `Best session: ${analysis.best_session} with ${((analysis.by_session[analysis.best_session]?.win_rate ?? 0) * 100).toFixed(1)}% win rate — trade this window more.` : 'Sample size too small for session conclusions.'}\n\n${analysis.best_instrument ? `Best pair: ${analysis.best_instrument} — your edge is clearer here.` : ''}\n\n${analysis.bias_analysis.aligned_trades > 0 ? `HTF Bias: Trading WITH bias wins at ${(analysis.bias_analysis.aligned_win_rate * 100).toFixed(1)}% vs ${(analysis.bias_analysis.misaligned_win_rate * 100).toFixed(1)}% against. Respect the higher timeframe.` : ''}`,
+      sentiment: 'neutral',
+      tags: ['#Backtesting', '#Patterns'],
+    },
+    {
+      emoji: '🎯', name: 'Nick Fury', role: 'Director', color: '#7c3aed',
+      content: `Final assessment:\n\n${analysis.improvement_tips.slice(0, 2).join('\n\n')}\n\n${pnl >= 0 && wr >= 0.5 ? 'Your system has positive expectancy. Focus on execution consistency.' : 'You have an edge to refine. The data is pointing at specific improvements — implement them.'}`,
+      sentiment: pnl >= 0 && wr >= 0.5 ? 'positive' : 'neutral',
+      tags: ['#Director', '#Strategy'],
+    },
+  ]
+}
+
+function AgentReviewPanel({ analysis }: { analysis: Analysis }) {
+  const [expanded, setExpanded] = useState(false)
+  const reviews = useMemo(() => buildAgentReview(analysis), [analysis])
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          width: '100%', border: '1px solid rgba(124,58,237,0.2)',
+          borderRadius: 6, padding: '6px 10px',
+          background: expanded ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)',
+          color: '#a78bfa', fontSize: 9, fontWeight: 700, cursor: 'pointer',
+          textAlign: 'left', display: 'flex', alignItems: 'center', gap: 6,
+        }}
+      >
+        <span>{expanded ? '▼' : '▶'}</span>
+        🛡️ AVENGERS REVIEW YOUR TRADES ({reviews.length} agents)
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 6 }}>
+          {reviews.map((r, i) => (
+            <div key={i} style={{
+              marginBottom: 8, padding: '8px 10px', borderRadius: 6,
+              background: 'rgba(255,255,255,0.02)',
+              border: `1px solid rgba(255,255,255,0.05)`,
+              borderLeft: `3px solid ${r.color}`,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+                <span style={{ fontSize: 16 }}>{r.emoji}</span>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: r.color }}>{r.name}</div>
+                  <div style={{ fontSize: 8, color: '#4a5870' }}>{r.role}</div>
+                </div>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {r.tags.map((t, j) => (
+                    <span key={j} style={{
+                      fontSize: 7, color: '#6366f1', background: 'rgba(99,102,241,0.1)',
+                      border: '1px solid rgba(99,102,241,0.2)', borderRadius: 3, padding: '1px 4px',
+                      fontFamily: 'monospace',
+                    }}>{t}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize: 9, color: '#9faec0', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                {r.content}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export default function JournalPanel() {
@@ -465,18 +566,14 @@ export default function JournalPanel() {
         uploadText(text, isJSON)
       }} />
 
-      {/* Screenshot preview thumbnail — show immediately after upload, even during analysis */}
+      {/* Screenshot preview — full ScreenshotViewer with zoom/pan */}
       {preview && (preview.startsWith('data:') || preview.startsWith('https://')) && (
-        <div style={{ marginBottom: 8, borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(124,58,237,0.25)' }}>
-          <img
+        <div style={{ marginBottom: 8, borderRadius: 6, overflow: 'hidden',
+          border: '1px solid rgba(124,58,237,0.25)', height: 180 }}>
+          <ScreenshotViewer
             src={preview}
             alt="journal screenshot"
-            style={{ width: '100%', display: 'block', maxHeight: 120, objectFit: 'cover', objectPosition: 'top' }}
-            onError={() => {
-              // Clear broken preview so the UUID-as-src bug can never display
-              setPreview(null)
-              try { localStorage.removeItem('hulk_preview') } catch {}
-            }}
+            compact={true}
           />
         </div>
       )}
@@ -505,6 +602,9 @@ export default function JournalPanel() {
 
       {analysis && analysis.status === 'success' && (
         <>
+          {/* Agent review */}
+          <AgentReviewPanel analysis={analysis} />
+
           {/* Section tabs */}
           <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 10 }}>
             {tabBtn('overview',  '📊 Overview')}

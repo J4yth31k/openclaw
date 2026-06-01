@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SimState, Agent, AgentId, BuildingId } from './types'
+import type { SimState, Agent, AgentId, BuildingId, AgentConversation } from './types'
 import { UPGRADE_DEFS } from './data/upgradeData'
 import { makeInitialTime, advanceTime } from './engine/TimeSystem'
 import { makeInitialAgents, worldMap, gridToPixel } from './data/worldData'
@@ -27,8 +27,10 @@ function makeInitialState(): SimState {
         type: 'info',
       },
     ],
+    conversations: [],
     selectedAgentId: null,
     selectedBuildingId: null,
+    selectedConversationId: null,
     totalCash: 14900,
     completedTaskCount: 0,
     warnings: [],
@@ -41,12 +43,14 @@ interface SimStore extends SimState {
   tick: (realMs: number) => void
   selectAgent: (id: AgentId | null) => void
   selectBuilding: (id: BuildingId | null) => void
+  selectConversation: (id: string | null) => void
+  addConversation: (conv: AgentConversation) => void
   setSpeed: (speed: number) => void
   togglePause: () => void
   save: () => void
   load: () => void
   reset: () => void
-  purchaseUpgrade: (id: string) => boolean   // returns true if purchase succeeded
+  purchaseUpgrade: (id: string) => boolean
 }
 
 export const useSimStore = create<SimStore>((set, get) => ({
@@ -84,6 +88,10 @@ export const useSimStore = create<SimStore>((set, get) => ({
       ? [...bizUpdate.logEntries, ...state.eventLog].slice(0, 80)
       : state.eventLog
 
+    const newConversations = bizUpdate.conversations.length > 0
+      ? [...bizUpdate.conversations, ...state.conversations].slice(0, 120)
+      : state.conversations
+
     const newCash = newCreative.cash + newTrading.accountBalance
 
     set({
@@ -92,6 +100,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
       creative: newCreative,
       trading: newTrading,
       eventLog: newLog,
+      conversations: newConversations,
       totalCash: newCash,
       completedTaskCount: state.completedTaskCount + bizUpdate.completedDelta,
     })
@@ -139,6 +148,8 @@ export const useSimStore = create<SimStore>((set, get) => ({
 
   selectAgent: (id) => set({ selectedAgentId: id }),
   selectBuilding: (id) => set({ selectedBuildingId: id }),
+  selectConversation: (id) => set({ selectedConversationId: id }),
+  addConversation: (conv) => set(s => ({ conversations: [conv, ...s.conversations].slice(0, 120) })),
 
   setSpeed: (speed) => set(s => ({ time: { ...s.time, speed } })),
 

@@ -249,6 +249,70 @@ export interface EventLogEntry {
   agentId?: AgentId
 }
 
+// ── Conversation Intelligence ──────────────────────────────────────────────────
+
+export interface ConversationSection {
+  title: string
+  content: string
+}
+
+export type ConversationType =
+  | 'trading'
+  | 'risk'
+  | 'business'
+  | 'creative'
+  | 'coordination'
+  | 'marketing'
+  | 'planning'
+
+export type ConversationOutcome =
+  | 'approved'
+  | 'rejected'
+  | 'pending'
+  | 'executing'
+  | 'completed'
+  | 'cancelled'
+
+export type AgentSentiment =
+  | 'bullish'
+  | 'bearish'
+  | 'neutral'
+  | 'cautious'
+  | 'aggressive'
+  | 'optimistic'
+  | 'concerned'
+
+export interface ConversationMessage {
+  id: string
+  agentId: AgentId
+  agentName: string
+  agentRole: string
+  agentEmoji: string
+  agentColor: string
+  simMinute: number
+  timeLabel: string
+  content: string
+  confidence: number
+  riskLevel: 'low' | 'medium' | 'high' | 'critical'
+  sentiment: AgentSentiment
+  tags: string[]
+  sections: ConversationSection[]
+}
+
+export interface AgentConversation {
+  id: string
+  simMinute: number
+  timeLabel: string
+  title: string
+  type: ConversationType
+  outcome: ConversationOutcome
+  messages: ConversationMessage[]
+  pair?: string
+  finalDecision?: string
+  tags: string[]
+  sourceEventId?: string
+}
+
 // ── Full sim state ────────────────────────────────────────────────────────────
 
 export interface SimState {
@@ -258,8 +322,10 @@ export interface SimState {
   creative: CreativeStudioStats
   trading: TradingStats
   eventLog: EventLogEntry[]
+  conversations: AgentConversation[]
   selectedAgentId: AgentId | null
   selectedBuildingId: BuildingId | null
+  selectedConversationId: string | null
   totalCash: number
   completedTaskCount: number
   warnings: string[]

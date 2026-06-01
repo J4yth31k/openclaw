@@ -1,11 +1,19 @@
 import type {
   SimState, CreativeStudioStats, TradingStats,
-  EventLogEntry, EtsyProduct, OwnedUpgrade,
+  EventLogEntry, EtsyProduct, OwnedUpgrade, AgentConversation,
 } from '../types'
 import { TRADE_EVENTS, TRENDING_NICHES, makeProduct, makeProductId } from '../data/businessData'
 import { UPGRADE_DEFS, computeEffects } from '../data/upgradeData'
 import { timeLabel, simMinuteOfDay } from './TimeSystem'
 import { onTaskComplete, saveSimState } from './EtsyBridge'
+import {
+  generateTradingSetupConversation,
+  generateTradeClosedConversation,
+  generateRiskReviewConversation,
+  generateMarketBriefingConversation,
+  generateEtsyConversation,
+  generateTrendShiftConversation,
+} from './ConversationEngine'
 
 let _etsyAuthenticated = false
 export function setEtsyAuthenticated(v: boolean) { _etsyAuthenticated = v }
@@ -60,18 +68,23 @@ export interface BusinessUpdate {
   creative?: Partial<CreativeStudioStats>
   trading?:  Partial<TradingStats>
   logEntries: EventLogEntry[]
+  conversations: AgentConversation[]
   completedDelta: number
 }
 
+// Throttle conversation generation — max 1 per 45 sim-seconds to avoid spam
+let _lastConvTime = 0
+
 export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate {
-  const result: BusinessUpdate = { logEntries: [], completedDelta: 0 }
+  const result: BusinessUpdate = { logEntries: [], conversations: [], completedDelta: 0 }
+  const simNow = state.time.day * 1440 + simMinuteOfDay(state.time)
   const minuteOfDay = simMinuteOfDay(state.time)
   const workHours   = minuteOfDay >= 8 * 60 && minuteOfDay < 17 * 60
 
   // ── Trend rotation ──────────────────────────────────────────────────────────
   trendTimer -= dtSec
   if (trendTimer <= 0) {
-    trendTimer = 7200 + Math.random() * 3600  // 5–8 sim-days between shifts
+    trendTimer = 7200 + Math.random() * 3600
     trendIdx = (trendIdx + 1) % TRENDING_NICHES.length
     const niche = TRENDING_NICHES[trendIdx]
     result.logEntries.push({
@@ -85,6 +98,10 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
       ...result.creative,
       currentTrend: niche.name,
       trendMultiplier: niche.multiplier,
+    }
+    if (simNow - _lastConvTime > 45) {
+      _lastConvTime = simNow
+      result.conversations.push(generateTrendShiftConversation(state.time, niche.name))
     }
   }
 
@@ -149,13 +166,20 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
           newProduct.trend = 'hot'
         }
         products.push(newProduct)
+        const ideaLogId = uid()
         result.logEntries.push({
-          id: uid(),
+          id: ideaLogId,
           simMinute: state.time.day * 1440 + minuteOfDay,
           timeLabel: timeLabel(state.time),
           message: `💡 Reya researched: "${newProduct.name}" — ${newProduct.category} ${newProduct.trend === 'hot' ? '🔥' : ''}`,
           type: 'creative',
         })
+        if (simNow - _lastConvTime > 45) {
+          _lastConvTime = simNow
+          result.conversations.push(
+            generateEtsyConversation(state.time, newProduct.name, newProduct.category, 'idea')
+          )
+        }
       }
     }
   }
@@ -228,6 +252,12 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
           message: `🚀 Uly listed: "${listProduct.name}" — $${listProduct.price.toFixed(2)} on Etsy! ${listProduct.trend === 'hot' ? '🔥' : ''}`,
           type: 'success',
         })
+        if (simNow - _lastConvTime > 45) {
+          _lastConvTime = simNow
+          result.conversations.push(
+            generateEtsyConversation(state.time, listProduct.name, listProduct.category, 'listing')
+          )
+        }
       }
     }
   }
@@ -341,13 +371,72 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
       ...(ev.action ? { traderAction: ev.action } : {}),
     }
     result.completedDelta += ev.closeDelta
+
+    const tradeLogId = uid()
     result.logEntries.push({
-      id: uid(),
+      id: tradeLogId,
       simMinute: state.time.day * 1440 + minuteOfDay,
       timeLabel: timeLabel(state.time),
       message: ev.message,
       type: ev.plDelta > 0 ? 'success' : ev.plDelta < 0 ? 'warning' : 'trade',
     })
+
+    // Generate rich conversation for significant trade events
+    if (simNow - _lastConvTime > 45) {
+      _lastConvTime = simNow
+      const pairMatch = ev.message.match(/([A-Z]{3}\/[A-Z]{3})/)
+      const pair = pairMatch ? pairMatch[1] : 'EUR/USD'
+      const isOpen  = ev.openDelta > 0
+      const isClose = ev.closeDelta > 0
+
+      if (isOpen) {
+        const direction = ev.plDelta >= 0 || ev.message.toLowerCase().includes('long') ? 'long' : 'short'
+        result.conversations.push(
+          generateTradingSetupConversation(state.time, {
+            id: tradeLogId,
+            pair,
+            direction,
+            entryPrice: 1.0842 + (Math.random() - 0.5) * 0.02,
+            exitPrice: null,
+            pnl: null,
+            status: 'open',
+            timestamp: simNow,
+          })
+        )
+      } else if (isClose) {
+        const isWin = ev.won === true
+        const entry = 1.0842 + (Math.random() - 0.5) * 0.02
+        result.conversations.push(
+          generateTradeClosedConversation(state.time, {
+            id: tradeLogId,
+            pair,
+            direction: 'long',
+            entryPrice: entry,
+            exitPrice: entry + (isWin ? 0.0045 : -0.0018),
+            pnl: ev.plDelta,
+            status: isWin ? 'won' : 'lost',
+            timestamp: simNow,
+          })
+        )
+      } else if (ev.mood) {
+        // Market mood change → briefing
+        result.conversations.push(
+          generateMarketBriefingConversation(state.time, ev.mood)
+        )
+      }
+    }
+
+    // Risk review when drawdown exceeds threshold
+    if (newDD > 5 && Math.random() < 0.3 && simNow - _lastConvTime > 90) {
+      _lastConvTime = simNow
+      result.conversations.push(
+        generateRiskReviewConversation(state.time, {
+          drawdown: newDD,
+          winRate: winRate / 100,
+          openTrades: newOpen,
+        })
+      )
+    }
   }
 
   // ── 8. Daily reset at midnight ────────────────────────────────────────────
