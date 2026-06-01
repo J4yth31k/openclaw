@@ -48,11 +48,23 @@ except Exception:
 # ── In-memory sim state store (persists across requests within a deploy) ───────
 _sim_state: dict[str, Any] = {}
 
+# ── In-memory trade journal store ─────────────────────────────────────────────
+_journal_trades: list[dict] = []
+_journal_analysis: dict[str, Any] = {}
+
 try:
     from ict_pipeline import run_pipeline
     _ICT_AVAILABLE = True
 except Exception:
     _ICT_AVAILABLE = False
+
+try:
+    from hulk import Hulk as _Hulk
+    _hulk_instance = _Hulk()
+    _HULK_AVAILABLE = True
+except Exception:
+    _HULK_AVAILABLE = False
+    _hulk_instance = None  # type: ignore
 
 app = FastAPI(title="OpenClaw Agent API", version="3.0.0")
 
@@ -638,6 +650,70 @@ async def sim_load():
     if not _sim_state:
         return {"status": "empty"}
     return {"status": "ok", "state": _sim_state}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TRADE JOURNAL ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import csv, io
+
+class JournalIngest(BaseModel):
+    trades: list[dict]        # list of trade row dicts
+
+class JournalCSV(BaseModel):
+    csv_text: str             # raw CSV string uploaded from the browser
+
+
+@app.post("/journal/ingest")
+async def journal_ingest(payload: JournalIngest):
+    """Accept an array of trade dicts and store them in memory. Runs analysis immediately."""
+    global _journal_trades, _journal_analysis
+    _journal_trades = payload.trades
+    if _HULK_AVAILABLE and _hulk_instance:
+        _journal_analysis = _hulk_instance.analyze_journal(_journal_trades)
+    return {"status": "ok", "trades_loaded": len(_journal_trades)}
+
+
+@app.post("/journal/ingest-csv")
+async def journal_ingest_csv(payload: JournalCSV):
+    """Accept raw CSV text, parse it, store trades, and run Hulk analysis."""
+    global _journal_trades, _journal_analysis
+    try:
+        reader = csv.DictReader(io.StringIO(payload.csv_text.strip()))
+        _journal_trades = [row for row in reader]
+    except Exception as e:
+        raise HTTPException(400, f"CSV parse error: {e}")
+    if _HULK_AVAILABLE and _hulk_instance:
+        _journal_analysis = _hulk_instance.analyze_journal(_journal_trades)
+    return {"status": "ok", "trades_loaded": len(_journal_trades)}
+
+
+@app.get("/journal/entries")
+async def journal_entries():
+    """Return all stored journal entries."""
+    return {"trades": _journal_trades, "count": len(_journal_trades)}
+
+
+@app.get("/journal/analyze")
+async def journal_analyze():
+    """Return Hulk's latest journal analysis. Recomputes if journal has entries."""
+    global _journal_analysis
+    if not _journal_trades:
+        return {"status": "empty", "message": "No journal data — upload trades first"}
+    if not _HULK_AVAILABLE or not _hulk_instance:
+        raise HTTPException(503, "Hulk module not available")
+    _journal_analysis = _hulk_instance.analyze_journal(_journal_trades)
+    return _journal_analysis
+
+
+@app.delete("/journal/clear")
+async def journal_clear():
+    """Clear all stored journal entries."""
+    global _journal_trades, _journal_analysis
+    _journal_trades = []
+    _journal_analysis = {}
+    return {"status": "cleared"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

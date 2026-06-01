@@ -684,6 +684,185 @@ class Hulk:
         }
 
     # ------------------------------------------------------------------
+    # Trade journal analysis
+    # ------------------------------------------------------------------
+
+    def analyze_journal(self, trades: List[Dict]) -> Dict[str, Any]:
+        """
+        Analyze real trade journal entries to surface patterns and improvements.
+
+        Expects a list of dicts matching the trade_journal CSV schema:
+          outcome (win/loss/breakeven), session, instrument, signal_direction,
+          htf_bias, confluence_score, realized_pnl_dollars, realized_pnl_pips,
+          rr_achieved, rr_planned, generating_agent, trade_duration, status.
+
+        Returns a structured insights dict.
+        """
+        if not trades:
+            return {'error': 'No trades to analyze', 'total_trades': 0}
+
+        # Normalise: filter to closed trades only
+        closed = [t for t in trades if str(t.get('status', '')).lower() in ('closed', 'complete', 'filled', '')]
+        if not closed:
+            closed = trades  # fall back to all if status column is absent/empty
+
+        def _outcome(t: Dict) -> str:
+            o = str(t.get('outcome', '')).lower().strip()
+            if o in ('win', 'won', '1', 'true', 'w'):
+                return 'win'
+            if o in ('loss', 'lose', 'lost', '0', 'false', 'l'):
+                return 'loss'
+            return 'breakeven'
+
+        def _float(t: Dict, key: str) -> Optional[float]:
+            try:
+                v = t.get(key, '')
+                return float(v) if v not in (None, '', 'N/A', 'n/a') else None
+            except (ValueError, TypeError):
+                return None
+
+        def _win_rate(subset: List[Dict]) -> float:
+            if not subset:
+                return 0.0
+            wins = sum(1 for t in subset if _outcome(t) == 'win')
+            return round(wins / len(subset), 4)
+
+        def _avg_pnl(subset: List[Dict]) -> float:
+            vals = [_float(t, 'realized_pnl_dollars') for t in subset]
+            vals = [v for v in vals if v is not None]
+            return round(sum(vals) / len(vals), 2) if vals else 0.0
+
+        # ── Overall stats ──────────────────────────────────────────────
+        total = len(closed)
+        wins  = sum(1 for t in closed if _outcome(t) == 'win')
+        losses = sum(1 for t in closed if _outcome(t) == 'loss')
+        wr_overall = round(wins / total, 4)
+
+        pnls = [_float(t, 'realized_pnl_dollars') for t in closed]
+        pnls = [v for v in pnls if v is not None]
+        total_pnl = round(sum(pnls), 2)
+        avg_pnl   = round(sum(pnls) / len(pnls), 2) if pnls else 0.0
+
+        rr_achieved = [_float(t, 'rr_achieved') for t in closed]
+        rr_achieved = [v for v in rr_achieved if v is not None]
+        rr_planned  = [_float(t, 'rr_planned') for t in closed]
+        rr_planned  = [v for v in rr_planned if v is not None]
+        avg_rr_achieved = round(sum(rr_achieved) / len(rr_achieved), 2) if rr_achieved else 0.0
+        avg_rr_planned  = round(sum(rr_planned) / len(rr_planned), 2)  if rr_planned  else 0.0
+
+        # ── Breakdown helpers ──────────────────────────────────────────
+        def _breakdown(key: str) -> Dict[str, Dict]:
+            groups: Dict[str, List[Dict]] = {}
+            for t in closed:
+                val = str(t.get(key, 'unknown')).strip() or 'unknown'
+                groups.setdefault(val, []).append(t)
+            return {
+                k: {
+                    'trades': len(v),
+                    'win_rate': _win_rate(v),
+                    'avg_pnl': _avg_pnl(v),
+                }
+                for k, v in sorted(groups.items())
+            }
+
+        by_session   = _breakdown('session')
+        by_instrument = _breakdown('instrument')
+        by_direction = _breakdown('signal_direction')
+        by_agent     = _breakdown('generating_agent')
+
+        # ── HTF bias alignment ──────────────────────────────────────────
+        aligned, misaligned = [], []
+        for t in closed:
+            bias = str(t.get('htf_bias', '')).lower()
+            direction = str(t.get('signal_direction', '')).lower()
+            if not bias or not direction:
+                continue
+            match = (('bull' in bias and ('long' in direction or 'buy' in direction)) or
+                     ('bear' in bias and ('short' in direction or 'sell' in direction)))
+            (aligned if match else misaligned).append(t)
+
+        bias_analysis = {
+            'aligned_trades':      len(aligned),
+            'misaligned_trades':   len(misaligned),
+            'aligned_win_rate':    _win_rate(aligned),
+            'misaligned_win_rate': _win_rate(misaligned),
+        }
+
+        # ── Confluence score bucketing ──────────────────────────────────
+        low_conf, mid_conf, high_conf = [], [], []
+        for t in closed:
+            cs = _float(t, 'confluence_score')
+            if cs is None:
+                continue
+            if cs < 3:
+                low_conf.append(t)
+            elif cs < 5:
+                mid_conf.append(t)
+            else:
+                high_conf.append(t)
+
+        confluence_analysis = {
+            'low_0_2':  {'trades': len(low_conf),  'win_rate': _win_rate(low_conf)},
+            'mid_3_4':  {'trades': len(mid_conf),  'win_rate': _win_rate(mid_conf)},
+            'high_5plus':{'trades': len(high_conf), 'win_rate': _win_rate(high_conf)},
+        }
+
+        # ── Best session / instrument ────────────────────────────────────
+        best_session    = max(by_session,    key=lambda k: by_session[k]['win_rate'],    default=None)
+        best_instrument = max(by_instrument, key=lambda k: by_instrument[k]['win_rate'], default=None)
+
+        # ── Recent trades ────────────────────────────────────────────────
+        recent = closed[-10:]
+
+        # ── Improvement tips ─────────────────────────────────────────────
+        tips: List[str] = []
+
+        if avg_rr_achieved < avg_rr_planned * 0.75:
+            tips.append(f"You're cutting winners short — avg RR achieved {avg_rr_achieved:.2f} vs planned {avg_rr_planned:.2f}. Let trades breathe.")
+
+        if wr_overall < 0.45:
+            tips.append(f"Win rate is {wr_overall*100:.0f}% — tighten your entry criteria. Only take trades with confluence ≥ 4.")
+
+        if bias_analysis['misaligned_win_rate'] > 0 and bias_analysis['aligned_win_rate'] > 0:
+            if bias_analysis['misaligned_win_rate'] < bias_analysis['aligned_win_rate'] - 0.1:
+                tips.append("Counter-bias trades win much less. Stick to HTF bias direction.")
+
+        if confluence_analysis['low_0_2']['trades'] > 0 and confluence_analysis['low_0_2']['win_rate'] < 0.4:
+            tips.append("Low confluence setups (<3) are losing. Stop taking them.")
+
+        if best_session and by_session[best_session]['win_rate'] > wr_overall + 0.1:
+            tips.append(f"Best session is {best_session} ({by_session[best_session]['win_rate']*100:.0f}% WR). Focus fire there.")
+
+        if best_instrument and by_instrument[best_instrument]['win_rate'] > wr_overall + 0.1:
+            tips.append(f"{best_instrument} is your edge ({by_instrument[best_instrument]['win_rate']*100:.0f}% WR). Trade it more.")
+
+        if not tips:
+            tips.append("Setup quality looks consistent. Scale size on A+ setups to boost expectancy.")
+
+        return {
+            'status': 'success',
+            'timestamp': datetime.utcnow().isoformat(),
+            'total_trades': total,
+            'wins': wins,
+            'losses': losses,
+            'win_rate': wr_overall,
+            'total_pnl': total_pnl,
+            'avg_pnl_per_trade': avg_pnl,
+            'avg_rr_achieved': avg_rr_achieved,
+            'avg_rr_planned': avg_rr_planned,
+            'by_session': by_session,
+            'by_instrument': by_instrument,
+            'by_direction': by_direction,
+            'by_agent': by_agent,
+            'bias_analysis': bias_analysis,
+            'confluence_analysis': confluence_analysis,
+            'best_session': best_session,
+            'best_instrument': best_instrument,
+            'recent_trades': recent,
+            'improvement_tips': tips,
+        }
+
+    # ------------------------------------------------------------------
     # Report formatting
     # ------------------------------------------------------------------
 
