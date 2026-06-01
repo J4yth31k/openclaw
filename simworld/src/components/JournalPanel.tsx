@@ -144,26 +144,18 @@ function RecentTrade({ t }: { t: Record<string, string> }) {
 
 // ── Upload zone ───────────────────────────────────────────────────────────────
 
-function UploadZone({ onLoad }: { onLoad: (text: string, isJSON: boolean) => void }) {
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+
+function UploadZone({ onFile }: { onFile: (file: File) => void }) {
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleFile = (file: File) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const text = e.target?.result as string
-      const isJSON = file.name.endsWith('.json')
-      onLoad(text, isJSON)
-    }
-    reader.readAsText(file)
-  }
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file) handleFile(file)
-  }, [])
+    if (file) onFile(file)
+  }, [onFile])
 
   return (
     <div
@@ -181,13 +173,13 @@ function UploadZone({ onLoad }: { onLoad: (text: string, isJSON: boolean) => voi
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.json"
+        accept=".csv,.json,image/png,image/jpeg,image/webp"
         style={{ display: 'none' }}
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f) }}
       />
       <div style={{ fontSize: 20, marginBottom: 4 }}>📂</div>
-      <div style={{ fontSize: 9, color: '#a78bfa', fontWeight: 700 }}>Drop CSV or JSON</div>
-      <div style={{ fontSize: 8, color: '#4a5870', marginTop: 2 }}>or click to browse</div>
+      <div style={{ fontSize: 9, color: '#a78bfa', fontWeight: 700 }}>Drop CSV, JSON, or Screenshot</div>
+      <div style={{ fontSize: 8, color: '#4a5870', marginTop: 2 }}>PNG · JPG · WEBP · .csv · .json</div>
     </div>
   )
 }
@@ -197,12 +189,63 @@ function UploadZone({ onLoad }: { onLoad: (text: string, isJSON: boolean) => voi
 export default function JournalPanel() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingMsg, setLoadingMsg] = useState('Hulk crunching numbers…')
   const [error, setError] = useState<string | null>(null)
   const [section, setSection] = useState<'overview' | 'breakdown' | 'tips' | 'trades'>('overview')
+  const [preview, setPreview] = useState<string | null>(null)   // object URL for image preview
 
-  async function uploadAndAnalyze(text: string, isJSON: boolean) {
-    setLoading(true)
+  async function handleFile(file: File) {
     setError(null)
+    setPreview(null)
+
+    if (IMAGE_TYPES.includes(file.type)) {
+      await uploadScreenshot(file)
+    } else {
+      const text = await file.text()
+      const isJSON = file.name.endsWith('.json')
+      await uploadText(text, isJSON)
+    }
+  }
+
+  async function uploadScreenshot(file: File) {
+    setLoading(true)
+    setLoadingMsg('👁️ Claude reading screenshot…')
+    setPreview(URL.createObjectURL(file))
+    try {
+      const b64 = await new Promise<string>((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => {
+          const result = r.result as string
+          res(result.split(',')[1])   // strip data:image/...;base64, prefix
+        }
+        r.onerror = rej
+        r.readAsDataURL(file)
+      })
+
+      const mediaType = file.type === 'image/jpg' ? 'image/jpeg' : file.type
+
+      const resp = await fetch(`${BASE}/journal/screenshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_b64: b64, media_type: mediaType }),
+      })
+      if (!resp.ok) throw new Error(await resp.text())
+      const data = await resp.json()
+      if (data.analysis?.status === 'success') {
+        setAnalysis(data.analysis)
+      } else {
+        throw new Error(data.analysis?.error ?? 'No trades found in screenshot')
+      }
+    } catch (e: any) {
+      setError(e.message ?? 'Screenshot upload failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function uploadText(text: string, isJSON: boolean) {
+    setLoading(true)
+    setLoadingMsg('💪 Hulk crunching numbers…')
     try {
       let endpoint: string
       let body: string
@@ -263,11 +306,18 @@ export default function JournalPanel() {
       </div>
 
       {/* Upload zone */}
-      <UploadZone onLoad={uploadAndAnalyze} />
+      <UploadZone onFile={handleFile} />
+
+      {/* Screenshot preview thumbnail */}
+      {preview && !loading && (
+        <div style={{ marginBottom: 8, borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(124,58,237,0.25)' }}>
+          <img src={preview} alt="journal screenshot" style={{ width: '100%', display: 'block', maxHeight: 120, objectFit: 'cover', objectPosition: 'top' }} />
+        </div>
+      )}
 
       {loading && (
         <div style={{ textAlign: 'center', padding: 16, color: '#a78bfa', fontSize: 10 }}>
-          💪 Hulk crunching numbers…
+          {loadingMsg}
         </div>
       )}
 

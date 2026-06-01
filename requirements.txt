@@ -30,3 +30,6 @@ pyyaml==6.0.1
 # Etsy API + PDF generation
 httpx>=0.27.0
 fpdf2>=2.7.9
+
+# Vision / AI parsing (screenshot journal upload)
+anthropic>=0.30.0

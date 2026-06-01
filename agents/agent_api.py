@@ -66,6 +66,12 @@ except Exception:
     _HULK_AVAILABLE = False
     _hulk_instance = None  # type: ignore
 
+try:
+    import anthropic as _anthropic
+    _ANTHROPIC_AVAILABLE = True
+except Exception:
+    _ANTHROPIC_AVAILABLE = False
+
 app = FastAPI(title="OpenClaw Agent API", version="3.0.0")
 
 # ── Signal Forge indicator short-code → readable label ────────────────────────
@@ -714,6 +720,102 @@ async def journal_clear():
     _journal_trades = []
     _journal_analysis = {}
     return {"status": "cleared"}
+
+
+_SCREENSHOT_PROMPT = """\
+You are a trading journal parser. The image shows a trading journal — it may be a spreadsheet,
+broker statement, TradingView history, or a hand-made table. Extract every trade visible.
+
+Return ONLY a valid JSON array (no markdown, no explanation) where each element is an object
+with as many of these fields as you can find (use empty string "" for missing fields):
+
+trade_id, instrument, session, signal_direction (long/short/buy/sell),
+signal_timeframe, htf_bias (bullish/bearish), confluence_score (number),
+entry_price, stop_loss_price, take_profit_prices, stop_loss_pips,
+dollar_risk, position_size, account_balance_at_entry, risk_pct_used,
+generating_agent, timestamp_utc, exit_price, exit_reason, trade_duration,
+realized_pnl_pips, realized_pnl_dollars, account_balance_at_close,
+rr_achieved, rr_planned, slippage, outcome (win/loss/breakeven), status (closed/open)
+
+Rules:
+- outcome: "win" if P&L > 0 or text says winner/profit; "loss" if P&L < 0 or text says loser/loss
+- realized_pnl_dollars: positive for profit, negative for loss
+- If a field is truly absent from the image leave it as ""
+- Return the raw JSON array only. No prose.
+"""
+
+class ScreenshotPayload(BaseModel):
+    image_b64: str          # base64-encoded image data
+    media_type: str = "image/png"   # image/png | image/jpeg | image/webp
+
+
+@app.post("/journal/screenshot")
+async def journal_screenshot(payload: ScreenshotPayload):
+    """
+    Accept a base64 screenshot of a trade journal. Uses Claude vision to extract
+    trade rows, stores them, runs Hulk analysis, and returns insights.
+    """
+    global _journal_trades, _journal_analysis
+
+    if not _ANTHROPIC_AVAILABLE:
+        raise HTTPException(503, "anthropic package not installed — redeploy Railway")
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "ANTHROPIC_API_KEY not set in Railway environment")
+
+    client = _anthropic.Anthropic(api_key=api_key)
+
+    try:
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": payload.media_type,
+                            "data": payload.image_b64,
+                        },
+                    },
+                    {"type": "text", "text": _SCREENSHOT_PROMPT},
+                ],
+            }],
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Claude vision error: {e}")
+
+    raw = message.content[0].text.strip()
+
+    # Strip accidental markdown fences
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
+    try:
+        extracted: list[dict] = json.loads(raw)
+    except Exception:
+        raise HTTPException(422, f"Could not parse Claude response as JSON: {raw[:300]}")
+
+    if not isinstance(extracted, list):
+        raise HTTPException(422, "Claude returned non-array JSON")
+
+    _journal_trades = extracted
+    if _HULK_AVAILABLE and _hulk_instance:
+        _journal_analysis = _hulk_instance.analyze_journal(_journal_trades)
+    else:
+        _journal_analysis = {}
+
+    return {
+        "status": "ok",
+        "trades_extracted": len(extracted),
+        "analysis": _journal_analysis,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
