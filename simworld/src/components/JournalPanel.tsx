@@ -275,7 +275,10 @@ export default function JournalPanel() {
   const [loadingMsg, setLoadingMsg] = useState('Hulk crunching numbers…')
   const [error, setError] = useState<string | null>(null)
   const [section, setSection] = useState<'overview' | 'breakdown' | 'tips' | 'trades'>('overview')
-  const [preview, setPreview] = useState<string | null>(null)
+  // Restore preview from localStorage so it survives page refresh
+  const [preview, setPreview] = useState<string | null>(() => {
+    try { return localStorage.getItem('hulk_preview') } catch { return null }
+  })
 
   // Stable ref so global paste listener always sees latest upload fns
   const uploadScreenshotRef = useRef<(f: File) => Promise<void>>()
@@ -330,6 +333,7 @@ export default function JournalPanel() {
   async function handleFile(file: File) {
     setError(null)
     setPreview(null)
+    try { localStorage.removeItem('hulk_preview') } catch {}
     if (IMAGE_TYPES.includes(file.type)) {
       await uploadScreenshot(file)
     } else {
@@ -342,18 +346,26 @@ export default function JournalPanel() {
   async function uploadScreenshot(file: File) {
     setLoading(true)
     setLoadingMsg('👁️ Claude reading screenshot…')
-    setPreview(URL.createObjectURL(file))
     try {
-      const b64 = await new Promise<string>((res, rej) => {
+      // Read as data URL — inline, no HTTP request, works under any CSP,
+      // survives page refresh when persisted. Do NOT use URL.createObjectURL()
+      // which produces blob:hostname/uuid — blocked by Vercel's img-src CSP.
+      const dataUrl = await new Promise<string>((res, rej) => {
         const r = new FileReader()
-        r.onload = () => {
-          const result = r.result as string
-          res(result.split(',')[1])   // strip data:image/...;base64, prefix
-        }
+        r.onload = () => res(r.result as string)  // full data:image/...;base64,... string
         r.onerror = rej
         r.readAsDataURL(file)
       })
 
+      // Show immediately (before API round-trip)
+      setPreview(dataUrl)
+      try {
+        // Only persist to localStorage if small enough (<2 MB base64)
+        if (dataUrl.length < 2_000_000) localStorage.setItem('hulk_preview', dataUrl)
+        else localStorage.removeItem('hulk_preview')
+      } catch { /* storage quota exceeded — ignore */ }
+
+      const b64 = dataUrl.split(',')[1]
       const mediaType = file.type === 'image/jpg' ? 'image/jpeg' : file.type
 
       const resp = await fetch(`${BASE}/journal/screenshot`, {
@@ -453,10 +465,19 @@ export default function JournalPanel() {
         uploadText(text, isJSON)
       }} />
 
-      {/* Screenshot preview thumbnail */}
-      {preview && !loading && (
+      {/* Screenshot preview thumbnail — show immediately after upload, even during analysis */}
+      {preview && (preview.startsWith('data:') || preview.startsWith('https://')) && (
         <div style={{ marginBottom: 8, borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(124,58,237,0.25)' }}>
-          <img src={preview} alt="journal screenshot" style={{ width: '100%', display: 'block', maxHeight: 120, objectFit: 'cover', objectPosition: 'top' }} />
+          <img
+            src={preview}
+            alt="journal screenshot"
+            style={{ width: '100%', display: 'block', maxHeight: 120, objectFit: 'cover', objectPosition: 'top' }}
+            onError={() => {
+              // Clear broken preview so the UUID-as-src bug can never display
+              setPreview(null)
+              try { localStorage.removeItem('hulk_preview') } catch {}
+            }}
+          />
         </div>
       )}
 
