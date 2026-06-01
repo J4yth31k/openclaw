@@ -18,9 +18,6 @@ apscheduler>=3.10.4
 # News feed parsing (Spider-Man)
 feedparser>=6.0.10
 
-# Telegram delivery
-python-telegram-bot==20.3
-
 # Visualization (optional, for reports)
 matplotlib==3.8.4
 
