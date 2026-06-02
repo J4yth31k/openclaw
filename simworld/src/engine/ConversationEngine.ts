@@ -694,7 +694,7 @@ export function generateMarketBriefingConversation(
   }
 }
 
-// ── Etsy product conversation ─────────────────────────────────────────────────
+// ── Etsy product pipeline: Reya → Dani → Quinn → Uly ────────────────────────
 
 export function generateEtsyConversation(
   time: GameTime,
@@ -702,67 +702,102 @@ export function generateEtsyConversation(
   category: string,
   stage: string,
 ): AgentConversation {
-  const label = timeLabel(time)
-  const sm    = time.day * 1440 + time.hour * 60 + Math.floor(time.minute)
-  const price = (4.99 + Math.random() * 25).toFixed(2)
+  const label    = timeLabel(time)
+  const sm       = time.day * 1440 + time.hour * 60 + Math.floor(time.minute)
+  const price    = (4.99 + Math.random() * 25).toFixed(2)
   const estSales = Math.round(5 + Math.random() * 40)
+  const qcScore  = Math.round(80 + Math.random() * 18)
+  const style    = pick(['Minimalist modern', 'Bold contemporary', 'Elegant classic', 'Playful hand-drawn', 'Professional corporate'])
+  const format   = pick(['Letter + A4 compatible', 'Square (Instagram-ready)', 'US Letter + A4 dual-format'])
+  const diff     = pick(['Editable Canva templates', 'Print-ready PDF + editable source', 'Lifetime updates included', 'Commercial license included'])
 
+  // ── Step 1: Reya researches and hands brief to Dani ─────────────────────────
   const reyaMsg = msg('research_agent', sm, label,
-    `New product opportunity identified: "${productName}" in the ${category} category. Market research complete.`,
+    `Research complete for "${productName}" (${category}). Dani — passing design brief now. Price target $${price}, est. ${estSales} sales/mo.`,
     {
-      confidence: 76, riskLevel: 'low',
-      sentiment: 'optimistic',
-      tags: [`#${category.replace(/\s/g, '')}`, '#Etsy', '#ProductResearch'],
+      confidence: 76, riskLevel: 'low', sentiment: 'optimistic',
+      tags: [`#${category.replace(/\s/g, '')}`, '#Etsy', '#ProductResearch', '#HandoffToDani'],
       sections: [
         {
-          title: 'Market Research',
-          content: `Product: ${productName}\nCategory: ${category}\nSearch Volume: ${pick(['High', 'Medium-High', 'Growing'])}\nCompetition Level: ${pick(['Low', 'Medium', 'Moderate'])}\nTop competitor avg price: $${(parseFloat(price) * (0.8 + Math.random() * 0.4)).toFixed(2)}`,
+          title: '📊 Market Research',
+          content: `Product: ${productName}\nCategory: ${category}\nSearch Volume: ${pick(['High', 'Medium-High', 'Growing'])}\nCompetition: ${pick(['Low', 'Medium', 'Moderate'])}\nTop competitor avg: $${(parseFloat(price) * (0.8 + Math.random() * 0.4)).toFixed(2)}\nTrend: ${pick(['Rising ↑', 'Steady →', 'Seasonal peak approaching'])}\nKeyword opportunity: ${pick(['Strong long-tail available', 'Niche gap found', 'High-volume room for new sellers'])}`,
         },
         {
-          title: 'Market Analysis',
-          content: `Trend Direction: ${pick(['Rising', 'Steady', 'Seasonal peak approaching'])}\nSeasonal Factor: ${pick(['Year-round demand', 'Q4 peak', 'Spring boost'])}\nKeyword Opportunity: ${pick(['Strong long-tail keywords available', 'Niche market with less competition', 'High-volume keywords with room for new sellers'])}`,
+          title: '💰 Revenue Projection',
+          content: `Suggested Price: $${price}\nMonth 1 est. sales: ${estSales} units\nProjected monthly revenue: $${(parseFloat(price) * estSales).toFixed(2)}\nROI rating: ${pick(['Excellent', 'Good', 'Solid'])}`,
         },
         {
-          title: 'Revenue Projection',
-          content: `Suggested Price: $${price}\nEstimated Month 1 Sales: ${estSales} units\nProjected Monthly Revenue: $${(parseFloat(price) * estSales).toFixed(2)}\nROI vs Time Investment: ${pick(['Excellent', 'Good', 'Solid'])}`,
+          title: '📋 Design Brief for Dani',
+          content: `Style direction: ${style}\nFormat required: ${format}\nKey differentiator: ${diff}\nDeadline: ${pick(['ASAP — trend window open', 'Within 48h', 'This sprint'])}\nTag set: ${pick(['15 optimized Etsy tags provided', '13 high-volume tags ready', '12 niche + broad tag mix prepared'])}`,
         },
       ],
     }
   )
 
-  const daniMsg = msg('design_agent', sm + 1, label,
-    `Design brief accepted. Starting on "${productName}". Going for a ${pick(['minimal', 'bold', 'elegant', 'playful', 'professional'])} aesthetic.`,
+  // ── Step 2: Dani designs and hands file to Quinn ─────────────────────────────
+  const daniMsg = msg('design_agent', sm + 2, label,
+    `Got Reya's brief — design done. "${productName}" is looking ${pick(['clean', 'sharp', 'gorgeous', 'polished'])}. Quinn, sending to you now for QC.`,
     {
-      confidence: 82, riskLevel: 'low',
-      sentiment: 'optimistic',
-      tags: ['#Design', '#Creative', `#${category.replace(/\s/g, '')}`],
+      confidence: 84, riskLevel: 'low', sentiment: 'optimistic',
+      tags: ['#Design', '#Creative', `#${category.replace(/\s/g, '')}`, '#HandoffToQuinn'],
       sections: [
         {
-          title: 'Design Approach',
-          content: `Style: ${pick(['Minimalist modern', 'Bold contemporary', 'Elegant classic', 'Playful hand-drawn', 'Professional corporate'])}\nColor Palette: ${pick(['Neutral + accent pop', 'Monochromatic', 'Complementary duo', 'Analogous earth tones'])}\nFont Direction: ${pick(['Sans-serif clean', 'Mixed editorial', 'Script + sans combo', 'Geometric display'])}\nFormat: ${pick(['Letter + A4 compatible', 'Square (Instagram-ready)', 'US Letter + A4 dual-format'])}`,
+          title: '🎨 Design Summary',
+          content: `Style: ${style}\nColor palette: ${pick(['Neutral + accent pop', 'Monochromatic', 'Complementary duo', 'Analogous earth tones'])}\nFont: ${pick(['Sans-serif clean', 'Mixed editorial', 'Script + sans combo', 'Geometric display'])}\nFormat: ${format}\nFiles delivered: PDF, PNG (300 DPI), editable source`,
         },
         {
-          title: 'Competitive Differentiation',
-          content: `Key differentiator: ${pick(['Editable Canva templates', 'Print-ready PDF + editable source', 'Lifetime updates included', 'Commercial license included', 'Multiple size variations'])}\nUnique value: ${pick(['More comprehensive than competitors', 'Better organized file structure', 'Customer support included'])}`,
+          title: '⭐ Differentiator Applied',
+          content: `${diff}\nMockups: ${pick(['5 lifestyle shots created', '7 preview images done', '3 styled mockups included'])}\nBonus: ${pick(['Size guide included', 'How-to-use card added', 'Commercial license doc attached'])}`,
+        },
+        {
+          title: '📤 Handoff to Quinn',
+          content: `Files ready for QC review\nBrief alignment: ✅ followed Reya's spec exactly\nDesign notes: ${pick(['No known issues', 'Font double-checked for licensing', 'Tested print at actual size'])}\nAction: Quinn — please review and approve for upload`,
         },
       ],
     }
   )
 
-  const quinnMsg = msg('qc_agent', sm + 2, label,
-    `QC review of "${productName}" in progress. Checking against shop standards.`,
+  // ── Step 3: Quinn QC-checks and approves for Uly ─────────────────────────────
+  const quinnMsg = msg('qc_agent', sm + 4, label,
+    `QC pass complete on "${productName}". Score: ${qcScore}/100. ${qcScore >= 90 ? '✅ Approved' : '⚠️ Approved with note'}. Uly — clear to upload.`,
     {
-      confidence: 88, riskLevel: 'low',
-      sentiment: 'neutral',
-      tags: ['#QualityControl', '#Etsy', '#ProductReview'],
+      confidence: 90, riskLevel: 'low', sentiment: qcScore >= 90 ? 'optimistic' : 'neutral',
+      tags: ['#QualityControl', '#Approved', '#HandoffToUly'],
       sections: [
         {
-          title: 'QC Checklist',
-          content: `✅ File format compliance (PDF/PNG/JPG)\n✅ Resolution: 300 DPI for print\n✅ Color profile: ${pick(['CMYK for print', 'sRGB for digital', 'Both profiles included'])}\n✅ Font licensing: All commercial-use fonts\n✅ Editable layers organized\n${pick(['✅', '⚠️'])} Mockup previews: ${pick(['5 lifestyle shots included', '3 mockups attached', '7 preview images ready'])}`,
+          title: '✅ QC Checklist',
+          content: `✅ File format OK (PDF/PNG/JPG)\n✅ Resolution 300 DPI\n✅ Color profile: ${pick(['CMYK + sRGB', 'sRGB for digital', 'Both profiles'])}\n✅ Fonts: commercial license confirmed\n✅ Layers organized & named\n${qcScore >= 88 ? '✅' : '⚠️'} Mockups: ${pick(['5 lifestyle shots', '7 previews', '3 styled mockups'])}`,
         },
         {
-          title: 'Quality Verdict',
-          content: `Overall Quality Score: ${Math.round(80 + Math.random() * 18)}/100\nRecommendation: ${stage === 'qc' ? 'APPROVED — proceed to listing' : 'In review'}\nNotes: ${pick(['No revisions needed', 'Minor description tweak suggested', 'Consider adding size guide'])}`,
+          title: '📋 Quality Verdict',
+          content: `Score: ${qcScore}/100\nStatus: ${qcScore >= 90 ? 'APPROVED — no revisions' : 'APPROVED with note'}\nNote: ${pick(['All clear', 'Minor description refinement suggested', 'Consider adding size guide'])}\nDani's work: ${pick(['Exactly on brief', 'Exceeded expectations', 'Solid execution'])}\nUly — listing details below`,
+        },
+        {
+          title: '📦 Listing Instructions for Uly',
+          content: `Title: ${productName}\nCategory: ${category}\nPrice: $${price}\nDigital download: Yes\nTags: use Reya's optimized set\nDescription: ${pick(['Use template A', 'Lead with the differentiator', 'Open with the use case'])}\nShipping profile: Digital — no shipping required`,
+        },
+      ],
+    }
+  )
+
+  // ── Step 4: Uly uploads and confirms live ────────────────────────────────────
+  const ulyMsg = msg('upload_agent', sm + 6, label,
+    `Listing live! "${productName}" is up on Etsy at $${price}. Got Quinn's approval — all done. 🚀`,
+    {
+      confidence: 95, riskLevel: 'low', sentiment: 'optimistic',
+      tags: ['#Listed', '#EtsyLive', `#${category.replace(/\s/g, '')}`],
+      sections: [
+        {
+          title: '🚀 Listing Status',
+          content: `Status: ACTIVE ✅\nTitle: ${productName}\nPrice: $${price}\nCategory: ${category}\nFiles uploaded: PDF + PNG + source\nMockups: uploaded & ordered`,
+        },
+        {
+          title: '🏷️ SEO Applied',
+          content: `Tags: Reya's 13-tag set applied\nTitle keywords: front-loaded\nDescription: ${pick(['Use-case first', 'Benefit-led', 'Keyword-rich opener'])}\nShop section: assigned\nProcessing profile: Instant digital download`,
+        },
+        {
+          title: '📈 Next Steps',
+          content: `Monitor: first 48h views & favorites\nPromo: ${pick(['Pin to Pinterest board', 'Share to Instagram story', 'Add to Etsy ads at $1/day'])}\nPrice test: ${pick(['Hold price for 2 weeks', 'A/B test after 10 views', 'Undercut top competitor by $1'])}\nEst. first sale: ${pick(['Within 24h if ads on', '3–5 days organic', '1–2 weeks organic'])}`,
         },
       ],
     }
@@ -772,12 +807,12 @@ export function generateEtsyConversation(
     id: uid(),
     simMinute: sm,
     timeLabel: label,
-    title: `Product Launch: "${productName}" (${category})`,
+    title: `Etsy Pipeline: "${productName}" (${category})`,
     type: 'business',
-    outcome: stage === 'listing' || stage === 'selling' ? 'completed' : 'pending',
-    messages: [reyaMsg, daniMsg, quinnMsg],
-    finalDecision: `Proceed with "${productName}" at $${price}. Estimated ${estSales} monthly sales.`,
-    tags: ['#Etsy', `#${category.replace(/\s/g, '')}`, '#ProductLaunch'],
+    outcome: stage === 'listing' || stage === 'selling' ? 'completed' : 'executing',
+    messages: [reyaMsg, daniMsg, quinnMsg, ulyMsg],
+    finalDecision: `"${productName}" live at $${price}. Reya → Dani → Quinn → Uly pipeline complete. Est. ${estSales} sales/mo.`,
+    tags: ['#Etsy', `#${category.replace(/\s/g, '')}`, '#ProductLaunch', '#PipelineComplete'],
   }
 }
 
@@ -813,8 +848,22 @@ export function generateTrendShiftConversation(
     }
   )
 
-  const furyMsg = msg('fury', sm + 1, label,
-    `Trend confirmed. Reallocating design bandwidth to capitalize on "${newTrend}". All hands on deck.`,
+  const daniTrendMsg = msg('design_agent', sm + 1, label,
+    `On it! Starting "${newTrend}" designs right now. Reya — confirmed receipt of brief. Quinn + Uly, expect files within ${pick(['24h', '48h', '36h'])}.`,
+    {
+      confidence: 86, riskLevel: 'low', sentiment: 'aggressive',
+      tags: ['#Design', '#TrendPivot', '#HandoffToQuinn'],
+      sections: [
+        {
+          title: '🎨 Design Sprint Plan',
+          content: `Trend: ${newTrend}\nProducts planned: ${pick(['3 variations', '2 hero products + upsell', '4 quick wins'])}\nStyle: ${pick(['Match trending aesthetic', 'Bold standout look', 'Minimal — launches fastest'])}\nETA to Quinn: ${pick(['24h', '36h', '48h'])}`,
+        },
+      ],
+    }
+  )
+
+  const furyMsg = msg('fury', sm + 2, label,
+    `Trend confirmed. Reya flagged it, Dani's designing, Quinn on standby. Target: 3 products live within ${pick(['48h', '72h', '5 days'])}. Move fast.`,
     {
       confidence: 90, riskLevel: 'low',
       sentiment: 'aggressive',
@@ -822,7 +871,7 @@ export function generateTrendShiftConversation(
       sections: [
         {
           title: 'Resource Reallocation',
-          content: `Design Queue: "${newTrend}" items jump to front\nTarget: 3 products live within ${pick(['48 hours', '72 hours', '5 days'])}\nExpected revenue impact: +${pick(['15', '25', '35', '45'])}% this week`,
+          content: `Pipeline: Reya → Dani → Quinn → Uly\nDesign queue: "${newTrend}" at front\nTarget: 3 products live within ${pick(['48 hours', '72 hours', '5 days'])}\nExpected revenue impact: +${pick(['15', '25', '35', '45'])}% this week\nQuinn: fast-track QC\nUly: optimize all listings for trend keywords`,
         },
       ],
     }
@@ -835,8 +884,8 @@ export function generateTrendShiftConversation(
     title: `Trend Alert: ${newTrend}`,
     type: 'marketing',
     outcome: 'executing',
-    messages: [reyaMsg, furyMsg],
-    finalDecision: `Pivot resources to capture "${newTrend}" trend immediately.`,
+    messages: [reyaMsg, daniTrendMsg, furyMsg],
+    finalDecision: `Pivot resources to capture "${newTrend}" trend. Reya → Dani → Quinn → Uly pipeline activated.`,
     tags: ['#TrendAlert', '#Etsy', '#MarketOpportunity'],
   }
 }
