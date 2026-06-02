@@ -8,6 +8,7 @@ import { timeLabel, simMinuteOfDay } from './TimeSystem'
 import { onTaskComplete, saveSimState } from './EtsyBridge'
 import {
   generateTradingSetupConversation,
+  generateSMCScalpConversation,
   generateTradeClosedConversation,
   generateRiskReviewConversation,
   generateMarketBriefingConversation,
@@ -400,17 +401,21 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
       if (isOpen) {
         const direction = ev.message.toLowerCase().includes('short') ? 'short' : 'long'
         const basePrice = INSTRUMENT_BASE_PRICES[pair] ?? 1.0842
+        const tradeRec = {
+          id: tradeLogId,
+          pair,
+          direction: direction as 'long' | 'short',
+          entryPrice: basePrice * (1 + (Math.random() - 0.5) * 0.001),
+          exitPrice: null,
+          pnl: null,
+          status: 'open' as const,
+          timestamp: simNow,
+        }
+        // NQ and ES use the full 4-step SMC scalp checklist conversation
         result.conversations.push(
-          generateTradingSetupConversation(state.time, {
-            id: tradeLogId,
-            pair,
-            direction,
-            entryPrice: basePrice * (1 + (Math.random() - 0.5) * 0.001),
-            exitPrice: null,
-            pnl: null,
-            status: 'open',
-            timestamp: simNow,
-          })
+          (pair === 'NQ' || pair === 'ES')
+            ? generateSMCScalpConversation(state.time, tradeRec)
+            : generateTradingSetupConversation(state.time, tradeRec)
         )
       } else if (isClose) {
         const isWin = ev.won === true

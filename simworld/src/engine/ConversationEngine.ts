@@ -124,6 +124,165 @@ function isFutures(pair: string): boolean {
   return FUTURES.includes(pair)
 }
 
+// ── SMC Index Futures Scalp (NQ / ES) — 4-step checklist ─────────────────────
+// Framework: 1H Bias → 15M Narrative → 5M Setup → 1M Execution
+// "NO SWEEP + NO DISPLACEMENT + NO CONFIRMATION = NO TRADE"
+
+const SMC_KILLZONES = ['NY AM Kill Zone (9:30–11:00 EST)', 'London Open (7:00–9:00 EST)', 'NY PM Kill Zone (1:30–3:00 EST)']
+const SMC_STRUCTURES_BULL = ['HH/HL', 'HH/HL with premium liquidity above', 'HH/HL — last BOS to the upside']
+const SMC_STRUCTURES_BEAR = ['LH/LL', 'LH/LL with discount liquidity below', 'LH/LL — last BOS to the downside']
+const SMC_LIQUIDITY_BULL = ['equal lows (sell-side liquidity)', 'swing lows below structure', 'double bottom wicks']
+const SMC_LIQUIDITY_BEAR = ['equal highs (buy-side liquidity)', 'swing highs above structure', 'double top wicks']
+const SMC_DISP_CANDLES = ['large-bodied bullish engulfing', 'hammer with strong close', 'bullish marubozu', 'institutional displacement candle (large body, near-zero upper wick)']
+const SMC_DISP_CANDLES_BEAR = ['large-bodied bearish engulfing', 'shooting star with strong close', 'bearish marubozu', 'displacement candle with near-zero lower wick']
+
+export function generateSMCScalpConversation(
+  time: GameTime,
+  trade: TradeRecord,
+): AgentConversation {
+  const label  = timeLabel(time)
+  const sm     = time.day * 1440 + time.hour * 60 + Math.floor(time.minute)
+  const isBull = trade.direction === 'long'
+  const pair   = trade.pair  // 'NQ' or 'ES'
+  const meta   = getMeta(pair)
+
+  const entry   = trade.entryPrice
+  const maxSL   = pair === 'NQ' ? 10 : 3   // checklist max: <10 NQ pts, <3 ES pts
+  const slDist  = Math.min(+(rand(meta.slRange[0], meta.slRange[1])), maxSL)
+  const tp1Dist = slDist * 2
+  const tp2Dist = slDist * (2.5 + Math.random() * 1.5)
+  const sl      = isBull ? entry - slDist   : entry + slDist
+  const tp1     = isBull ? entry + tp1Dist  : entry - tp1Dist
+  const tp2     = isBull ? entry + tp2Dist  : entry - tp2Dist
+  const fp      = (p: number) => fmtPrice(p, pair)
+  const killzone = pick(SMC_KILLZONES)
+
+  // Price context
+  const structure    = isBull ? pick(SMC_STRUCTURES_BULL) : pick(SMC_STRUCTURES_BEAR)
+  const liquidityZone = isBull ? pick(SMC_LIQUIDITY_BULL) : pick(SMC_LIQUIDITY_BEAR)
+  const dispCandle   = isBull ? pick(SMC_DISP_CANDLES) : pick(SMC_DISP_CANDLES_BEAR)
+  const pricePos     = isBull ? 'discount (below 50% of 1H range)' : 'premium (above 50% of 1H range)'
+  const htfOB        = isBull ? `bullish order block around ${fp(sl + slDist * 0.5)}` : `bearish order block around ${fp(sl - slDist * 0.5)}`
+  const equalLiqLabel = isBull ? 'Equal Lows (SSL)' : 'Equal Highs (BSL)'
+  const sweepDir     = isBull ? 'sell-side liquidity swept (equal lows taken)' : 'buy-side liquidity swept (equal highs taken)'
+  const chochLabel   = 'CHoCH'
+  const fvgRange     = `${fp(isBull ? entry - slDist * 0.6 : entry + slDist * 0.6)}–${fp(isBull ? entry - slDist * 0.2 : entry + slDist * 0.2)}`
+  const conf         = Math.round(72 + Math.random() * 18)
+
+  // ── Step 1: Iron Man — 1H Bias ──────────────────────────────────────────────
+  const ironManMsg = msg('ironman', sm, label,
+    `1H Bias confirmed on ${pair}. Market structure is ${isBull ? 'BULLISH' : 'BEARISH'} — ${structure}. Checklist Step 1: PASS ✅`,
+    {
+      confidence: conf - 8, riskLevel: 'low', sentiment: isBull ? 'bullish' : 'bearish',
+      tags: [`#${pair}`, '#1HBias', '#SMC', isBull ? '#Bullish' : '#Bearish', '#HH_HL'],
+      sections: [
+        {
+          title: '1H Bias Checklist',
+          content: `✅ Market Structure: ${structure}\n✅ Last BOS: ${isBull ? 'Up' : 'Down'}\n✅ Major Liquidity: ${isBull ? 'Equal highs above (buy-side target)' : 'Equal lows below (sell-side target)'}\n✅ Price Position: ${pricePos}\n✅ HTF Order Block: ${htfOB}\n✅ Bias: ${isBull ? 'LONG' : 'SHORT'}`,
+        },
+        {
+          title: '1H Chart Context',
+          content: `Price is ${isBull ? 'making higher highs and higher lows — last BOS to the upside — sitting in discount of the daily range' : 'making lower highs and lower lows — last BOS to the downside — sitting in premium of the daily range'}.\n\nLiquidity target above: ${isBull ? fp(tp2) : fp(sl)}\nHTF Order Block: ${htfOB}\n\nBias direction: ${isBull ? 'LONG only until liquidity target reached' : 'SHORT only until liquidity target reached'}`,
+        },
+      ],
+    }
+  )
+
+  // ── Step 2: Scarlet Witch — 15M Narrative ──────────────────────────────────
+  const scarletMsg = msg('scarlet', sm + 1, label,
+    `15M Narrative confirmed. ${equalLiqLabel} swept → ${chochLabel} formed → strong displacement → FVG created. Checklist Step 2: PASS ✅`,
+    {
+      confidence: conf - 4, riskLevel: 'low', sentiment: isBull ? 'bullish' : 'cautious',
+      tags: [`#${pair}`, '#15MNarrative', '#SMC', '#SSL', '#ChoCH', '#FVG'],
+      sections: [
+        {
+          title: '15M Narrative Checklist',
+          content: `✅ Sweep of Liquidity (${equalLiqLabel === 'Equal Lows (SSL)' ? 'SSL' : 'BSL'}): ${sweepDir}\n✅ ${chochLabel} After Sweep: confirmed on 15M\n✅ Strong Displacement Candle: ${dispCandle}\n✅ FVG Created: ${fvgRange}\n✅ Bias Alignment (1H): ${isBull ? 'LONG' : 'SHORT'} ✓\n✅ Target: ${isBull ? 'Equal Highs / PDH' : 'Equal Lows / PDL'}`,
+        },
+        {
+          title: '15M Narrative Breakdown',
+          content: `Price swept ${isBull ? 'below' : 'above'} ${liquidityZone}, taking ${isBull ? 'sell-side' : 'buy-side'} liquidity.\n\nAfter the sweep, ${chochLabel} confirmed — structure flipped from ${isBull ? 'bearish to bullish' : 'bullish to bearish'} on 15M.\n\nStrong ${isBull ? 'bullish' : 'bearish'} displacement candle created a Fair Value Gap (FVG) at ${fvgRange}.\n\nThis FVG is our refined entry zone on the 5M.`,
+        },
+      ],
+    }
+  )
+
+  // ── Step 3: Black Widow — 5M Setup ─────────────────────────────────────────
+  const widowMsg = msg('widow', sm + 2, label,
+    `5M Setup valid. BOS in direction of 1H bias, price retracing into FVG. Waiting for 1M confirmation. Checklist Step 3: PASS ✅`,
+    {
+      confidence: conf, riskLevel: 'low', sentiment: isBull ? 'bullish' : 'aggressive',
+      tags: [`#${pair}`, '#5MSetup', '#BOS', '#FVG', '#OB', '#Retrace'],
+      sections: [
+        {
+          title: '5M Setup Checklist',
+          content: `✅ BOS in Direction of Bias: ${isBull ? 'Bullish BOS on 5M ✓' : 'Bearish BOS on 5M ✓'}\n✅ Retrace into FVG / OB: Price retracing to ${fvgRange}\n✅ Price in Discount: ${isBull ? 'Yes — below 50% of displacement move' : 'Yes — above 50% of displacement move'}\n✅ Clean Structure: No messy wicks or overlap\n✅ Risk Mgmt: SL = ${slDist.toFixed(1)} ${meta.tickLabel} (max ${maxSL} ${meta.tickLabel} for ${pair})`,
+        },
+        {
+          title: 'Setup Narrative',
+          content: `BOS to the ${isBull ? 'upside' : 'downside'} on 5M confirmed.\nPrice is retracing into the FVG created by the displacement — this is the OTE (Optimal Trade Entry) zone.\n\nFVG entry zone: ${fvgRange}\nDo NOT enter until 1M confirms with: liquidity sweep → displacement → BOS.\n\nInvalidation: Price closes ${isBull ? 'below' : 'above'} the sweep low at ${fp(sl)}.`,
+        },
+        {
+          title: 'Risk Parameters',
+          content: `Entry target: ${fp(entry)} (FVG retest)\nStop Loss: ${fp(sl)} (below sweep low — ${slDist.toFixed(1)} ${meta.tickLabel})\nMax SL rule: ${maxSL} ${meta.tickLabel} for ${pair} — ${slDist <= maxSL ? '✅ WITHIN LIMIT' : '⚠️ EXCEEDS LIMIT — SKIP'}\nTP1: ${fp(tp1)} (2R = +${tp1Dist.toFixed(1)} ${meta.tickLabel})\nTP2: ${fp(tp2)} (+${tp2Dist.toFixed(1)} ${meta.tickLabel})`,
+        },
+      ],
+    }
+  )
+
+  // ── Step 4: Vision — 1M Execution ──────────────────────────────────────────
+  const visionMsg = msg('vision', sm + 3, label,
+    `1M Execution confirmed. Liquidity taken, displacement seen, BOS printed, FVG retest live. Entry valid. Checklist Step 4: PASS ✅`,
+    {
+      confidence: conf + 5, riskLevel: 'low', sentiment: isBull ? 'bullish' : 'bearish',
+      tags: [`#${pair}`, '#1MExecution', '#Entry', '#FVGRetest', '#StopBelowSweep'],
+      sections: [
+        {
+          title: '1M Execution Checklist',
+          content: `✅ Liquidity Taken: ${isBull ? 'Equal lows swept on 1M' : 'Equal highs swept on 1M'}\n✅ Displacement: ${dispCandle} — large body, minimal wick\n✅ BOS After Displacement: ${isBull ? 'Bullish' : 'Bearish'} BOS confirmed on 1M\n✅ Entry: FVG / OB retest at ${fp(entry)}\n✅ Stop Below Sweep Low: ${fp(sl)}\n✅ 2R+ Available: ${(tp1Dist / slDist).toFixed(1)}R to TP1, ${(tp2Dist / slDist).toFixed(1)}R to TP2\n✅ Session: ${killzone}`,
+        },
+        {
+          title: 'Execution Sequence',
+          content: `1. ${isBull ? 'Equal lows' : 'Equal highs'} swept (liquidity taken) ✓\n2. ${isBull ? 'Bullish' : 'Bearish'} displacement candle printed ✓\n3. BOS after displacement confirmed ✓\n4. Price retraced into FVG — this is the retest entry ✓\n5. Stop: ${fp(sl)} (${slDist.toFixed(1)} ${meta.tickLabel} below sweep low) ✓\n\n${killzone} — session timing is optimal.`,
+        },
+      ],
+    }
+  )
+
+  // ── Dr. Strange — Risk Management sign-off ───────────────────────────────────
+  const strangeMsg = msg('strange', sm + 4, label,
+    `ALL 4 CHECKLIST STEPS CLEARED. Risk parameters confirmed. Authorizing execution on ${pair}.`,
+    {
+      confidence: 95, riskLevel: 'low', sentiment: 'cautious',
+      tags: [`#${pair}`, '#Authorized', '#RiskApproved', '#SMCChecklist'],
+      sections: [
+        {
+          title: 'Full SMC Checklist Summary',
+          content: `✅ Step 1 — 1H Bias: ${isBull ? 'BULLISH' : 'BEARISH'} (${structure})\n✅ Step 2 — 15M Narrative: SSL swept → CHoCH → Displacement → FVG\n✅ Step 3 — 5M Setup: BOS confirmed, retrace into FVG, clean structure\n✅ Step 4 — 1M Execution: Liquidity taken, displacement, BOS, FVG retest\n\n"TRADE ONLY WHEN ALL CHECKLIST BOXES ARE CHECKED ✅"`,
+        },
+        {
+          title: 'Final Trade Card',
+          content: `Instrument: ${pair} Futures\nDirection: ${isBull ? 'LONG' : 'SHORT'}\nEntry: ${fp(entry)}\nStop Loss: ${fp(sl)} (${slDist.toFixed(1)} ${meta.tickLabel} — below sweep)\nTP1: ${fp(tp1)} (2R — partial close)\nTP2: ${fp(tp2)} (${(tp2Dist / slDist).toFixed(1)}R — runners)\nSession: ${killzone}\nRule: NO SWEEP + NO DISPLACEMENT + NO CONFIRMATION = NO TRADE`,
+        },
+      ],
+    }
+  )
+
+  return {
+    id: uid(),
+    simMinute: sm,
+    timeLabel: label,
+    title: `${pair} ${isBull ? 'Long' : 'Short'} — SMC Scalp Setup (${killzone.split('(')[0].trim()})`,
+    type: 'trading',
+    outcome: 'approved',
+    messages: [ironManMsg, scarletMsg, widowMsg, visionMsg, strangeMsg],
+    pair,
+    finalDecision: `${isBull ? 'LONG' : 'SHORT'} ${pair} at ${fp(entry)} — SL ${fp(sl)} (${slDist.toFixed(1)} pts) — TP1 ${fp(tp1)} — TP2 ${fp(tp2)}. All 4 SMC steps cleared.`,
+    tags: [`#${pair}`, '#SMCScalp', '#FVG', '#SSL', '#ChoCH', isBull ? '#Long' : '#Short', killzone.includes('NY AM') ? '#KillZone' : '#Session'],
+    sourceEventId: trade.id,
+  }
+}
+
 // ── Trading conversation generators ──────────────────────────────────────────
 
 export function generateTradingSetupConversation(
@@ -693,20 +852,31 @@ export function generateConversationForLogEntry(
   const sm    = time.day * 1440 + time.hour * 60 + Math.floor(time.minute)
 
   if (type === 'trade') {
-    const isBull = message.toLowerCase().includes('long') || message.toLowerCase().includes('buy')
-    const pairMatch = message.match(/([A-Z]{3}\/[A-Z]{3})/)
+    const isShort = message.toLowerCase().includes('short')
+    const isBull  = !isShort && (message.toLowerCase().includes('long') || message.toLowerCase().includes('buy'))
+    // Match both slash pairs (EUR/USD) and bare futures (NQ, ES, CL, ZN, GC, RTY)
+    const pairMatch = message.match(/\b(NQ|ES|CL|ZN|GC|RTY)\b/) ?? message.match(/([A-Z]{3}\/[A-Z]{3})/)
     const pair = pairMatch ? pairMatch[1] : pick(PAIRS)
+    const meta = getMeta(pair)
+    const basePrice = meta.basePrice
 
-    return generateTradingSetupConversation(time, {
+    const tradeRecord: TradeRecord = {
       id: `auto_${sm}`,
       pair,
       direction: isBull ? 'long' : 'short',
-      entryPrice: rand(1.05, 1.15),
+      entryPrice: basePrice * (1 + (Math.random() - 0.5) * 0.001),
       exitPrice: null,
       pnl: null,
       status: 'open',
       timestamp: sm,
-    })
+    }
+
+    // NQ and ES use the full 4-step SMC checklist conversation
+    if (pair === 'NQ' || pair === 'ES') {
+      return generateSMCScalpConversation(time, tradeRecord)
+    }
+
+    return generateTradingSetupConversation(time, tradeRecord)
   }
 
   if (type === 'creative') {
