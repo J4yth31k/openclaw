@@ -167,104 +167,96 @@ function UploadZone({ onFile }: { onFile: (file: File) => void }) {
       onClick={() => inputRef.current?.click()}
       style={{
         border: `2px dashed ${dragging ? '#a78bfa' : 'rgba(124,58,237,0.25)'}`,
-        borderRadius: 8, padding: '16px 12px', textAlign: 'center', cursor: 'pointer',
+        borderRadius: 8, padding: '14px 12px', textAlign: 'center', cursor: 'pointer',
         background: dragging ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)',
-        transition: 'all 0.15s', marginBottom: 10,
+        transition: 'all 0.15s', marginBottom: 8, minHeight: 48,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
       }}
     >
       <input
         ref={inputRef}
         type="file"
         accept=".csv,.json,image/png,image/jpeg,image/webp"
+        capture="environment"
         style={{ display: 'none' }}
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f) }}
       />
-      <div style={{ fontSize: 20, marginBottom: 4 }}>📂</div>
-      <div style={{ fontSize: 9, color: '#a78bfa', fontWeight: 700 }}>Drop CSV, JSON, or Screenshot</div>
-      <div style={{ fontSize: 8, color: '#4a5870', marginTop: 2 }}>PNG · JPG · WEBP · .csv · .json</div>
-    </div>
-  )
-}
-
-// ── Paste zone ────────────────────────────────────────────────────────────────
-
-function PasteZone({ onPaste }: { onPaste: (e: React.ClipboardEvent) => void }) {
-  const [focused, setFocused] = useState(false)
-  return (
-    <div
-      tabIndex={0}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onPaste={onPaste}
-      style={{
-        border: `2px dashed ${focused ? '#10b981' : 'rgba(16,185,129,0.2)'}`,
-        borderRadius: 8, padding: '12px 10px', textAlign: 'center', cursor: 'text',
-        background: focused ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.02)',
-        transition: 'all 0.15s', marginBottom: 10, outline: 'none',
-      }}
-    >
-      <div style={{ fontSize: 18, marginBottom: 3 }}>📋</div>
-      <div style={{ fontSize: 9, fontWeight: 700, color: focused ? '#10b981' : '#4a5870' }}>
-        {focused ? 'Ready — paste now (Ctrl+V / ⌘V)' : 'Click here · then Ctrl+V to paste'}
-      </div>
-      <div style={{ fontSize: 8, color: '#4a5870', marginTop: 2 }}>
-        Screenshot · CSV rows · JSON trades
+      <span style={{ fontSize: 22 }}>📷</span>
+      <div>
+        <div style={{ fontSize: 10, color: '#a78bfa', fontWeight: 700 }}>Upload / Camera / Screenshot</div>
+        <div style={{ fontSize: 8, color: '#4a5870' }}>PNG · JPG · CSV · JSON</div>
       </div>
     </div>
   )
 }
 
-// ── Text paste area ───────────────────────────────────────────────────────────
+// ── Main input box: always-visible textarea + Analyze button ──────────────────
 
-function TextPasteArea({ onSubmit }: { onSubmit: (text: string) => void }) {
-  const [open, setOpen] = useState(false)
+interface InputBoxProps {
+  onSubmitText: (text: string) => void
+  onPaste: (e: React.ClipboardEvent) => void
+  loading: boolean
+}
+
+function InputBox({ onSubmitText, onPaste, loading }: InputBoxProps) {
   const [text, setText] = useState('')
+  const hasText = text.trim().length > 0
 
   function submit() {
-    if (text.trim()) { onSubmit(text.trim()); setText(''); setOpen(false) }
+    if (hasText && !loading) { onSubmitText(text.trim()); setText('') }
+  }
+
+  // Allow Enter to submit (Shift+Enter = newline)
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
 
   return (
-    <div style={{ marginBottom: 10 }}>
-      <button
-        onClick={() => setOpen(o => !o)}
+    <div style={{ marginBottom: 8 }}>
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        disabled={loading}
+        placeholder={
+          'Paste or type your trades here, then tap Analyze…\n\n' +
+          'CSV: date,instrument,outcome,realized_pnl_dollars\n' +
+          '     2024-01-15,NQ,win,320\n\n' +
+          'JSON: [{"instrument":"NQ","outcome":"win","realized_pnl_dollars":320}]'
+        }
         style={{
-          width: '100%', border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: 5, padding: '5px 8px', background: 'rgba(255,255,255,0.02)',
-          color: '#4a5870', fontSize: 8, fontWeight: 700, cursor: 'pointer',
-          textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4,
+          width: '100%', minHeight: 110, resize: 'vertical', boxSizing: 'border-box',
+          background: 'rgba(0,0,0,0.35)', border: `1px solid ${hasText ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.08)'}`,
+          borderRadius: '8px 8px 0 0', color: '#c0cfe0',
+          /* 16px prevents iOS auto-zoom on focus */
+          fontSize: 16, fontFamily: 'monospace',
+          padding: '10px 12px', outline: 'none', transition: 'border-color 0.15s',
+          WebkitTextSizeAdjust: '100%',
+        }}
+      />
+      <button
+        onClick={submit}
+        disabled={!hasText || loading}
+        style={{
+          width: '100%', padding: '14px 12px', borderRadius: '0 0 8px 8px',
+          border: 'none', borderTop: '1px solid rgba(0,0,0,0.3)',
+          background: hasText && !loading ? '#10b981' : 'rgba(16,185,129,0.12)',
+          color: hasText && !loading ? '#fff' : '#3a5040',
+          fontSize: 14, fontWeight: 800, cursor: hasText && !loading ? 'pointer' : 'not-allowed',
+          letterSpacing: 0.5, transition: 'all 0.15s',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          minHeight: 50,
         }}
       >
-        <span style={{ color: '#a78bfa' }}>{open ? '▲' : '▼'}</span>
-        PASTE RAW TEXT (CSV / JSON)
+        {loading
+          ? <><span>⚙️</span> Hulk is crunching…</>
+          : <><span>💪</span> {hasText ? 'ANALYZE NOW' : 'Paste trades above'}</>
+        }
       </button>
-      {open && (
-        <div style={{ marginTop: 4 }}>
-          <textarea
-            value={text}
-            onChange={e => setText(e.target.value)}
-            placeholder={'Paste CSV rows or JSON array here…\n\nExamples:\ndate,instrument,outcome,realized_pnl_dollars\n2024-01-15,BTCUSD,win,120\n\nor\n[{"instrument":"NQ","outcome":"win","realized_pnl_dollars":200}]'}
-            style={{
-              width: '100%', minHeight: 100, resize: 'vertical', boxSizing: 'border-box',
-              background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 5, color: '#c0cfe0', fontSize: 8, fontFamily: 'monospace',
-              padding: '6px 8px', outline: 'none',
-            }}
-          />
-          <button
-            onClick={submit}
-            disabled={!text.trim()}
-            style={{
-              marginTop: 4, padding: '5px 12px', borderRadius: 5, border: 'none',
-              background: text.trim() ? '#7c3aed' : 'rgba(124,58,237,0.2)',
-              color: text.trim() ? '#fff' : '#4a5870', fontSize: 8, fontWeight: 700,
-              cursor: text.trim() ? 'pointer' : 'not-allowed',
-            }}
-          >
-            💪 Send to Hulk
-          </button>
-        </div>
-      )}
+      <div style={{ fontSize: 7, color: '#2a3040', textAlign: 'center', marginTop: 3 }}>
+        Enter to submit · Shift+Enter for new line · or Ctrl+V a screenshot anywhere
+      </div>
     </div>
   )
 }
@@ -744,60 +736,75 @@ export default function JournalPanel() {
   )
 
   return (
-    <div style={{ padding: '10px 10px 0', height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+    <div style={{ padding: '12px 12px 80px', height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto', boxSizing: 'border-box' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <span style={{ fontSize: 16 }}>💪</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 24 }}>💪</span>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#e0e6f0' }}>Hulk Journal Analyzer</div>
-          <div style={{ fontSize: 8, color: '#4a5870' }}>Bruce SMASHES your trades for patterns</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#e0e6f0' }}>Hulk Journal</div>
+          <div style={{ fontSize: 10, color: '#4a5870' }}>Bruce SMASHES your trades for patterns</div>
         </div>
+        {analysis && (
+          <button
+            onClick={() => { setAnalysis(null); setBtResult(null); setError(null) }}
+            style={{ marginLeft: 'auto', fontSize: 9, color: '#4a5870', background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
+          >
+            ↺ New
+          </button>
+        )}
       </div>
 
       {/* Upload zone */}
       <UploadZone onFile={handleFile} />
 
-      {/* Paste zone — click to focus, then Ctrl+V */}
-      <PasteZone onPaste={handleReactPaste} />
+      {/* ── Main input: always-visible textarea + ANALYZE button ─── */}
+      {!analysis && (
+        <InputBox
+          onSubmitText={(text) => {
+            const isJSON = text.startsWith('[') || text.startsWith('{')
+            uploadText(text, isJSON)
+          }}
+          onPaste={handleReactPaste}
+          loading={loading}
+        />
+      )}
 
-      {/* Raw text paste area */}
-      <TextPasteArea onSubmit={(text) => {
-        const isJSON = text.startsWith('[') || text.startsWith('{')
-        uploadText(text, isJSON)
-      }} />
-
-      {/* Screenshot preview — full ScreenshotViewer with zoom/pan */}
+      {/* Screenshot preview */}
       {preview && (preview.startsWith('data:') || preview.startsWith('https://')) && (
         <div style={{ marginBottom: 8, borderRadius: 6, overflow: 'hidden',
           border: '1px solid rgba(124,58,237,0.25)', height: 180, flexShrink: 0 }}>
-          <ScreenshotViewer
-            src={preview}
-            alt="journal screenshot"
-            compact={true}
-          />
+          <ScreenshotViewer src={preview} alt="journal screenshot" compact={true} />
         </div>
       )}
 
+      {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: 16, color: '#a78bfa', fontSize: 10 }}>
-          {loadingMsg}
-        </div>
-      )}
-
-      {error && (
         <div style={{
-          padding: '8px 10px', borderRadius: 5, marginBottom: 8,
-          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-          fontSize: 9, color: '#ef4444',
+          textAlign: 'center', padding: 20, color: '#84cc16', fontSize: 11,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
         }}>
-          ❌ {error}
+          <span style={{ fontSize: 28 }}>💪</span>
+          <div style={{ fontWeight: 700 }}>{loadingMsg}</div>
+          <div style={{ fontSize: 9, color: '#4a5870' }}>Hulk is crunching your data…</div>
         </div>
       )}
 
-      {!analysis && !loading && (
-        <div style={{ textAlign: 'center', padding: '12px 0', color: '#3a4860', fontSize: 9 }}>
-          Drop a file · click Paste · or just press Ctrl+V anywhere
+      {/* Error */}
+      {error && !loading && (
+        <div style={{
+          padding: '10px 12px', borderRadius: 8, marginBottom: 10,
+          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+          fontSize: 10, color: '#ef4444',
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 3 }}>❌ Error</div>
+          <div style={{ fontSize: 9, color: '#c08080' }}>{error}</div>
+          <button
+            onClick={() => setError(null)}
+            style={{ marginTop: 6, fontSize: 8, color: '#ef4444', background: 'none', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' }}
+          >
+            Try again
+          </button>
         </div>
       )}
 
@@ -813,30 +820,29 @@ export default function JournalPanel() {
                 onClick={runBacktest}
                 disabled={btLoading}
                 style={{
-                  width: '100%', padding: '10px 12px', borderRadius: 7,
-                  border: '1px solid rgba(132,204,22,0.35)',
-                  background: btLoading ? 'rgba(132,204,22,0.04)' : 'rgba(132,204,22,0.10)',
-                  color: btLoading ? '#4a5870' : '#84cc16',
-                  fontSize: 10, fontWeight: 700, cursor: btLoading ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  width: '100%', minHeight: 52, padding: '12px 16px', borderRadius: 8,
+                  border: '1px solid rgba(132,204,22,0.4)',
+                  background: btLoading ? 'rgba(132,204,22,0.05)' : 'rgba(132,204,22,0.14)',
+                  color: btLoading ? '#4a5070' : '#84cc16',
+                  fontSize: 13, fontWeight: 800, cursor: btLoading ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                  letterSpacing: 0.3,
                 }}
               >
-                {btLoading ? (
-                  <>
-                    <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚙️</span>
-                    💪 Hulk is smashing 2 years of {analysis.best_instrument} data…
-                  </>
-                ) : (
-                  <>💪 Run Hulk Backtest — {analysis.best_instrument}</>
-                )}
+                <span style={{ fontSize: 20 }}>💪</span>
+                {btLoading
+                  ? `Smashing ${analysis.best_instrument} history…`
+                  : `Backtest ${analysis.best_instrument}`
+                }
               </button>
               {btError && (
-                <div style={{ marginTop: 4, fontSize: 8, color: '#ef4444', padding: '4px 8px', background: 'rgba(239,68,68,0.08)', borderRadius: 4 }}>
+                <div style={{ marginTop: 6, fontSize: 9, color: '#ef4444', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
                   ❌ {btError}
                 </div>
               )}
             </div>
           )}
+
 
           {/* ── Backtest result ───────────────────────────────────────── */}
           {btResult && <BacktestPanel result={btResult} />}
