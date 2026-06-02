@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import ScreenshotViewer from './ScreenshotViewer'
+import { useSimStore } from '../store'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -368,14 +369,171 @@ function AgentReviewPanel({ analysis }: { analysis: Analysis }) {
   )
 }
 
+// ── Backtest types ────────────────────────────────────────────────────────────
+
+interface BacktestResult {
+  status: string
+  instrument: string
+  ticker: string
+  period: string
+  strategy: string
+  total_trades: number
+  win_rate: number
+  total_return_pct: number
+  max_drawdown_pct: number
+  sharpe_ratio: number
+  equity_curve: number[]
+  journal_win_rate: number
+  journal_trades: number
+  coaching: string[]
+  improvement_rules: string[]
+  error?: string
+}
+
+// ── Equity sparkline SVG ──────────────────────────────────────────────────────
+
+function EquitySpark({ curve, color }: { curve: number[]; color: string }) {
+  if (!curve || curve.length < 2) return null
+  const W = 220, H = 60
+  const mn = Math.min(...curve), mx = Math.max(...curve)
+  const range = mx - mn || 1
+  const pts = curve.map((v, i) => {
+    const x = (i / (curve.length - 1)) * W
+    const y = H - ((v - mn) / range) * H
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  // Shade under
+  const ptsArr = pts.split(' ')
+  const first = ptsArr[0], last = ptsArr[ptsArr.length - 1]
+  const area = `M${first} L${pts.split(' ').slice(1).join(' ')} L${last.split(',')[0]},${H} L0,${H} Z`
+  return (
+    <svg width={W} height={H} style={{ display: 'block', width: '100%' }} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <path d={area} fill={color + '18'} />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      {/* Start / end labels */}
+      <text x="2" y="10" fontSize="7" fill={color + '90'} fontFamily="monospace">${mn.toFixed(0)}</text>
+      <text x={W - 2} y="10" fontSize="7" fill={color + '90'} fontFamily="monospace" textAnchor="end">${mx.toFixed(0)}</text>
+    </svg>
+  )
+}
+
+// ── Backtest result panel ─────────────────────────────────────────────────────
+
+function BacktestPanel({ result }: { result: BacktestResult }) {
+  const isProfit  = result.total_return_pct >= 0
+  const retColor  = isProfit ? '#10b981' : '#ef4444'
+  const btWR      = Math.round(result.win_rate * 100)
+  const liveWR    = Math.round(result.journal_win_rate * 100)
+  const gap       = btWR - liveWR
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      {/* Header */}
+      <div style={{
+        background: 'rgba(132,204,22,0.08)', border: '1px solid rgba(132,204,22,0.25)',
+        borderRadius: '7px 7px 0 0', padding: '7px 10px',
+        display: 'flex', alignItems: 'center', gap: 7,
+      }}>
+        <span style={{ fontSize: 16 }}>💪</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#84cc16' }}>
+            Hulk Backtest — {result.instrument}
+          </div>
+          <div style={{ fontSize: 7, color: '#4a5870' }}>
+            {result.strategy} · {result.period} · {result.total_trades} signals · {result.ticker}
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        background: 'rgba(132,204,22,0.03)', border: '1px solid rgba(132,204,22,0.15)',
+        borderTop: 'none', borderRadius: '0 0 7px 7px', padding: '8px 10px',
+      }}>
+        {/* Equity curve */}
+        <div style={{ marginBottom: 8, borderRadius: 4, overflow: 'hidden', background: 'rgba(0,0,0,0.3)', padding: '4px' }}>
+          <EquitySpark curve={result.equity_curve} color={retColor} />
+        </div>
+
+        {/* Stats grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 8 }}>
+          {[
+            { label: 'Return', value: `${result.total_return_pct >= 0 ? '+' : ''}${result.total_return_pct}%`, color: retColor },
+            { label: 'Win Rate', value: `${btWR}%`, color: btWR >= 55 ? '#10b981' : btWR >= 45 ? '#f5c842' : '#ef4444' },
+            { label: 'Max DD', value: `${result.max_drawdown_pct}%`, color: result.max_drawdown_pct > 20 ? '#ef4444' : '#6a7888' },
+            { label: 'Sharpe', value: result.sharpe_ratio.toFixed(2), color: result.sharpe_ratio >= 1 ? '#10b981' : '#6a7888' },
+            { label: 'Signals', value: String(result.total_trades), color: '#c8ccd8' },
+            { label: 'Period', value: result.period, color: '#4a5870' },
+          ].map(s => (
+            <div key={s.label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 4, padding: '4px 6px' }}>
+              <div style={{ fontSize: 7, color: '#4a5870' }}>{s.label}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: 'monospace' }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Live vs backtest comparison bar */}
+        <div style={{ marginBottom: 8, padding: '6px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: 5 }}>
+          <div style={{ fontSize: 7, color: '#4a5870', marginBottom: 4 }}>Your Journal vs. Backtest Baseline</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 8, color: '#6366f1', fontFamily: 'monospace', width: 30 }}>{liveWR}%</span>
+            <div style={{ flex: 1, background: '#1a1c28', borderRadius: 3, height: 8, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', left: 0, top: 0, width: `${liveWR}%`, height: '100%', background: '#6366f1' }} />
+              <div style={{ position: 'absolute', left: 0, top: 0, width: `${btWR}%`, height: '100%', background: '#84cc16', opacity: 0.5 }} />
+            </div>
+            <span style={{ fontSize: 8, color: '#84cc16', fontFamily: 'monospace', width: 30 }}>{btWR}%</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 6, color: '#2a3040', marginTop: 2 }}>
+            <span>🟣 Your live WR</span>
+            <span style={{ color: gap > 0 ? '#ef4444' : gap < 0 ? '#10b981' : '#4a5870' }}>
+              {gap > 0 ? `↑ ${gap}pt gap to close` : gap < 0 ? `↑ ${Math.abs(gap)}pt above baseline` : 'Matched'}
+            </span>
+            <span>🟢 Backtest WR</span>
+          </div>
+        </div>
+
+        {/* Coaching messages from Hulk */}
+        {result.coaching.map((msg, i) => (
+          <div key={i} style={{
+            marginBottom: 6, padding: '6px 8px',
+            background: 'rgba(132,204,22,0.05)', borderRadius: 5,
+            borderLeft: '2px solid #84cc16',
+            fontSize: 8, color: '#9faec0', lineHeight: 1.55,
+          }}>
+            <span style={{ color: '#84cc16', fontWeight: 700 }}>💪 Hulk: </span>
+            {msg}
+          </div>
+        ))}
+
+        {/* Improvement rules */}
+        {result.improvement_rules.length > 0 && (
+          <div style={{ marginTop: 6, padding: '6px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: 5, border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ fontSize: 8, color: '#4a5870', fontWeight: 700, marginBottom: 4 }}>📋 Rules to implement:</div>
+            {result.improvement_rules.map((rule, i) => (
+              <div key={i} style={{ fontSize: 7, color: '#6a8090', lineHeight: 1.5, padding: '1px 0' }}>{rule}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export default function JournalPanel() {
+  const addEventLogEntry = useSimStore(s => s.addEventLogEntry)
+  const setHulkTask      = useSimStore(s => s.setHulkTask)
+
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('Hulk crunching numbers…')
   const [error, setError] = useState<string | null>(null)
   const [section, setSection] = useState<'overview' | 'breakdown' | 'tips' | 'trades'>('overview')
+
+  // Backtest state
+  const [btResult, setBtResult]   = useState<BacktestResult | null>(null)
+  const [btLoading, setBtLoading] = useState(false)
+  const [btError, setBtError]     = useState<string | null>(null)
   // Restore preview from localStorage so it survives page refresh
   const [preview, setPreview] = useState<string | null>(() => {
     try { return localStorage.getItem('hulk_preview') } catch { return null }
@@ -527,6 +685,49 @@ export default function JournalPanel() {
   uploadScreenshotRef.current = uploadScreenshot
   uploadTextRef.current = uploadText
 
+  // ── Run Hulk backtest from journal analysis ──────────────────────────────
+  async function runBacktest() {
+    if (!analysis || !analysis.best_instrument) return
+    setBtLoading(true)
+    setBtError(null)
+    setBtResult(null)
+
+    const instrument = analysis.best_instrument
+    addEventLogEntry(`💪 Hulk is smashing 2 years of ${instrument} history — backtest starting!`, 'info')
+    setHulkTask(`Backtesting ${instrument} from journal…`)
+
+    try {
+      const resp = await fetch(`${BASE}/journal/backtest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instrument,
+          journal_win_rate: analysis.win_rate,
+          journal_trades: analysis.total_trades,
+          journal_avg_rr: analysis.avg_rr_achieved,
+          period: '2y',
+        }),
+      })
+      if (!resp.ok) throw new Error(await resp.text())
+      const data: BacktestResult = await resp.json()
+      if (data.status !== 'success') throw new Error(data.error ?? 'Backtest failed')
+      setBtResult(data)
+      addEventLogEntry(
+        `💪 Hulk SMASHED ${data.total_trades} ${instrument} signals! `
+        + `Backtest WR: ${Math.round(data.win_rate * 100)}% · `
+        + `Return: ${data.total_return_pct >= 0 ? '+' : ''}${data.total_return_pct}%`,
+        'success',
+      )
+    } catch (e: any) {
+      const msg = e.message ?? 'Backtest request failed'
+      setBtError(msg)
+      addEventLogEntry(`💪 Hulk backtest error: ${msg}`, 'warning')
+    } finally {
+      setBtLoading(false)
+      setHulkTask(null)
+    }
+  }
+
   const tabBtn = (id: typeof section, label: string) => (
     <button
       key={id}
@@ -604,6 +805,41 @@ export default function JournalPanel() {
         <>
           {/* Agent review */}
           <AgentReviewPanel analysis={analysis} />
+
+          {/* ── Hulk Backtest button ──────────────────────────────────── */}
+          {analysis.best_instrument && !btResult && (
+            <div style={{ marginBottom: 10 }}>
+              <button
+                onClick={runBacktest}
+                disabled={btLoading}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 7,
+                  border: '1px solid rgba(132,204,22,0.35)',
+                  background: btLoading ? 'rgba(132,204,22,0.04)' : 'rgba(132,204,22,0.10)',
+                  color: btLoading ? '#4a5870' : '#84cc16',
+                  fontSize: 10, fontWeight: 700, cursor: btLoading ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                {btLoading ? (
+                  <>
+                    <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚙️</span>
+                    💪 Hulk is smashing 2 years of {analysis.best_instrument} data…
+                  </>
+                ) : (
+                  <>💪 Run Hulk Backtest — {analysis.best_instrument}</>
+                )}
+              </button>
+              {btError && (
+                <div style={{ marginTop: 4, fontSize: 8, color: '#ef4444', padding: '4px 8px', background: 'rgba(239,68,68,0.08)', borderRadius: 4 }}>
+                  ❌ {btError}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Backtest result ───────────────────────────────────────── */}
+          {btResult && <BacktestPanel result={btResult} />}
 
           {/* Section tabs */}
           <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 10 }}>

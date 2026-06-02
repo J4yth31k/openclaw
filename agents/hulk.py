@@ -863,6 +863,188 @@ class Hulk:
         }
 
     # ------------------------------------------------------------------
+    # Journal-driven backtest
+    # ------------------------------------------------------------------
+
+    # Maps friendly instrument names → yfinance tickers
+    _INSTRUMENT_MAP: Dict[str, str] = {
+        'NQ': 'NQ=F', 'MNQ': 'NQ=F', 'ES': 'ES=F', 'MES': 'ES=F',
+        'RTY': 'RTY=F', 'CL': 'CL=F', 'ZN': 'ZN=F', 'GC': 'GC=F',
+        'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X', 'USDJPY': 'JPY=X',
+        'AUDUSD': 'AUDUSD=X', 'USDCAD': 'USDCAD=X', 'USDCHF': 'USDCHF=X',
+        'XAUUSD': 'GC=F', 'BTCUSD': 'BTC-USD', 'ETHUSD': 'ETH-USD',
+    }
+
+    def run_journal_backtest(
+        self,
+        instrument: str,
+        journal_win_rate: float = 0.0,
+        journal_trades: int = 0,
+        journal_avg_rr: float = 0.0,
+        period: str = '2y',
+    ) -> Dict[str, Any]:
+        """
+        Run an EMA 9/21 crossover backtest on the instrument identified from
+        journal analysis. Compares historical strategy results against the
+        trader's live journal performance and generates a coaching plan.
+
+        Returns a dict with equity_curve (list), metrics, and improvement tips
+        structured for the SimWorld JournalPanel to display.
+        """
+        inst_upper = instrument.upper().replace('/', '').replace('-', '')
+        ticker = self._INSTRUMENT_MAP.get(inst_upper, inst_upper)
+
+        logger.info(f"Hulk backtesting {instrument} ({ticker}) over {period}…")
+
+        df = self.fetch_historical_data(ticker, period=period, interval='1d')
+        if df is None or df.empty:
+            # Try weekly if daily fails
+            df = self.fetch_historical_data(ticker, period=period, interval='1wk')
+        if df is None or df.empty:
+            return {
+                'status': 'error',
+                'error': f'No historical data found for {instrument} ({ticker}). Check the symbol.',
+                'instrument': instrument,
+            }
+
+        # ── EMA 9/21 crossover strategy ───────────────────────────────────
+        def ema_crossover(data: pd.DataFrame, params: Optional[Dict]) -> pd.DataFrame:
+            fast = (params or {}).get('fast', 9)
+            slow = (params or {}).get('slow', 21)
+            data = data.copy()
+            data['ema_fast'] = data['close'].ewm(span=fast, adjust=False).mean()
+            data['ema_slow'] = data['close'].ewm(span=slow, adjust=False).mean()
+            data['signal'] = 0
+            data.loc[data['ema_fast'] > data['ema_slow'], 'signal'] = 1
+            # Exit on cross-under
+            cross_under = (data['ema_fast'] < data['ema_slow']) & (data['ema_fast'].shift(1) >= data['ema_slow'].shift(1))
+            data.loc[cross_under, 'signal'] = -1
+            return data
+
+        result = self.backtest_strategy(df, ema_crossover, {'fast': 9, 'slow': 21})
+        trades  = result.get('trades', [])
+        eq_raw  = result.get('equity_curve', pd.Series(dtype=float))
+
+        if not trades:
+            return {
+                'status': 'error',
+                'error': f'No trades generated for {instrument} — not enough price history or insufficient crossovers.',
+                'instrument': instrument,
+            }
+
+        # ── Core metrics ──────────────────────────────────────────────────
+        wins = sum(1 for t in trades if t.get('pnl', 0) > 0)
+        total_bt_trades = len(trades)
+        bt_win_rate = round(wins / total_bt_trades, 4) if total_bt_trades else 0.0
+
+        eq_list: List[float] = eq_raw.tolist() if hasattr(eq_raw, 'tolist') else list(eq_raw)
+        # Downsample to ≤60 points for the sparkline
+        if len(eq_list) > 60:
+            step = max(1, len(eq_list) // 60)
+            eq_list = eq_list[::step]
+        eq_list = [round(v, 2) for v in eq_list if not (v != v)]  # drop NaN
+
+        start_val = self.initial_balance
+        end_val   = eq_list[-1] if eq_list else start_val
+        total_return_pct = round((end_val - start_val) / start_val * 100, 2)
+
+        # Max drawdown
+        peak = start_val
+        max_dd_pct = 0.0
+        running = start_val
+        for v in (eq_raw.tolist() if hasattr(eq_raw, 'tolist') else []):
+            if v != v: continue  # skip NaN
+            if v > peak:
+                peak = v
+            dd = (peak - v) / peak * 100
+            if dd > max_dd_pct:
+                max_dd_pct = dd
+        max_dd_pct = round(max_dd_pct, 2)
+
+        # Sharpe approximation (annualised, daily returns)
+        try:
+            daily_eq = eq_raw.dropna()
+            daily_ret = daily_eq.pct_change().dropna()
+            sharpe = round(float(daily_ret.mean() / daily_ret.std() * (252 ** 0.5)), 2) if daily_ret.std() > 0 else 0.0
+        except Exception:
+            sharpe = 0.0
+
+        # ── Coaching: compare live journal vs. historical backtest ─────────
+        coaching: List[str] = []
+        live_wr_pct = round(journal_win_rate * 100, 1)
+        bt_wr_pct   = round(bt_win_rate * 100, 1)
+        gap = bt_win_rate - journal_win_rate
+
+        if gap > 0.12:
+            coaching.append(
+                f"Strategy WR {bt_wr_pct}% vs your live {live_wr_pct}% — a {abs(gap*100):.0f}pt gap. "
+                f"The historical edge is there. Your entries on {instrument} need tightening: "
+                f"wait for the EMA alignment before the ICT trigger."
+            )
+        elif gap < -0.12:
+            coaching.append(
+                f"Your live WR {live_wr_pct}% beats the mechanical backtest {bt_wr_pct}%. "
+                f"Your ICT discretion is adding real alpha on {instrument}. "
+                f"The risk is overconfidence — keep sizing consistent."
+            )
+        else:
+            coaching.append(
+                f"Your live WR {live_wr_pct}% closely matches the {period} backtest ({bt_wr_pct}%). "
+                f"Execution is consistent. Focus on R:R — that's where the next level of profit comes from."
+            )
+
+        if total_return_pct > 15:
+            coaching.append(
+                f"EMA 9/21 on {instrument} returned {total_return_pct:.1f}% over {period} — solid trend instrument. "
+                f"Layer your ICT setups ON TOP of EMA alignment for maximum confluence."
+            )
+        elif total_return_pct < 0:
+            coaching.append(
+                f"{instrument} trended against simple trend-following over {period} ({total_return_pct:.1f}%). "
+                f"This is a chop or range environment — ICT range setups (equilibrium fades) may outperform here."
+            )
+
+        if max_dd_pct > 25:
+            coaching.append(
+                f"Historical drawdown hit {max_dd_pct:.1f}%. Size as if this is your next drawdown, not the average. "
+                f"Dr. Strange recommends risking ≤0.5% per trade until you have 100+ journal entries."
+            )
+
+        if journal_trades < 30:
+            coaching.append(
+                f"You have {journal_trades} journal trades — Hulk needs ≥30 for statistical edge. "
+                f"Keep logging every trade. The patterns become clear around 50 entries."
+            )
+
+        # ── Specific improvement rules ─────────────────────────────────────
+        improvement_rules = [
+            f"✅ Only enter {instrument} longs when EMA 9 > EMA 21 on the daily — confirms macro bias",
+            f"✅ Best EMA-based entries: pullbacks to the 9-EMA during trending markets, not breakouts",
+            f"✅ Session filter: highest win rate on {instrument} comes in the first 2 hours of NY open",
+            f"✅ Use the backtest {bt_wr_pct}% win rate as your minimum — if journal falls below it, stop and review",
+            f"✅ Max drawdown {max_dd_pct:.1f}% — size positions so a full drawdown sequence stays < 5% of account",
+        ]
+
+        return {
+            'status': 'success',
+            'instrument': instrument,
+            'ticker': ticker,
+            'period': period,
+            'strategy': 'EMA 9/21 Crossover (baseline)',
+            'total_trades': total_bt_trades,
+            'win_rate': bt_win_rate,
+            'total_return_pct': total_return_pct,
+            'max_drawdown_pct': max_dd_pct,
+            'sharpe_ratio': sharpe,
+            'equity_curve': eq_list,
+            'journal_win_rate': journal_win_rate,
+            'journal_trades': journal_trades,
+            'journal_avg_rr': journal_avg_rr,
+            'coaching': coaching,
+            'improvement_rules': improvement_rules,
+        }
+
+    # ------------------------------------------------------------------
     # Report formatting
     # ------------------------------------------------------------------
 

@@ -51,6 +51,8 @@ interface SimStore extends SimState {
   load: () => void
   reset: () => void
   purchaseUpgrade: (id: string) => boolean
+  addEventLogEntry: (message: string, type?: import('./types').LogType) => void
+  setHulkTask: (task: string | null) => void
 }
 
 export const useSimStore = create<SimStore>((set, get) => ({
@@ -145,6 +147,31 @@ export const useSimStore = create<SimStore>((set, get) => ({
     })
     return true
   },
+
+  addEventLogEntry: (message, type = 'info') => {
+    const s = get()
+    const minuteOfDay = s.time.hour * 60 + Math.floor(s.time.minute)
+    const simMinute   = s.time.day * 1440 + minuteOfDay
+    const h = String(s.time.hour).padStart(2, '0')
+    const m = String(Math.floor(s.time.minute)).padStart(2, '0')
+    const entry = {
+      id: `evt_hulk_${Date.now()}`,
+      simMinute,
+      timeLabel: `Day ${s.time.day} ${h}:${m}`,
+      message,
+      type,
+      agentId: 'hulk',
+    }
+    set(s2 => ({ eventLog: [entry, ...s2.eventLog].slice(0, 80) }))
+  },
+
+  setHulkTask: (task) => set(s => ({
+    agents: s.agents.map(a =>
+      a.id === 'hulk'
+        ? { ...a, taskName: task, state: task ? 'working' : a.state }
+        : a
+    ),
+  })),
 
   selectAgent: (id) => set({ selectedAgentId: id }),
   selectBuilding: (id) => set({ selectedBuildingId: id }),

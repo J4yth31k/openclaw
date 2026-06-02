@@ -783,6 +783,35 @@ async def journal_analyze():
     return _journal_analysis
 
 
+class JournalBacktestRequest(BaseModel):
+    instrument: str
+    journal_win_rate: float = 0.0
+    journal_trades: int = 0
+    journal_avg_rr: float = 0.0
+    period: str = "2y"
+
+
+@app.post("/journal/backtest")
+async def journal_backtest(payload: JournalBacktestRequest):
+    """
+    Run Hulk's EMA 9/21 backtest on the instrument identified from journal analysis.
+    Returns equity curve, metrics, and a coaching plan comparing live vs. historical results.
+    """
+    if not _HULK_AVAILABLE or not _hulk_instance:
+        raise HTTPException(503, "Hulk module not available — check Railway deployment")
+    try:
+        result = _hulk_instance.run_journal_backtest(
+            instrument=payload.instrument,
+            journal_win_rate=payload.journal_win_rate,
+            journal_trades=payload.journal_trades,
+            journal_avg_rr=payload.journal_avg_rr,
+            period=payload.period,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"Hulk backtest error: {e}")
+
+
 @app.delete("/journal/clear")
 async def journal_clear():
     """Clear all stored journal entries."""
