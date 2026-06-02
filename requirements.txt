@@ -30,3 +30,6 @@ fpdf2>=2.7.9
 
 # Vision / AI parsing (screenshot journal upload)
 anthropic>=0.30.0
+
+# Ant-Man: Etsy niche research via Google Trends
+pytrends>=4.9.2

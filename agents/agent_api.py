@@ -72,6 +72,15 @@ try:
 except Exception:
     _ANTHROPIC_AVAILABLE = False
 
+try:
+    from ant_man import AntMan as _AntMan, SEED_NICHES as _SEED_NICHES
+    _ant_man_instance = _AntMan()
+    _ANT_MAN_AVAILABLE = True
+except Exception:
+    _ANT_MAN_AVAILABLE = False
+    _ant_man_instance = None  # type: ignore
+    _SEED_NICHES = {}
+
 app = FastAPI(title="OpenClaw Agent API", version="3.0.0")
 
 # ── Signal Forge indicator short-code → readable label ────────────────────────
@@ -636,6 +645,67 @@ async def etsy_generate_all():
         raise HTTPException(503, "pdf_generator not available — install fpdf2")
     products = generate_all()
     return {"products": products, "count": len(products)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ANT-MAN — ETSY NICHE RESEARCH ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/etsy/niche/research")
+async def etsy_niche_research(keyword: str):
+    """
+    Research a specific Etsy niche keyword.
+
+    Query params:
+        keyword  — niche to research (e.g. 'printable wall art')
+
+    Returns full niche analysis: trend, competition, avg price, opportunity score,
+    AI insights, and suggested Etsy tags.
+    """
+    if not _ANT_MAN_AVAILABLE:
+        raise HTTPException(503, "ant_man module not available")
+    if not keyword.strip():
+        raise HTTPException(400, "keyword is required")
+    result = _ant_man_instance.research_niche(keyword.strip())
+    return result
+
+
+@app.get("/etsy/niche/discover")
+async def etsy_niche_discover(category: str = "all", top_n: int = 10):
+    """
+    Auto-discover top Etsy niche opportunities in a category.
+
+    Query params:
+        category  — 'digital_downloads' | 'personalized_gifts' | 'home_decor' |
+                    'seasonal' | 'nq_es_trader' | 'all'  (default: 'all')
+        top_n     — number of top niches to return (default: 10, max: 20)
+
+    Returns ranked list of niches with opportunity scores.
+    Note: This call runs synchronously and may take 30–120 seconds for large scans.
+    """
+    if not _ANT_MAN_AVAILABLE:
+        raise HTTPException(503, "ant_man module not available")
+    top_n = min(top_n, 20)
+    if category != "all" and category not in _SEED_NICHES:
+        valid = list(_SEED_NICHES.keys()) + ["all"]
+        raise HTTPException(400, f"Unknown category. Valid options: {valid}")
+    niches = _ant_man_instance.discover_trending_niches(category=category, top_n=top_n, delay_s=1.5)
+    return {"category": category, "count": len(niches), "niches": niches}
+
+
+@app.get("/etsy/niche/report")
+async def etsy_niche_report(category: str = "digital_downloads", top_n: int = 8):
+    """
+    Generate a full markdown niche report for a category.
+
+    Returns {markdown, niches, category}.
+    """
+    if not _ANT_MAN_AVAILABLE:
+        raise HTTPException(503, "ant_man module not available")
+    top_n = min(top_n, 15)
+    niches = _ant_man_instance.discover_trending_niches(category=category, top_n=top_n, delay_s=1.5)
+    md = _ant_man_instance.generate_niche_report(niches, title=f"Etsy Niche Report — {category.replace('_', ' ').title()}")
+    return {"category": category, "markdown": md, "niches": niches, "count": len(niches)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
