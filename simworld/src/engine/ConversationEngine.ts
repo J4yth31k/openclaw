@@ -62,12 +62,67 @@ function pct(n: number) { return `${Math.round(n)}%` }
 function fmt(p: number) { return p.toFixed(4) }
 function pip(p: number) { return Math.round(p * 10000) }
 
-// ── FOREX pairs list ──────────────────────────────────────────────────────────
+// ── Instrument catalog ─────────────────────────────────────────────────────────
 
-const PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'NZD/USD', 'GBP/JPY', 'EUR/GBP', 'USD/CAD']
-const SESSIONS = ['London', 'New York', 'Asian', 'London-NY Overlap']
-const ICT_CONCEPTS = ['FVG', 'OTE zone', 'breaker block', 'order block', 'liquidity sweep', 'displacement candle', 'CISD']
+// Forex pairs
+const FOREX_PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'NZD/USD', 'GBP/JPY', 'EUR/GBP', 'USD/CAD']
+
+// Futures instruments
+const FUTURES = ['NQ', 'ES', 'CL', 'ZN', 'GC', 'RTY']
+
+const PAIRS = [...FOREX_PAIRS, ...FUTURES]
+
+// Instrument metadata: base price, SL range (in price units), tick description
+const INSTRUMENT_META: Record<string, {
+  basePrice: number
+  slRange: [number, number]   // [min, max] SL distance in price units
+  tpMult: [number, number]    // TP = SL * random(min, max)
+  decimals: number
+  tickLabel: string           // "pips" | "points" | "ticks"
+  category: 'forex' | 'futures_index' | 'futures_commodity' | 'futures_bond' | 'futures_metal'
+}> = {
+  'EUR/USD': { basePrice: 1.0842, slRange: [0.0010, 0.0025], tpMult: [1.5, 3.5], decimals: 4, tickLabel: 'pips',   category: 'forex' },
+  'GBP/USD': { basePrice: 1.2640, slRange: [0.0012, 0.0028], tpMult: [1.5, 3.0], decimals: 4, tickLabel: 'pips',   category: 'forex' },
+  'USD/JPY': { basePrice: 149.80, slRange: [0.15,   0.40],   tpMult: [1.5, 3.0], decimals: 2, tickLabel: 'pips',   category: 'forex' },
+  'AUD/USD': { basePrice: 0.6540, slRange: [0.0008, 0.0020], tpMult: [1.5, 3.0], decimals: 4, tickLabel: 'pips',   category: 'forex' },
+  'NZD/USD': { basePrice: 0.6040, slRange: [0.0008, 0.0020], tpMult: [1.5, 3.0], decimals: 4, tickLabel: 'pips',   category: 'forex' },
+  'GBP/JPY': { basePrice: 189.40, slRange: [0.20,   0.55],   tpMult: [1.5, 3.0], decimals: 2, tickLabel: 'pips',   category: 'forex' },
+  'EUR/GBP': { basePrice: 0.8560, slRange: [0.0008, 0.0018], tpMult: [1.5, 2.5], decimals: 4, tickLabel: 'pips',   category: 'forex' },
+  'USD/CAD': { basePrice: 1.3680, slRange: [0.0010, 0.0025], tpMult: [1.5, 3.0], decimals: 4, tickLabel: 'pips',   category: 'forex' },
+  // Futures
+  'NQ':  { basePrice: 18240, slRange: [20,  60],   tpMult: [1.5, 4.0], decimals: 0, tickLabel: 'points', category: 'futures_index' },
+  'ES':  { basePrice: 5420,  slRange: [8,   20],   tpMult: [1.5, 3.5], decimals: 2, tickLabel: 'points', category: 'futures_index' },
+  'CL':  { basePrice: 81.40, slRange: [0.40, 1.20],tpMult: [1.5, 3.5], decimals: 2, tickLabel: 'ticks',  category: 'futures_commodity' },
+  'ZN':  { basePrice: 111.12,slRange: [0.08, 0.24],tpMult: [1.5, 3.0], decimals: 2, tickLabel: 'ticks',  category: 'futures_bond' },
+  'GC':  { basePrice: 2344,  slRange: [8,   22],   tpMult: [1.5, 3.5], decimals: 1, tickLabel: 'ticks',  category: 'futures_metal' },
+  'RTY': { basePrice: 2080,  slRange: [6,   18],   tpMult: [1.5, 3.5], decimals: 1, tickLabel: 'points', category: 'futures_index' },
+}
+
+// Context labels per category
+const CATEGORY_CONTEXT: Record<string, { session: string; driver: string }> = {
+  forex:             { session: 'London / NY Overlap',   driver: 'DXY correlation and central bank differentials' },
+  futures_index:     { session: 'RTH (Regular Trading Hours)',  driver: 'SPX breadth, VIX, and macro risk sentiment' },
+  futures_commodity: { session: 'NY Mercantile session', driver: 'EIA inventory data and OPEC supply signals' },
+  futures_bond:      { session: 'NY Bond session',       driver: 'Fed rate expectations and yield curve shape' },
+  futures_metal:     { session: 'NY Comex session',      driver: 'Real yields, DXY, and safe-haven demand' },
+}
+
+const SESSIONS = ['London', 'New York', 'Asian', 'London-NY Overlap', 'RTH Open', 'RTH Close']
+const ICT_CONCEPTS = ['FVG', 'OTE zone', 'breaker block', 'order block', 'liquidity sweep', 'displacement candle', 'CISD', 'VWAP reclaim']
 const HTF_BIASES = ['daily bullish', 'daily bearish', 'weekly bullish', 'weekly bearish']
+
+function getMeta(pair: string) {
+  return INSTRUMENT_META[pair] ?? INSTRUMENT_META['EUR/USD']
+}
+
+function fmtPrice(price: number, pair: string): string {
+  const meta = getMeta(pair)
+  return price.toFixed(meta.decimals)
+}
+
+function isFutures(pair: string): boolean {
+  return FUTURES.includes(pair)
+}
 
 // ── Trading conversation generators ──────────────────────────────────────────
 
@@ -79,40 +134,49 @@ export function generateTradingSetupConversation(
   const sm     = time.day * 1440 + time.hour * 60 + Math.floor(time.minute)
   const isBull = trade.direction === 'long'
   const pair   = trade.pair
+  const meta   = getMeta(pair)
+  const catCtx = CATEGORY_CONTEXT[meta.category] ?? CATEGORY_CONTEXT.forex
+
+  // Use metadata-driven SL/TP rather than hardcoded FOREX offsets
   const entry  = trade.entryPrice
-  const sl     = isBull ? entry - rand(0.0010, 0.0025) : entry + rand(0.0010, 0.0025)
-  const tp1    = isBull ? entry + rand(0.0018, 0.0030) : entry - rand(0.0018, 0.0030)
-  const tp2    = isBull ? entry + rand(0.0035, 0.0055) : entry - rand(0.0035, 0.0055)
-  const slPips = Math.abs(pip(entry - sl))
-  const rrRaw  = Math.abs(tp2 - entry) / Math.abs(entry - sl)
+  const slDist = rand(meta.slRange[0], meta.slRange[1])
+  const tpMult = rand(meta.tpMult[0], meta.tpMult[1])
+  const sl     = isBull ? entry - slDist : entry + slDist
+  const tp1    = isBull ? entry + slDist * 1.5 : entry - slDist * 1.5
+  const tp2    = isBull ? entry + slDist * tpMult : entry - slDist * tpMult
+  const slPips = slDist.toFixed(meta.decimals)
+  const rrRaw  = tpMult
   const rr     = rrRaw.toFixed(1)
   const conf   = Math.round(65 + Math.random() * 20)
-  const session = pick(SESSIONS)
+  const session = isFutures(pair) ? catCtx.session : pick(SESSIONS)
   const concept = pick(ICT_CONCEPTS)
   const htfBias = pick(HTF_BIASES)
   const ema9    = isBull ? 'above EMA 21' : 'below EMA 21'
   const macd    = isBull ? 'bullish crossover' : 'bearish crossover'
-  const hh1     = fmt(entry - (isBull ? rand(0.0020, 0.0050) : -rand(0.0020, 0.0050)))
-  const hh2     = fmt(entry - (isBull ? rand(0.0005, 0.0015) : -rand(0.0005, 0.0015)))
+  const hh1     = fmtPrice(entry - (isBull ? slDist * 2 : -slDist * 2), pair)
+  const hh2     = fmtPrice(entry - (isBull ? slDist * 0.5 : -slDist * 0.5), pair)
+
+  const fp = (p: number) => fmtPrice(p, pair)
+  const slBuffer = slDist * 0.15
 
   const ironManMsg = msg('ironman', sm, label,
     `Full technical scan complete on ${pair}. Structure is clearly ${isBull ? 'bullish' : 'bearish'}.`,
     {
       confidence: conf - 5, riskLevel: 'medium',
       sentiment: isBull ? 'bullish' : 'bearish',
-      tags: [`#${pair.replace('/', '')}`, '#TechnicalAnalysis', isBull ? '#Bullish' : '#Bearish'],
+      tags: [`#${pair.replace('/', '')}`, '#TechnicalAnalysis', isBull ? '#Bullish' : '#Bearish', isFutures(pair) ? '#Futures' : '#Forex'],
       sections: [
         {
           title: 'Market Structure Analysis',
-          content: `• ${isBull ? 'Higher highs' : 'Lower lows'} confirmed: ${hh1} → ${hh2} → current\n• ${isBull ? 'Higher lows holding' : 'Lower highs forming'} above structure\n• EMA 9 ${ema9} — trend momentum confirmed\n• MACD: ${macd} on H1 chart\n• Volume expanding on ${isBull ? 'up' : 'down'}-candles`,
+          content: `• ${isBull ? 'Higher highs' : 'Lower lows'} confirmed: ${hh1} → ${hh2} → current\n• ${isBull ? 'Higher lows holding' : 'Lower highs forming'} at structure\n• EMA 9 ${ema9} — trend momentum confirmed\n• MACD: ${macd} on H1 chart\n• Volume expanding on ${isBull ? 'up' : 'down'}-candles`,
         },
         {
           title: 'Key Levels',
-          content: `Support: ${fmt(sl + (isBull ? 0.0003 : -0.0003))}\nResistance: ${fmt(tp1)}\nSwing High Target: ${fmt(tp2)}`,
+          content: `Support: ${fp(sl + (isBull ? slBuffer : -slBuffer))}\nResistance: ${fp(tp1)}\nSwing Target: ${fp(tp2)}`,
         },
         {
           title: 'Market Context',
-          content: `Session: ${session}\nHTF Bias: ${htfBias}\nRecent structure: ${concept} identified on M15`,
+          content: `Session: ${session}\nHTF Bias: ${htfBias}\nPrimary Driver: ${catCtx.driver}\nRecent structure: ${concept} identified on M15`,
         },
       ],
     }
@@ -123,19 +187,19 @@ export function generateTradingSetupConversation(
     {
       confidence: conf, riskLevel: 'medium',
       sentiment: isBull ? 'bullish' : 'aggressive',
-      tags: [`#${pair.replace('/', '')}`, '#ICT', `#${concept.replace(' ', '')}`],
+      tags: [`#${pair.replace('/', '')}`, '#ICT', `#${concept.replace(/\s/g, '')}`],
       sections: [
         {
           title: 'Setup Quality Assessment',
-          content: `• Liquidity sweep: ${isBull ? 'London low taken' : 'London high taken'} at ${fmt(sl + (isBull ? -0.0005 : 0.0005))}\n• Price reclaimed ${fmt(isBull ? sl + 0.0005 : sl - 0.0005)} structure in last 3 candles\n• ICT ${concept} identified on M15\n• OTE zone: ${fmt(entry - (isBull ? 0.0004 : -0.0004))}–${fmt(entry + (isBull ? 0.0004 : -0.0004))}`,
+          content: `• Liquidity sweep: ${isBull ? 'session low taken' : 'session high taken'} at ${fp(sl - (isBull ? slBuffer : -slBuffer))}\n• Price reclaimed ${fp(isBull ? sl + slBuffer : sl - slBuffer)} structure in last 3 candles\n• ICT ${concept} identified on M15\n• OTE zone: ${fp(entry - slDist * 0.3)}–${fp(entry + slDist * 0.3)}`,
         },
         {
           title: 'Trade Parameters',
-          content: `Entry: ${fmt(entry)} (limit order)\nStop Loss: ${fmt(sl)} (below ${isBull ? 'liquidity sweep' : 'liquidity pool'} + buffer)\nTP1: ${fmt(tp1)} (1:1.5 partial)\nTP2: ${fmt(tp2)} (1:${rr} full target)`,
+          content: `Entry: ${fp(entry)} (limit order)\nStop Loss: ${fp(sl)} (below ${isBull ? 'liquidity sweep' : 'liquidity pool'} + buffer)\nTP1: ${fp(tp1)} (1:1.5 partial)\nTP2: ${fp(tp2)} (1:${rr} full target)`,
         },
         {
           title: 'Risk/Reward',
-          content: `R:R Ratio: 1:${rr}\nSL distance: ${slPips} pips\nConditional on candle close ${isBull ? 'above' : 'below'} entry zone.`,
+          content: `R:R Ratio: 1:${rr}\nSL distance: ${slPips} ${meta.tickLabel}\nConditional on candle close ${isBull ? 'above' : 'below'} entry zone.`,
         },
       ],
     }
@@ -150,7 +214,7 @@ export function generateTradingSetupConversation(
       sections: [
         {
           title: 'Order Flow Observations',
-          content: `• ${isBull ? 'Buy' : 'Sell'}-side delta: ${isBull ? '+' : '-'}${Math.round(1500 + Math.random() * 2000).toLocaleString()} at entry zone\n• ${isBull ? 'Passive bid' : 'Passive offer'} wall detected at ${fmt(sl + (isBull ? 0.0002 : -0.0002))}\n• No visible ${isBull ? 'offer absorption' : 'bid absorption'} at current price level`,
+          content: `• ${isBull ? 'Buy' : 'Sell'}-side delta: ${isBull ? '+' : '-'}${Math.round(1500 + Math.random() * 2000).toLocaleString()} at entry zone\n• ${isBull ? 'Passive bid' : 'Passive offer'} wall detected at ${fp(sl + (isBull ? slBuffer : -slBuffer))}\n• No visible ${isBull ? 'offer absorption' : 'bid absorption'} at current price level`,
         },
         {
           title: 'Market Microstructure',
@@ -160,6 +224,7 @@ export function generateTradingSetupConversation(
     }
   )
 
+  const maxLoss = Math.round(slDist * (isFutures(pair) ? 20 : 10000))
   const strangeMsg = msg('strange', sm + 2, label,
     `Risk profile analyzed. Position sizing within acceptable parameters. Proceeding with ${pct(conf)} confidence.`,
     {
@@ -169,7 +234,7 @@ export function generateTradingSetupConversation(
       sections: [
         {
           title: 'Position Sizing',
-          content: `Risk per trade: 1% of account\nSL distance: ${slPips} pips\nRecommended lot: 0.1 standard\nMax loss exposure: $${Math.round(slPips * 10)}`,
+          content: `Risk per trade: 1% of account\nSL distance: ${slPips} ${meta.tickLabel}\n${isFutures(pair) ? 'Recommended: 1 contract' : 'Recommended lot: 0.1 standard'}\nMax loss exposure: ~$${maxLoss}`,
         },
         {
           title: 'Portfolio Exposure',
@@ -177,7 +242,7 @@ export function generateTradingSetupConversation(
         },
         {
           title: 'Risk Verdict',
-          content: `VERDICT: APPROVED\nStop placement: ${fmt(sl)} (structural, not arbitrary)\nPartial TP at ${fmt(tp1)} recommended to lock in 1:1.5`,
+          content: `VERDICT: APPROVED\nStop placement: ${fp(sl)} (structural, not arbitrary)\nPartial TP at ${fp(tp1)} recommended to lock in 1:1.5`,
         },
       ],
     }
@@ -192,11 +257,11 @@ export function generateTradingSetupConversation(
       sections: [
         {
           title: 'Final Order Parameters',
-          content: `Pair: ${pair}\nDirection: ${trade.direction.toUpperCase()}\nEntry: ${fmt(entry)}\nStop Loss: ${fmt(sl)}\nTP1: ${fmt(tp1)} (partial close)\nTP2: ${fmt(tp2)} (full target)\nPosition Size: 0.1 lot`,
+          content: `Instrument: ${pair}${isFutures(pair) ? ' Futures' : ''}\nDirection: ${trade.direction.toUpperCase()}\nEntry: ${fp(entry)}\nStop Loss: ${fp(sl)}\nTP1: ${fp(tp1)} (partial close)\nTP2: ${fp(tp2)} (full target)\n${isFutures(pair) ? 'Size: 1 contract' : 'Size: 0.1 lot'}`,
         },
         {
           title: 'Execution Conditions',
-          content: `Trigger: Candle close ${isBull ? 'above' : 'below'} ${fmt(entry + (isBull ? -0.0002 : 0.0002))}\nInvalidation: Close ${isBull ? 'below' : 'above'} ${fmt(sl + (isBull ? 0.0005 : -0.0005))}\nSession: ${session}`,
+          content: `Trigger: Candle close ${isBull ? 'above' : 'below'} ${fp(entry - (isBull ? slDist * 0.1 : -slDist * 0.1))}\nInvalidation: Close ${isBull ? 'below' : 'above'} ${fp(sl + (isBull ? slBuffer : -slBuffer))}\nSession: ${session}`,
         },
         {
           title: 'Mission Briefing',
@@ -215,7 +280,7 @@ export function generateTradingSetupConversation(
     outcome: 'approved',
     messages: [ironManMsg, widowMsg, visionMsg, strangeMsg, furyMsg],
     pair,
-    finalDecision: `Execute ${trade.direction} on ${pair} at ${fmt(entry)}, SL: ${fmt(sl)}, TP: ${fmt(tp2)}`,
+    finalDecision: `Execute ${trade.direction} on ${pair}${isFutures(pair) ? ' futures' : ''} at ${fmtPrice(entry, pair)}, SL: ${fmtPrice(sl, pair)}, TP: ${fmtPrice(tp2, pair)}`,
     tags: [`#${pair.replace('/', '')}`, '#TradeSetup', isBull ? '#Bullish' : '#Bearish', `#ICT`],
     sourceEventId: trade.id,
   }

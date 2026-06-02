@@ -75,6 +75,14 @@ export interface BusinessUpdate {
 // Throttle conversation generation — max 1 per 45 sim-seconds to avoid spam
 let _lastConvTime = 0
 
+// Base prices for each instrument — used to generate realistic entry prices
+const INSTRUMENT_BASE_PRICES: Record<string, number> = {
+  'EUR/USD': 1.0842, 'GBP/USD': 1.2640, 'USD/JPY': 149.80,
+  'AUD/USD': 0.6540, 'NZD/USD': 0.6040, 'GBP/JPY': 189.40,
+  'EUR/GBP': 0.8560, 'USD/CAD': 1.3680, 'XAU/USD': 2344,
+  'NQ': 18240, 'ES': 5420, 'CL': 81.40, 'ZN': 111.12, 'GC': 2344, 'RTY': 2080,
+}
+
 export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate {
   const result: BusinessUpdate = { logEntries: [], conversations: [], completedDelta: 0 }
   const simNow = state.time.day * 1440 + simMinuteOfDay(state.time)
@@ -390,13 +398,14 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
       const isClose = ev.closeDelta > 0
 
       if (isOpen) {
-        const direction = ev.plDelta >= 0 || ev.message.toLowerCase().includes('long') ? 'long' : 'short'
+        const direction = ev.message.toLowerCase().includes('short') ? 'short' : 'long'
+        const basePrice = INSTRUMENT_BASE_PRICES[pair] ?? 1.0842
         result.conversations.push(
           generateTradingSetupConversation(state.time, {
             id: tradeLogId,
             pair,
             direction,
-            entryPrice: 1.0842 + (Math.random() - 0.5) * 0.02,
+            entryPrice: basePrice * (1 + (Math.random() - 0.5) * 0.001),
             exitPrice: null,
             pnl: null,
             status: 'open',
@@ -405,14 +414,16 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
         )
       } else if (isClose) {
         const isWin = ev.won === true
-        const entry = 1.0842 + (Math.random() - 0.5) * 0.02
+        const basePrice = INSTRUMENT_BASE_PRICES[pair] ?? 1.0842
+        const entry = basePrice * (1 + (Math.random() - 0.5) * 0.001)
+        const slDist = basePrice * 0.001
         result.conversations.push(
           generateTradeClosedConversation(state.time, {
             id: tradeLogId,
             pair,
-            direction: 'long',
+            direction: ev.message.toLowerCase().includes('short') ? 'short' : 'long',
             entryPrice: entry,
-            exitPrice: entry + (isWin ? 0.0045 : -0.0018),
+            exitPrice: entry + (isWin ? slDist * 2.5 : -slDist),
             pnl: ev.plDelta,
             status: isWin ? 'won' : 'lost',
             timestamp: simNow,

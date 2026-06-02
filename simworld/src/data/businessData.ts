@@ -177,21 +177,69 @@ export const TRADE_EVENTS: Array<{
   message: string; plDelta: number; openDelta: number; closeDelta: number
   won?: boolean; pair?: string; mood?: TradingStats['marketMood']; action?: string
 }> = [
-  { message: 'Trae spotted a bullish structure on EUR/USD 👀',  plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'Analyzing EUR/USD structure' },
-  { message: 'Remi reviewed the setup — approved ✅',           plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'Risk approved' },
-  { message: 'Trade opened: EUR/USD long at 1.0842 📈',         plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'EUR/USD', action: 'Trade open: EUR/USD long' },
-  { message: 'EUR/USD hit TP — trade closed +$120 WIN 🎉',      plDelta: 120, openDelta: -1, closeDelta: 1, won: true,  pair: 'EUR/USD', action: 'Taking profits' },
-  { message: 'Trae spotted a bearish BOS on GBP/JPY 📉',        plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'Analyzing GBP/JPY BOS' },
-  { message: 'Remi flagged high spread — trade rejected ⚠️',   plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'Reviewing rejection', mood: 'volatile' },
-  { message: 'Trade opened: GBP/USD short at 1.2640 📉',        plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'GBP/USD', action: 'Trade open: GBP/USD short' },
-  { message: 'GBP/USD hit SL — trade closed -$55 LOSS 😬',      plDelta: -55, openDelta: -1, closeDelta: 1, won: false, pair: 'GBP/USD', action: 'Reviewing loss' },
-  { message: 'Market session shifted — USD bullish momentum 🐂',plDelta: 0,   openDelta: 0,  closeDelta: 0, mood: 'bullish', action: 'Monitoring USD strength' },
-  { message: 'Trade opened: USD/JPY long 📈',                   plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'USD/JPY', action: 'Trade open: USD/JPY long' },
-  { message: 'USD/JPY closed +$200 WIN 🎉',                     plDelta: 200, openDelta: -1, closeDelta: 1, won: true,  action: 'Booking profits' },
-  { message: 'XAU/USD long signal confirmed 🥇',                plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'XAU/USD', action: 'Trade open: XAU/USD long' },
-  { message: 'XAU/USD TP hit — +$320 WIN 🎉',                   plDelta: 320, openDelta: -1, closeDelta: 1, won: true,  action: 'Locking in gold gains' },
-  { message: 'GBP/JPY short confirmed 📉',                      plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'GBP/JPY', action: 'Trade open: GBP/JPY short' },
-  { message: 'GBP/JPY SL hit — -$80 LOSS 😬',                   plDelta: -80, openDelta: -1, closeDelta: 1, won: false, action: 'Post-trade review' },
+  // ── FOREX ─────────────────────────────────────────────────────────────────
+  { message: 'Trae spotted a bullish structure on EUR/USD 👀',      plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Analyzing EUR/USD structure' },
+  { message: 'Remi reviewed the setup — approved ✅',               plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Risk approved' },
+  { message: 'Trade opened: EUR/USD long at 1.0842 📈',             plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'EUR/USD', action: 'Trade open: EUR/USD long' },
+  { message: 'EUR/USD hit TP — trade closed +$120 WIN 🎉',          plDelta: 120,  openDelta: -1, closeDelta: 1, won: true,  pair: 'EUR/USD', action: 'Taking profits' },
+  { message: 'Trae spotted a bearish BOS on GBP/JPY 📉',            plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Analyzing GBP/JPY BOS' },
+  { message: 'Remi flagged high spread — trade rejected ⚠️',       plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Reviewing rejection', mood: 'volatile' },
+  { message: 'Trade opened: GBP/USD short at 1.2640 📉',            plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'GBP/USD', action: 'Trade open: GBP/USD short' },
+  { message: 'GBP/USD hit SL — trade closed -$55 LOSS 😬',          plDelta: -55,  openDelta: -1, closeDelta: 1, won: false, pair: 'GBP/USD', action: 'Reviewing loss' },
+  { message: 'Market session shifted — USD bullish momentum 🐂',    plDelta: 0,    openDelta: 0,  closeDelta: 0, mood: 'bullish', action: 'Monitoring USD strength' },
+  { message: 'Trade opened: USD/JPY long 📈',                       plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'USD/JPY', action: 'Trade open: USD/JPY long' },
+  { message: 'USD/JPY closed +$200 WIN 🎉',                         plDelta: 200,  openDelta: -1, closeDelta: 1, won: true,  pair: 'USD/JPY', action: 'Booking profits' },
+  { message: 'XAU/USD long signal confirmed 🥇',                    plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'XAU/USD', action: 'Trade open: XAU/USD long' },
+  { message: 'XAU/USD TP hit — +$320 WIN 🎉',                       plDelta: 320,  openDelta: -1, closeDelta: 1, won: true,  pair: 'XAU/USD', action: 'Locking in gold gains' },
+  { message: 'GBP/JPY short confirmed 📉',                          plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'GBP/JPY', action: 'Trade open: GBP/JPY short' },
+  { message: 'GBP/JPY SL hit — -$80 LOSS 😬',                       plDelta: -80,  openDelta: -1, closeDelta: 1, won: false, pair: 'GBP/JPY', action: 'Post-trade review' },
+
+  // ── NQ (NASDAQ-100 Futures) ────────────────────────────────────────────────
+  { message: 'Iron Man scanning NQ — bullish fair value gap on M15 🦾',  plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Analyzing NQ M15 FVG' },
+  { message: 'Dr. Strange approved NQ long — risk within limits ✅',     plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ risk approved' },
+  { message: 'Trade opened: NQ long at 18,240 📈',                       plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'NQ', action: 'Trade open: NQ long' },
+  { message: 'NQ TP hit at 18,320 — +$400 WIN 🎉',                       plDelta: 400,  openDelta: -1, closeDelta: 1, won: true,  pair: 'NQ', action: 'NQ target reached' },
+  { message: 'NQ rejected at VWAP — short signal firing 📉',             plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ VWAP rejection', mood: 'bearish' },
+  { message: 'Trade opened: NQ short at 18,510 📉',                      plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'NQ', action: 'Trade open: NQ short' },
+  { message: 'NQ SL hit — -$200 LOSS 😬',                                plDelta: -200, openDelta: -1, closeDelta: 1, won: false, pair: 'NQ', action: 'NQ stopped out' },
+  { message: 'NQ reclaimed 18,000 VWAP — momentum bullish 🐂',           plDelta: 0,    openDelta: 0,  closeDelta: 0, mood: 'bullish', action: 'NQ VWAP reclaim' },
+  { message: 'NQ long closed +$640 WIN 🎉 — liquidity sweep executed',   plDelta: 640,  openDelta: -1, closeDelta: 1, won: true,  pair: 'NQ', action: 'NQ booking profits' },
+
+  // ── ES (S&P 500 Futures) ──────────────────────────────────────────────────
+  { message: 'Black Widow identified ES breaker block at 5,410 🕷️',      plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Analyzing ES breaker block' },
+  { message: 'Trade opened: ES long at 5,418 📈',                        plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'ES', action: 'Trade open: ES long' },
+  { message: 'ES TP hit +$250 WIN 🎉 — 1:2.5 R:R achieved',             plDelta: 250,  openDelta: -1, closeDelta: 1, won: true,  pair: 'ES', action: 'ES target reached' },
+  { message: 'ES rejected at all-time high — distribution forming 📉',   plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'ES ATH rejection', mood: 'volatile' },
+  { message: 'Trade opened: ES short at 5,490 📉',                       plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'ES', action: 'Trade open: ES short' },
+  { message: 'ES short closed +$375 WIN 🎉',                             plDelta: 375,  openDelta: -1, closeDelta: 1, won: true,  pair: 'ES', action: 'ES profits locked' },
+  { message: 'ES SL hit — -$125 LOSS 😬 — market absorbed offer',        plDelta: -125, openDelta: -1, closeDelta: 1, won: false, pair: 'ES', action: 'ES post-mortem' },
+
+  // ── CL (Crude Oil Futures) ────────────────────────────────────────────────
+  { message: 'Thor reading CL — inverse correlation with DXY confirmed ⚡', plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'CL-DXY correlation check' },
+  { message: 'Trade opened: CL long at 81.40 🛢️',                          plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'CL', action: 'Trade open: CL long' },
+  { message: 'CL TP hit at 82.80 — +$280 WIN 🎉',                          plDelta: 280, openDelta: -1, closeDelta: 1, won: true,  pair: 'CL', action: 'CL target reached' },
+  { message: 'CL inventory report bearish — short opportunity 📉',          plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'CL inventory reaction', mood: 'bearish' },
+  { message: 'Trade opened: CL short at 80.15 📉',                          plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'CL', action: 'Trade open: CL short' },
+  { message: 'CL closed +$420 WIN 🎉 — supply zone held perfectly',         plDelta: 420, openDelta: -1, closeDelta: 1, won: true,  pair: 'CL', action: 'CL supply zone trade won' },
+  { message: 'CL SL hit — -$140 LOSS 😬 — news spike',                      plDelta: -140,openDelta: -1, closeDelta: 1, won: false, pair: 'CL', action: 'CL news stop-out' },
+
+  // ── ZN (10-Year Treasury Futures) ────────────────────────────────────────
+  { message: 'Capt. America tracking ZN — yields inverted, bonds bullish 🛡️', plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'ZN yield curve analysis' },
+  { message: 'Trade opened: ZN long at 111.12 📈',                            plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'ZN', action: 'Trade open: ZN long' },
+  { message: 'ZN TP hit — +$187 WIN 🎉 — Fed pivot trade paid off',           plDelta: 187, openDelta: -1, closeDelta: 1, won: true,  pair: 'ZN', action: 'ZN pivot trade won' },
+  { message: 'ZN SL hit — -$94 LOSS 😬 — strong jobs data pressured bonds',   plDelta: -94, openDelta: -1, closeDelta: 1, won: false, pair: 'ZN', action: 'ZN stopped out on jobs' },
+
+  // ── GC (Gold Futures) ────────────────────────────────────────────────────
+  { message: 'Vision sees GC order block at 2,340 — institutional buy 👁️', plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'GC order block analysis' },
+  { message: 'Trade opened: GC long at 2,344.50 🥇',                       plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'GC', action: 'Trade open: GC long' },
+  { message: 'GC TP hit at 2,362 — +$350 WIN 🎉',                          plDelta: 350,  openDelta: -1, closeDelta: 1, won: true,  pair: 'GC', action: 'GC profits locked' },
+  { message: 'GC rejected at 2,400 resistance — short setup forming 📉',   plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'GC resistance rejection', mood: 'volatile' },
+
+  // ── RTY (Russell 2000 Futures) ───────────────────────────────────────────
+  { message: 'Spider-Man: small-cap rotation news confirms RTY long setup 🕸️', plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'RTY news catalyst confirmed' },
+  { message: 'Trade opened: RTY long at 2,080 📈',                              plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'RTY', action: 'Trade open: RTY long' },
+  { message: 'RTY closed +$310 WIN 🎉 — risk-on session delivered',             plDelta: 310, openDelta: -1, closeDelta: 1, won: true,  pair: 'RTY', action: 'RTY risk-on trade won' },
+  { message: 'RTY SL hit — -$155 LOSS 😬 — large-cap rotation headwind',        plDelta: -155,openDelta: -1, closeDelta: 1, won: false, pair: 'RTY', action: 'RTY stopped out' },
 ]
 
 // ── Agent speeches ────────────────────────────────────────────────────────────
@@ -204,15 +252,15 @@ export const AGENT_SPEECHES: Record<string, string[]> = {
   trader_agent:      ['Watching the charts 👀', 'ICT setup forming!', 'Entry confirmed!', 'Risk looks good!'],
   risk_manager:      ['Risk approved ✅', 'Too much drawdown ⚠️', 'Checking SL levels...', 'Position size OK.'],
   // ── Avengers ────────────────────────────────────────────────────────────────
-  tech_analyst:      ['EMAs aligned! 🦾', 'MACD cross confirmed!', 'RSI approaching OB...', 'Bollinger squeeze!'],
-  fundamentals_agent:['Fed holds rates! 🛡️', 'NFP beats forecast!', 'ECB hawkish pivot...', 'Rates differential widening!'],
-  sentiment_agent:   ['Fear & Greed at 72! 🔮', 'Whales accumulating!', 'Options flow bullish!', 'Sentiment shifting...'],
-  orderflow_agent:   ['Order book imbalance! 👁️', 'VWAP computed!', 'Large bid wall forming!', 'Liquidations incoming!'],
-  correlation_agent: ['Bifrost open! ⚡', 'DXY diverging!', 'VIX spiking—be careful!', 'Gold-USD correlation flipped!'],
-  director_agent:    ['Assemble! 🎯', 'Status check in progress...', 'Colony morale rising!', 'All agents report!'],
-  tradeideas_agent:  ['Setup confirmed! 🕷️', 'Confluence: 5/6 ✅', 'Entry zone mapped!', 'Filtering noise...'],
-  news_agent:        ['Breaking news! 🕸️', 'Headline parsed!', 'Sentiment: BULLISH!', 'High-impact event incoming!'],
-  webhook_agent:     ['Signal received! 🏹', 'Webhook fired!', 'Alert forwarded!', 'Pine script triggered!'],
-  hq_risk_manager:   ['Position sized! 🔯', 'Monte Carlo: green!', 'Kelly criterion OK!', 'Drawdown within limits ✅'],
-  backtest_agent:    ['SMASH! History crunched! 💪', '89% win rate found!', 'Optimizing params...', 'Walk-forward passed!'],
+  tech_analyst:      ['EMAs aligned! 🦾', 'MACD cross confirmed!', 'RSI approaching OB...', 'Bollinger squeeze!', 'NQ FVG filled!', 'ES reclaimed VWAP!', 'CL at supply zone!'],
+  fundamentals_agent:['Fed holds rates! 🛡️', 'NFP beats forecast!', 'ECB hawkish pivot...', 'Rates differential widening!', 'ZN yield inversion!', 'EIA inventories bearish!', 'GDP beat — risk on!'],
+  sentiment_agent:   ['Fear & Greed at 72! 🔮', 'Whales accumulating!', 'Options flow bullish NQ!', 'Sentiment shifting...', 'Put/call ratio spiking!', 'Retail short ES — fade time!'],
+  orderflow_agent:   ['Order book imbalance! 👁️', 'NQ VWAP computed!', 'Large ES bid wall!', 'Liquidations incoming!', 'GC order block defended!', 'RTY delta positive!'],
+  correlation_agent: ['Bifrost open! ⚡', 'DXY diverging!', 'VIX spiking—NQ short!', 'ZN-ES inverse confirmed!', 'CL-DXY flipped!', 'GC rallying on bond bid!'],
+  director_agent:    ['Assemble! 🎯', 'Status check in progress...', 'Colony morale rising!', 'All agents report!', 'Futures open — positions live!', 'RTH session underway!'],
+  tradeideas_agent:  ['NQ setup confirmed! 🕷️', 'Confluence: 5/6 ✅', 'ES entry zone mapped!', 'Filtering noise...', 'CL breaker block!', 'GC order block live!'],
+  news_agent:        ['Breaking: FOMC in 30min! 🕸️', 'EIA report bullish CL!', 'Sentiment: BULLISH ES!', 'High-impact event!', 'NFP preview parsed!', 'Fed speaker hawkish!'],
+  webhook_agent:     ['NQ signal received! 🏹', 'Webhook fired!', 'ES alert forwarded!', 'Pine script triggered!', 'CL alert live!', 'Futures alert queued!'],
+  hq_risk_manager:   ['NQ position sized! 🔯', 'Monte Carlo: green!', 'Kelly criterion OK!', 'Drawdown within limits ✅', 'ES exposure nominal!', 'Futures margin checked!'],
+  backtest_agent:    ['SMASH! NQ history crunched! 💪', 'ES 89% win rate found!', 'Optimizing CL params...', 'Walk-forward passed!', 'ZN backtest positive!', 'RTY edge confirmed!'],
 }
