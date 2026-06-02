@@ -569,7 +569,7 @@ export default function JournalPanel() {
       {/* Screenshot preview — full ScreenshotViewer with zoom/pan */}
       {preview && (preview.startsWith('data:') || preview.startsWith('https://')) && (
         <div style={{ marginBottom: 8, borderRadius: 6, overflow: 'hidden',
-          border: '1px solid rgba(124,58,237,0.25)', height: 180 }}>
+          border: '1px solid rgba(124,58,237,0.25)', height: 180, flexShrink: 0 }}>
           <ScreenshotViewer
             src={preview}
             alt="journal screenshot"
