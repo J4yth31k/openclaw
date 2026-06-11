@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useSimStore } from './store'
 import { getTzAbbr, clockString } from './engine/TimeSystem'
 import WorldCanvas from './components/WorldCanvas'
@@ -11,7 +11,7 @@ import CommandPanel from './components/CommandPanel'
 import UpgradesPanel from './components/UpgradesPanel'
 import LaunchPlanPanel from './components/LaunchPlanPanel'
 import N8nPlanPanel from './components/N8nPlanPanel'
-import BuildingModal from './components/BuildingModal'
+import BuildingOperationPanel from './components/BuildingOperationPanel'
 import JournalPanel from './components/JournalPanel'
 import ConversationViewer from './components/ConversationViewer'
 
@@ -361,7 +361,7 @@ export default function App() {
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}>
         <Toolbar isMobile={true} />
-        <BuildingModal />
+        <BuildingOperationPanel />
 
         {/* World canvas (compact on mobile) */}
         <div style={{ height: '32vh', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
@@ -410,7 +410,7 @@ export default function App() {
       userSelect: 'none', overflow: 'hidden', background: '#020408',
     }}>
       <Toolbar isMobile={false} />
-      <BuildingModal />
+      <BuildingOperationPanel />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* World canvas + event log */}

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { createServer } from 'http';
+import { createServer, request as httpRequest } from 'http';
 import WebSocket, { WebSocketServer } from 'ws';
 
 import { MarketDataProvider } from './providers/MarketDataProvider';
@@ -231,6 +231,66 @@ wss.on('connection', (ws: WebSocket) => {
 setInterval(() => {
   broadcast({ type: 'status', status: provider.getStatus() });
 }, 10_000);
+
+// ─── Python agent API proxy ───────────────────────────────────────────────────
+// agent_api.py (FastAPI/uvicorn) runs on port 8001 inside the same container.
+// We forward these prefixes through Node so the Railway public URL works.
+
+const PYTHON_PORT = parseInt(process.env.AGENT_API_PORT ?? '8001', 10);
+
+function proxyToPython(req: express.Request, res: express.Response): void {
+  // CORS pre-flight
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+
+  // Serialise request body (already parsed by express.json above)
+  const hasBody = req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH';
+  const bodyBuf = hasBody && req.body
+    ? Buffer.from(JSON.stringify(req.body), 'utf8')
+    : undefined;
+
+  const opts = {
+    hostname: '127.0.0.1',
+    port: PYTHON_PORT,
+    path: req.url,
+    method: req.method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(bodyBuf ? { 'Content-Length': bodyBuf.length } : {}),
+    },
+  };
+
+  const pr = httpRequest(opts, (pyRes) => {
+    res.writeHead(pyRes.statusCode ?? 502, {
+      'Content-Type': pyRes.headers['content-type'] ?? 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    pyRes.pipe(res, { end: true });
+  });
+
+  pr.on('error', (err: Error) => {
+    console.error('[proxy→python] error:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: 'Python agent API unavailable',
+        detail: err.message,
+        hint: 'agent_api.py may still be starting up — retry in a few seconds',
+      });
+    }
+  });
+
+  if (bodyBuf) pr.write(bodyBuf);
+  pr.end();
+}
+
+// Route prefixes that belong to the Python FastAPI service
+const PYTHON_PREFIXES = [
+  '/journal', '/agents', '/backtest', '/ict-gate',
+  '/etsy', '/trade', '/signal', '/analyze',
+];
+PYTHON_PREFIXES.forEach(prefix => app.all(`${prefix}*`, proxyToPython));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 provider.connect().then(() => {

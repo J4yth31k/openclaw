@@ -163,6 +163,7 @@ async def analyze(payload: AlertPayload) -> dict:
 
 
 @app.get("/health")
+@app.get("/api/health")
 async def health():
     return {"ok": True, "version": "3.0.0", "strategy": "SignalForge"}
 
