@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useSimStore } from '../store'
 import type { Agent, EtsyProduct, TradeRecord } from '../types'
 import AgentChatModal from './AgentChatModal'
+import LiveTradesPanel from './LiveTradesPanel'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED PRIMITIVES
@@ -238,7 +239,7 @@ function Pill({ label, color }: { label: string; color: string }) {
 // TRADING OPERATIONS PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TRADING_TABS = ['Overview', 'Signals', 'Positions', 'Journal', 'Analytics', 'Agents']
+const TRADING_TABS = ['Overview', '📡 Live', 'Signals', 'Positions', 'Journal', 'Analytics', 'Agents']
 
 function SignalCard({ trade, accent }: { trade: TradeRecord; accent: string }) {
   const isLong = trade.direction === 'long'
@@ -352,6 +353,10 @@ function TradingOpsPanel({ agents, accent }: { agents: Agent[]; accent: string }
 
           <AIInsight lines={hulkLines} agent="Hulk" agentColor="#10b981" />
         </>}
+
+        {tab === '📡 Live' && (
+          <LiveTradesPanel accent={accent} />
+        )}
 
         {tab === 'Signals' && <>
           <SectionHead label="Live Signal Feed" accent={accent} />

@@ -52,6 +52,9 @@ _sim_state: dict[str, Any] = {}
 _journal_trades: list[dict] = []
 _journal_analysis: dict[str, Any] = {}
 
+# ── Live TradingView trade store (rolling 50) ──────────────────────────────────
+_live_trades: list[dict] = []
+
 try:
     from ict_pipeline import run_pipeline
     _ICT_AVAILABLE = True
@@ -353,10 +356,66 @@ class AlertPayload(BaseModel):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+class TradeCloseRequest(BaseModel):
+    trade_id: str
+    outcome:  str    # 'won' | 'loss' | 'breakeven'
+    pnl:      float = 0.0
+    exit_price: Optional[float] = None
+    notes:    Optional[str] = None
+
+
 @app.post("/analyze")
 async def analyze(payload: AlertPayload) -> dict:
+    global _live_trades
     analysis = run_agents(payload)
-    return {"analysis": analysis, "symbol": payload.symbol, "action": payload.action}
+
+    import datetime as _dt
+    _now = _dt.datetime.now(_dt.timezone.utc)
+    trade_id = f"tv_{int(_now.timestamp() * 1000)}"
+    trade_record = {
+        "id":        trade_id,
+        "symbol":    payload.symbol,
+        "action":    payload.action,
+        "price":     payload.price,
+        "timeframe": payload.timeframe,
+        "session":   payload.session,
+        "timestamp": _now.isoformat(),
+        "analysis":  analysis,
+        "status":    "open",
+        "pnl":       None,
+        "exit_price": None,
+        "notes":     None,
+        # parsed sub-sections for SimWorld display
+        "ict_passed": "[ICT ✅" in analysis,
+        "risk_verdict": (
+            "APPROVED" if "[Risk APPROVED]" in analysis
+            else "REJECTED" if "[Risk REJECTED]" in analysis
+            else "REVIEW"
+        ),
+    }
+    _live_trades = ([trade_record] + _live_trades)[:50]
+
+    return {"analysis": analysis, "symbol": payload.symbol, "action": payload.action, "trade_id": trade_id}
+
+
+@app.get("/trades/live")
+async def trades_live(limit: int = 20):
+    """Return the most recent TradingView webhook trades with agent analysis."""
+    return {"trades": _live_trades[:limit], "total": len(_live_trades)}
+
+
+@app.post("/trades/close")
+async def trades_close(req: TradeCloseRequest):
+    """Mark a live trade as won, loss, or breakeven after it closes."""
+    global _live_trades
+    for t in _live_trades:
+        if t["id"] == req.trade_id:
+            t["status"]     = req.outcome
+            t["pnl"]        = req.pnl
+            t["exit_price"] = req.exit_price
+            t["notes"]      = req.notes
+            return {"status": "ok", "trade": t}
+    raise HTTPException(404, "trade not found")
 
 
 @app.post("/agents/chat")
