@@ -64,13 +64,10 @@ function pip(p: number) { return Math.round(p * 10000) }
 
 // ── Instrument catalog ─────────────────────────────────────────────────────────
 
-// Forex pairs
-const FOREX_PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'NZD/USD', 'GBP/JPY', 'EUR/GBP', 'USD/CAD']
+// Futures instruments only
+const FUTURES = ['NQ', 'ES', 'CL', 'ZN', 'GC', 'RTY', 'MNQ', 'MES']
 
-// Futures instruments
-const FUTURES = ['NQ', 'ES', 'CL', 'ZN', 'GC', 'RTY']
-
-const PAIRS = [...FOREX_PAIRS, ...FUTURES]
+const PAIRS = FUTURES
 
 // Instrument metadata: base price, SL range (in price units), tick description
 const INSTRUMENT_META: Record<string, {
@@ -78,29 +75,21 @@ const INSTRUMENT_META: Record<string, {
   slRange: [number, number]   // [min, max] SL distance in price units
   tpMult: [number, number]    // TP = SL * random(min, max)
   decimals: number
-  tickLabel: string           // "pips" | "points" | "ticks"
-  category: 'forex' | 'futures_index' | 'futures_commodity' | 'futures_bond' | 'futures_metal'
+  tickLabel: string           // "points" | "ticks"
+  category: 'futures_index' | 'futures_commodity' | 'futures_bond' | 'futures_metal'
 }> = {
-  'EUR/USD': { basePrice: 1.0842, slRange: [0.0010, 0.0025], tpMult: [1.5, 3.5], decimals: 4, tickLabel: 'pips',   category: 'forex' },
-  'GBP/USD': { basePrice: 1.2640, slRange: [0.0012, 0.0028], tpMult: [1.5, 3.0], decimals: 4, tickLabel: 'pips',   category: 'forex' },
-  'USD/JPY': { basePrice: 149.80, slRange: [0.15,   0.40],   tpMult: [1.5, 3.0], decimals: 2, tickLabel: 'pips',   category: 'forex' },
-  'AUD/USD': { basePrice: 0.6540, slRange: [0.0008, 0.0020], tpMult: [1.5, 3.0], decimals: 4, tickLabel: 'pips',   category: 'forex' },
-  'NZD/USD': { basePrice: 0.6040, slRange: [0.0008, 0.0020], tpMult: [1.5, 3.0], decimals: 4, tickLabel: 'pips',   category: 'forex' },
-  'GBP/JPY': { basePrice: 189.40, slRange: [0.20,   0.55],   tpMult: [1.5, 3.0], decimals: 2, tickLabel: 'pips',   category: 'forex' },
-  'EUR/GBP': { basePrice: 0.8560, slRange: [0.0008, 0.0018], tpMult: [1.5, 2.5], decimals: 4, tickLabel: 'pips',   category: 'forex' },
-  'USD/CAD': { basePrice: 1.3680, slRange: [0.0010, 0.0025], tpMult: [1.5, 3.0], decimals: 4, tickLabel: 'pips',   category: 'forex' },
-  // Futures
   'NQ':  { basePrice: 18240, slRange: [20,  60],   tpMult: [1.5, 4.0], decimals: 0, tickLabel: 'points', category: 'futures_index' },
   'ES':  { basePrice: 5420,  slRange: [8,   20],   tpMult: [1.5, 3.5], decimals: 2, tickLabel: 'points', category: 'futures_index' },
   'CL':  { basePrice: 81.40, slRange: [0.40, 1.20],tpMult: [1.5, 3.5], decimals: 2, tickLabel: 'ticks',  category: 'futures_commodity' },
   'ZN':  { basePrice: 111.12,slRange: [0.08, 0.24],tpMult: [1.5, 3.0], decimals: 2, tickLabel: 'ticks',  category: 'futures_bond' },
   'GC':  { basePrice: 2344,  slRange: [8,   22],   tpMult: [1.5, 3.5], decimals: 1, tickLabel: 'ticks',  category: 'futures_metal' },
   'RTY': { basePrice: 2080,  slRange: [6,   18],   tpMult: [1.5, 3.5], decimals: 1, tickLabel: 'points', category: 'futures_index' },
+  'MNQ': { basePrice: 18240, slRange: [10,  30],   tpMult: [1.5, 4.0], decimals: 0, tickLabel: 'points', category: 'futures_index' },
+  'MES': { basePrice: 5420,  slRange: [4,   10],   tpMult: [1.5, 3.5], decimals: 2, tickLabel: 'points', category: 'futures_index' },
 }
 
 // Context labels per category
 const CATEGORY_CONTEXT: Record<string, { session: string; driver: string }> = {
-  forex:             { session: 'London / NY Overlap',   driver: 'DXY correlation and central bank differentials' },
   futures_index:     { session: 'RTH (Regular Trading Hours)',  driver: 'SPX breadth, VIX, and macro risk sentiment' },
   futures_commodity: { session: 'NY Mercantile session', driver: 'EIA inventory data and OPEC supply signals' },
   futures_bond:      { session: 'NY Bond session',       driver: 'Fed rate expectations and yield curve shape' },
@@ -112,7 +101,7 @@ const ICT_CONCEPTS = ['FVG', 'OTE zone', 'breaker block', 'order block', 'liquid
 const HTF_BIASES = ['daily bullish', 'daily bearish', 'weekly bullish', 'weekly bearish']
 
 function getMeta(pair: string) {
-  return INSTRUMENT_META[pair] ?? INSTRUMENT_META['EUR/USD']
+  return INSTRUMENT_META[pair] ?? INSTRUMENT_META['NQ']
 }
 
 function fmtPrice(price: number, pair: string): string {
@@ -120,8 +109,8 @@ function fmtPrice(price: number, pair: string): string {
   return price.toFixed(meta.decimals)
 }
 
-function isFutures(pair: string): boolean {
-  return FUTURES.includes(pair)
+function isFutures(_pair: string): boolean {
+  return true  // futures-only operation
 }
 
 // ── SMC Index Futures Scalp (NQ / ES) — 4-step checklist ─────────────────────
@@ -294,7 +283,7 @@ export function generateTradingSetupConversation(
   const isBull = trade.direction === 'long'
   const pair   = trade.pair
   const meta   = getMeta(pair)
-  const catCtx = CATEGORY_CONTEXT[meta.category] ?? CATEGORY_CONTEXT.forex
+  const catCtx = CATEGORY_CONTEXT[meta.category] ?? CATEGORY_CONTEXT.futures_index
 
   // Use metadata-driven SL/TP rather than hardcoded FOREX offsets
   const entry  = trade.entryPrice
@@ -323,7 +312,7 @@ export function generateTradingSetupConversation(
     {
       confidence: conf - 5, riskLevel: 'medium',
       sentiment: isBull ? 'bullish' : 'bearish',
-      tags: [`#${pair.replace('/', '')}`, '#TechnicalAnalysis', isBull ? '#Bullish' : '#Bearish', isFutures(pair) ? '#Futures' : '#Forex'],
+      tags: [`#${pair}`, '#TechnicalAnalysis', isBull ? '#Bullish' : '#Bearish', '#Futures'],
       sections: [
         {
           title: 'Market Structure Analysis',

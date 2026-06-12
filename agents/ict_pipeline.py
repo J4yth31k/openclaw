@@ -743,7 +743,7 @@ class ICTPipeline:
                 "dollar_risk":             self.account_size * self.risk_pct,
                 "position_size":           risk.position_size,
                 "account_balance_at_entry": self.account_size,
-                "account_type":            "FUTURES" if "1!" in result.symbol else "FOREX",
+                "account_type":            "FUTURES",
                 "risk_pct_used":           self.risk_pct * (0.5 if risk.daily_state == "DERIKSED" else 1.0),
                 "generating_agent":        "ICTPipeline",
             })

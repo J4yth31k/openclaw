@@ -177,22 +177,22 @@ export const TRADE_EVENTS: Array<{
   message: string; plDelta: number; openDelta: number; closeDelta: number
   won?: boolean; pair?: string; mood?: TradingStats['marketMood']; action?: string
 }> = [
-  // ── FOREX ─────────────────────────────────────────────────────────────────
-  { message: 'Trae spotted a bullish structure on EUR/USD 👀',      plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Analyzing EUR/USD structure' },
-  { message: 'Remi reviewed the setup — approved ✅',               plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Risk approved' },
-  { message: 'Trade opened: EUR/USD long at 1.0842 📈',             plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'EUR/USD', action: 'Trade open: EUR/USD long' },
-  { message: 'EUR/USD hit TP — trade closed +$120 WIN 🎉',          plDelta: 120,  openDelta: -1, closeDelta: 1, won: true,  pair: 'EUR/USD', action: 'Taking profits' },
-  { message: 'Trae spotted a bearish BOS on GBP/JPY 📉',            plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Analyzing GBP/JPY BOS' },
-  { message: 'Remi flagged high spread — trade rejected ⚠️',       plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Reviewing rejection', mood: 'volatile' },
-  { message: 'Trade opened: GBP/USD short at 1.2640 📉',            plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'GBP/USD', action: 'Trade open: GBP/USD short' },
-  { message: 'GBP/USD hit SL — trade closed -$55 LOSS 😬',          plDelta: -55,  openDelta: -1, closeDelta: 1, won: false, pair: 'GBP/USD', action: 'Reviewing loss' },
-  { message: 'Market session shifted — USD bullish momentum 🐂',    plDelta: 0,    openDelta: 0,  closeDelta: 0, mood: 'bullish', action: 'Monitoring USD strength' },
-  { message: 'Trade opened: USD/JPY long 📈',                       plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'USD/JPY', action: 'Trade open: USD/JPY long' },
-  { message: 'USD/JPY closed +$200 WIN 🎉',                         plDelta: 200,  openDelta: -1, closeDelta: 1, won: true,  pair: 'USD/JPY', action: 'Booking profits' },
-  { message: 'XAU/USD long signal confirmed 🥇',                    plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'XAU/USD', action: 'Trade open: XAU/USD long' },
-  { message: 'XAU/USD TP hit — +$320 WIN 🎉',                       plDelta: 320,  openDelta: -1, closeDelta: 1, won: true,  pair: 'XAU/USD', action: 'Locking in gold gains' },
-  { message: 'GBP/JPY short confirmed 📉',                          plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'GBP/JPY', action: 'Trade open: GBP/JPY short' },
-  { message: 'GBP/JPY SL hit — -$80 LOSS 😬',                       plDelta: -80,  openDelta: -1, closeDelta: 1, won: false, pair: 'GBP/JPY', action: 'Post-trade review' },
+  // ── MNQ (Micro NQ) ────────────────────────────────────────────────────────
+  { message: 'Trae: MNQ sell-side swept pre-market — bias flipped bullish 👀',   plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'MNQ pre-market sweep read' },
+  { message: 'Remi reviewed MNQ size — 2 contracts approved ✅',                  plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Risk approved' },
+  { message: 'Trade opened: MNQ long at 18,240 — FVG fill 📈',                   plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'MNQ', action: 'MNQ long entry' },
+  { message: 'MNQ TP hit — +$140 WIN 🎉',                                         plDelta: 140,  openDelta: -1, closeDelta: 1, won: true,  pair: 'MNQ', action: 'MNQ profit booked' },
+  { message: 'Trae: MNQ VWAP rejection — bearish short setup forming 📉',         plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'MNQ VWAP rejection read' },
+  { message: 'Remi: max daily loss 60% used — scaling back to 1 contract ⚠️',    plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Risk scaling', mood: 'volatile' },
+  { message: 'Trade opened: MNQ short at 18,510 — OB retest 📉',                  plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'MNQ', action: 'MNQ short entry' },
+  { message: 'MNQ hit SL — -$60 LOSS 😬 — news spike (review rule)',              plDelta: -60,  openDelta: -1, closeDelta: 1, won: false, pair: 'MNQ', action: 'MNQ loss review' },
+  { message: 'RTH open — NQ printing higher — bias remains bullish 🐂',           plDelta: 0,    openDelta: 0,  closeDelta: 0, mood: 'bullish', action: 'RTH open read' },
+  { message: 'Trade opened: MES long at 5,420 — NY AM Kill Zone 📈',              plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'MES', action: 'MES long entry' },
+  { message: 'MES closed +$175 WIN 🎉 — 2.1R clean',                              plDelta: 175,  openDelta: -1, closeDelta: 1, won: true,  pair: 'MES', action: 'MES profit locked' },
+  { message: 'GC (Gold) long signal — safe haven bid building 🥇',                plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'GC', action: 'GC long entry' },
+  { message: 'GC TP hit — +$310 WIN 🎉',                                           plDelta: 310,  openDelta: -1, closeDelta: 1, won: true,  pair: 'GC', action: 'Gold gains locked' },
+  { message: 'CL short confirmed — EIA inventory bearish 📉',                     plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'CL', action: 'CL short entry' },
+  { message: 'CL SL hit — -$90 LOSS 😬 — tight chop pre-EIA',                    plDelta: -90,  openDelta: -1, closeDelta: 1, won: false, pair: 'CL', action: 'CL loss post-mortem' },
 
   // ── NQ (NASDAQ-100 Futures) — SMC 4-Step Checklist ────────────────────────
   { message: 'Iron Man: NQ 1H bias BULLISH — HH/HL structure, price in discount 🦾',           plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ 1H bias analysis' },

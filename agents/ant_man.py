@@ -54,7 +54,7 @@ SEED_NICHES: dict[str, list[str]] = {
         "fathers day svg", "new year planner", "summer wall art",
     ],
     "nq_es_trader": [
-        "trading journal printable", "trading planner", "forex wall art",
+        "trading journal printable", "trading planner", "futures trader wall art",
         "stock market print", "trader gift", "trading desk decor",
         "investment planner", "financial goal tracker",
     ],

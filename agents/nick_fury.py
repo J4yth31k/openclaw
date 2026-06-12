@@ -1302,9 +1302,7 @@ class NickFury:
             active_fut = sess_ctx.get('active_futures', [])
             if active_fut:
                 summary_lines.append(f"📈 Active futures: {', '.join(active_fut[:4])}")
-            forex_s = sess_ctx.get('forex_sessions', [])
-            if forex_s:
-                summary_lines.append(f"🌍 Forex session: {'/'.join(forex_s)}")
+            # futures-only operation — no forex session display
 
         workspace['risk']          = risk_result
         workspace['approved_trades'] = approved_trades
@@ -1857,8 +1855,6 @@ class NickFury:
             }
 
         if kind == 'session':
-            forex_s   = ', '.join(data.get('forex_sessions', ['Off-Hours']))
-            active_fx = ', '.join(data.get('active_forex_pairs', [])[:4])
             fut_lines = '\n'.join(
                 f"`{sym}` {info['session']}  {info['exchange_time']}"
                 for sym, info in list(data.get('futures', {}).items())[:6]
@@ -1866,10 +1862,9 @@ class NickFury:
             return {
                 'embeds': [{
                     'color': 0x00D4FF,
-                    'title': f"📡 Session Update  ·  {now}",
+                    'title': f"📡 Futures Session Update  ·  {now}",
                     'fields': [
-                        {'name': 'Forex', 'value': f"{forex_s}\nActive: {active_fx or '—'}", 'inline': False},
-                        {'name': 'Futures', 'value': fut_lines or '—', 'inline': False},
+                        {'name': 'Futures Markets', 'value': fut_lines or '—', 'inline': False},
                     ],
                     'footer': {'text': 'Nick Fury'},
                 }]
