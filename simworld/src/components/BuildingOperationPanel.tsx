@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useSimStore } from '../store'
 import type { Agent, EtsyProduct, TradeRecord } from '../types'
+import AgentChatModal from './AgentChatModal'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED PRIMITIVES
@@ -89,6 +90,8 @@ function SectionHead({ label, accent }: { label: string; accent: string }) {
 // ── Agent mini card ───────────────────────────────────────────────────────────
 
 function AgentMini({ agent, accent, task }: { agent: Agent; accent: string; task?: string }) {
+  const openAgentChat = useSimStore(s => s.openAgentChat)
+
   const stateLabel: Record<string, string> = {
     working: '⚙️ Working', talking: '💬 Meeting', at_work: '🪑 At desk',
     on_break: '☕ Break', commuting_to_work: '🚶 Commuting',
@@ -129,6 +132,19 @@ function AgentMini({ agent, accent, task }: { agent: Agent; accent: string; task
           </div>
         </div>
       )}
+      <button
+        onClick={() => openAgentChat(agent.id)}
+        title={`Message ${agent.name}`}
+        style={{
+          background: `${accent}18`, border: `1px solid ${accent}40`,
+          borderRadius: 6, color: accent, cursor: 'pointer',
+          width: 24, height: 24, fontSize: 11, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'background 0.15s',
+        }}
+      >
+        💬
+      </button>
     </div>
   )
 }
@@ -1001,6 +1017,7 @@ export default function BuildingOperationPanel() {
 
   return (
     <>
+      <AgentChatModal />
       <style>{`
         @keyframes opSlideIn {
           from { opacity: 0; transform: scale(0.97) translateY(8px); }

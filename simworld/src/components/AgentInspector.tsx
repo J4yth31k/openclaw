@@ -1,4 +1,5 @@
 import { useSimStore } from '../store'
+import AgentChatModal from './AgentChatModal'
 
 const ROLE_LABELS: Record<string, string> = {
   research_agent:     'Research Agent',
@@ -53,6 +54,7 @@ export default function AgentInspector() {
   const agents = useSimStore(s => s.agents)
   const selectedId = useSimStore(s => s.selectedAgentId)
   const selectAgent = useSimStore(s => s.selectAgent)
+  const openAgentChat = useSimStore(s => s.openAgentChat)
 
   const agent = agents.find(a => a.id === selectedId)
 
@@ -179,9 +181,23 @@ export default function AgentInspector() {
             <div style={{ color: '#4a5060', fontSize: 9, marginTop: 4 }}>
               Grid: ({Math.round(agent.gridPos.x)}, {Math.round(agent.gridPos.y)})
             </div>
+
+            <button
+              onClick={() => openAgentChat(agent.id)}
+              style={{
+                marginTop: 10, width: '100%', padding: '7px 0',
+                background: `${agent.color}22`, border: `1px solid ${agent.color}50`,
+                borderRadius: 7, color: agent.color, cursor: 'pointer',
+                fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+                transition: 'background 0.15s',
+              }}
+            >
+              💬 Message {agent.name}
+            </button>
           </>
         )}
       </div>
+      <AgentChatModal />
     </div>
   )
 }

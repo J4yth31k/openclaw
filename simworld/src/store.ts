@@ -53,6 +53,8 @@ interface SimStore extends SimState {
   purchaseUpgrade: (id: string) => boolean
   addEventLogEntry: (message: string, type?: import('./types').LogType) => void
   setHulkTask: (task: string | null) => void
+  chatAgentId: AgentId | null
+  openAgentChat: (id: AgentId | null) => void
 }
 
 export const useSimStore = create<SimStore>((set, get) => ({
@@ -172,6 +174,9 @@ export const useSimStore = create<SimStore>((set, get) => ({
         : a
     ),
   })),
+
+  chatAgentId: null,
+  openAgentChat: (id) => set({ chatAgentId: id }),
 
   selectAgent: (id) => set({ selectedAgentId: id }),
   selectBuilding: (id) => set({ selectedBuildingId: id }),
