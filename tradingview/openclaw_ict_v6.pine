@@ -1,0 +1,316 @@
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  OpenClaw ICT Scalper — Futures Only                                    ║
+// ║  Pine Script v6                                                         ║
+// ║  Webhook → Railway /analyze → Avengers agent team                       ║
+// ║                                                                         ║
+// ║  Instruments: NQ / ES / MNQ / MES / CL / GC / RTY / ZN                ║
+// ║  Framework: 1H Bias → 15M FVG → 5M Sweep → Entry                      ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+//@version=6
+strategy(
+  title       = "OpenClaw ICT Scalper (Futures)",
+  overlay     = true,
+  initial_capital       = 25000,
+  default_qty_type      = strategy.percent_of_equity,
+  default_qty_value     = 1,
+  commission_type       = strategy.commission.cash_per_contract,
+  commission_value      = 4.2,           // approx NQ round-trip
+  slippage              = 2,
+  calc_on_every_tick    = false,
+  process_orders_on_close = true
+)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+var g_bias    = "─── Bias ───────────────────────────────"
+var g_fvg     = "─── Fair Value Gap ──────────────────────"
+var g_sweep   = "─── Liquidity Sweep ─────────────────────"
+var g_session = "─── Session Filter ──────────────────────"
+var g_risk    = "─── Risk ────────────────────────────────"
+var g_webhook = "─── Webhook ─────────────────────────────"
+
+// Bias
+ema_fast    = input.int(21,  "EMA Fast",  group=g_bias, minval=5)
+ema_slow    = input.int(55,  "EMA Slow",  group=g_bias, minval=10)
+htf         = input.timeframe("60", "HTF Bias Timeframe", group=g_bias)
+
+// FVG
+fvg_min_pct = input.float(0.02, "FVG Min Size (%)", group=g_fvg, step=0.01,
+              tooltip="Minimum gap size as % of price. Filters noise.")
+fvg_max_bars = input.int(20,  "FVG Expires After (bars)", group=g_fvg, minval=3)
+
+// Sweep
+sweep_lookback = input.int(10, "Swing Lookback (bars)", group=g_sweep, minval=3, maxval=50)
+sweep_buffer   = input.float(0.5, "Sweep Buffer (pts)", group=g_sweep, step=0.25,
+               tooltip="Price must pierce the swing by at least this many points to count as a sweep.")
+
+// Sessions (UTC hours — adjust for your broker timezone)
+use_session   = input.bool(true,  "Enable Session Filter", group=g_session)
+ny_open       = input.int(14,  "NY AM Kill Zone Start (UTC hr)", group=g_session, minval=0, maxval=23)
+ny_close      = input.int(17,  "NY AM Kill Zone End   (UTC hr)", group=g_session, minval=0, maxval=23)
+lon_open      = input.int(7,   "London Open Start     (UTC hr)", group=g_session, minval=0, maxval=23)
+lon_close     = input.int(10,  "London Open End       (UTC hr)", group=g_session, minval=0, maxval=23)
+
+// Risk
+sl_mult       = input.float(1.5, "ATR SL Multiplier",  group=g_risk, step=0.25, minval=0.5)
+tp_mult       = input.float(3.0, "ATR TP Multiplier",  group=g_risk, step=0.25, minval=1.0)
+atr_len       = input.int(14,  "ATR Length",            group=g_risk, minval=5)
+
+// Webhook
+railway_url   = input.string("https://YOUR-RAILWAY.up.railway.app/analyze",
+               "Railway Webhook URL", group=g_webhook,
+               tooltip="Paste your Railway /analyze URL. Alerts fire this payload automatically.")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INDICATORS
+// ══════════════════════════════════════════════════════════════════════════════
+
+ema21  = ta.ema(close, ema_fast)
+ema55  = ta.ema(close, ema_slow)
+atr    = ta.atr(atr_len)
+rsi    = ta.rsi(close, 14)
+vwap_v = ta.vwap(hlc3)
+[stoch_k, _stoch_d] = ta.stoch(close, high, low, 14)
+
+// RSI bands for confluence scoring
+rsi_bull = rsi > 45 and rsi < 75
+rsi_bear = rsi < 55 and rsi > 25
+
+// HTF bias via request.security (1H default)
+htf_ema21 = request.security(syminfo.tickerid, htf, ta.ema(close, ema_fast), lookahead=barmerge.lookahead_off)
+htf_ema55 = request.security(syminfo.tickerid, htf, ta.ema(close, ema_slow), lookahead=barmerge.lookahead_off)
+htf_bull  = htf_ema21 > htf_ema55
+htf_bear  = htf_ema21 < htf_ema55
+
+// Current TF bias
+ltf_bull  = ema21 > ema55 and close > ema21
+ltf_bear  = ema21 < ema55 and close < ema21
+
+bias_bull = htf_bull and ltf_bull
+bias_bear = htf_bear and ltf_bear
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SESSION FILTER
+// ══════════════════════════════════════════════════════════════════════════════
+
+hr = hour(time, "UTC")
+in_ny  = hr >= ny_open  and hr < ny_close
+in_lon = hr >= lon_open and hr < lon_close
+in_session = use_session ? (in_ny or in_lon) : true
+
+session_label = in_ny ? "NY AM Kill Zone" : in_lon ? "London Open" : "Off-Hours"
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FAIR VALUE GAP (FVG) DETECTION
+// ══════════════════════════════════════════════════════════════════════════════
+// Bullish FVG: gap between candle[2].high and candle[0].low (ascending price)
+// Bearish FVG: gap between candle[2].low  and candle[0].high (descending price)
+
+fvg_min = close * fvg_min_pct / 100
+
+bull_fvg = high[2] < low[0] and (low[0] - high[2]) >= fvg_min
+bear_fvg = low[2]  > high[0] and (low[2] - high[0]) >= fvg_min
+
+// Track last FVG zone (mid-point)
+var float bull_fvg_top = na
+var float bull_fvg_bot = na
+var int   bull_fvg_age = 0
+var float bear_fvg_top = na
+var float bear_fvg_bot = na
+var int   bear_fvg_age = 0
+
+if bull_fvg
+    bull_fvg_top := low[0]
+    bull_fvg_bot := high[2]
+    bull_fvg_age := 0
+else
+    bull_fvg_age += 1
+
+if bear_fvg
+    bear_fvg_top := low[2]
+    bear_fvg_bot := high[0]
+    bear_fvg_age := 0
+else
+    bear_fvg_age += 1
+
+// FVG is "fresh" if within expiry window
+bull_fvg_active = not na(bull_fvg_bot) and bull_fvg_age <= fvg_max_bars
+bear_fvg_active = not na(bear_fvg_top) and bear_fvg_age <= fvg_max_bars
+
+// Price retesting the FVG zone
+in_bull_fvg = bull_fvg_active and low <= bull_fvg_top and close >= bull_fvg_bot
+in_bear_fvg = bear_fvg_active and high >= bear_fvg_bot and close <= bear_fvg_top
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LIQUIDITY SWEEP DETECTION
+// ══════════════════════════════════════════════════════════════════════════════
+// Bullish sweep: price wicks BELOW recent swing low then closes ABOVE it
+// Bearish sweep: price wicks ABOVE recent swing high then closes BELOW it
+
+swing_low  = ta.lowest(low,  sweep_lookback)[1]   // previous N-bar low (excluding current)
+swing_high = ta.highest(high, sweep_lookback)[1]   // previous N-bar high
+
+bull_sweep = low < (swing_low - sweep_buffer) and close > swing_low   // pierced & recovered
+bear_sweep = high > (swing_high + sweep_buffer) and close < swing_high
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ENTRY CONDITIONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// LONG: HTF+LTF bullish bias + liquidity sweep of sell-side + price in/near bull FVG + RSI ok
+long_signal = bias_bull
+             and in_session
+             and bull_sweep
+             and (in_bull_fvg or close > bull_fvg_bot)
+             and rsi_bull
+             and close > vwap_v    // price above VWAP for extra confluence
+
+// SHORT: HTF+LTF bearish bias + liquidity sweep of buy-side + price in/near bear FVG + RSI ok
+short_signal = bias_bear
+              and in_session
+              and bear_sweep
+              and (in_bear_fvg or close < bear_fvg_top)
+              and rsi_bear
+              and close < vwap_v   // price below VWAP
+
+// Prevent re-entry in same direction if already in a trade
+long_ok  = long_signal  and strategy.position_size == 0
+short_ok = short_signal and strategy.position_size == 0
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RISK MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════════
+
+long_sl  = close - sl_mult * atr
+long_tp  = close + tp_mult * atr
+short_sl = close + sl_mult * atr
+short_tp = close - tp_mult * atr
+
+long_rr  = math.round(tp_mult / sl_mult, 1)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WEBHOOK PAYLOAD BUILDER
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Rounds a float to N decimal places for clean JSON
+f(v, d) =>
+    str.tostring(math.round(v, d))
+
+build_payload(action, sl_price, tp_price) =>
+    '{'                                                     +
+    '"symbol":"'    + syminfo.ticker         + '",'         +
+    '"action":"'    + action                 + '",'         +
+    '"price":'      + f(close, 2)            + ','          +
+    '"timeframe":"' + str.tostring(timeframe.period) + '",' +
+    '"session":"'   + session_label          + '",'         +
+    '"strategy":"OpenClaw_ICT_v6",'                         +
+    '"rsi":'        + f(rsi, 2)              + ','          +
+    '"ema21":'      + f(ema21, 2)            + ','          +
+    '"ema55":'      + f(ema55, 2)            + ','          +
+    '"vwap":'       + f(vwap_v, 2)           + ','          +
+    '"atr":'        + f(atr, 4)              + ','          +
+    '"stoch_k":'    + f(stoch_k, 2)          + ','          +
+    '"prev_high":'  + f(swing_high, 2)       + ','          +
+    '"prev_low":'   + f(swing_low, 2)        + ','          +
+    '"stop_loss":'  + f(sl_price, 2)         + ','          +
+    '"take_profit":'+ f(tp_price, 2)         + ','          +
+    '"htf_bias":"'  + (htf_bull ? "bullish" : "bearish") + '",' +
+    '"fvg_sweep":true'                                      +
+    '}'
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STRATEGY ORDERS + ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+if long_ok
+    payload = build_payload("BUY", long_sl, long_tp)
+    strategy.entry("Long", strategy.long, alert_message=payload)
+    strategy.exit("Long Exit", "Long", stop=long_sl, limit=long_tp)
+
+if short_ok
+    payload = build_payload("SELL", short_sl, short_tp)
+    strategy.entry("Short", strategy.short, alert_message=payload)
+    strategy.exit("Short Exit", "Short", stop=short_sl, limit=short_tp)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// EMAs
+plot(ema21, "EMA 21", color=#3b82f6, linewidth=1)
+plot(ema55, "EMA 55", color=#f97316, linewidth=1)
+
+// VWAP
+plot(vwap_v, "VWAP", color=#a855f7, linewidth=1, style=plot.style_circles)
+
+// FVG zones
+bgcolor(bull_fvg ? color.new(color.green,  92) : na, title="Bullish FVG")
+bgcolor(bear_fvg ? color.new(color.red,    92) : na, title="Bearish FVG")
+
+// Entry shapes
+plotshape(long_ok,  "Long Signal",  shape.triangleup,   location.belowbar, color=#10b981, size=size.small)
+plotshape(short_ok, "Short Signal", shape.triangledown,  location.abovebar, color=#ef4444, size=size.small)
+
+// Sweep markers
+plotshape(bull_sweep and bias_bull, "Bull Sweep", shape.circle, location.belowbar, color=#22d3ee, size=size.tiny)
+plotshape(bear_sweep and bias_bear, "Bear Sweep", shape.circle, location.abovebar, color=#f59e0b, size=size.tiny)
+
+// SL/TP lines for active trade
+var line sl_line = na
+var line tp_line = na
+
+if strategy.position_size > 0
+    line.delete(sl_line)
+    line.delete(tp_line)
+    sl_line := line.new(bar_index - 3, long_sl,  bar_index + 10, long_sl,  color=#ef4444, width=1, style=line.style_dashed)
+    tp_line := line.new(bar_index - 3, long_tp,  bar_index + 10, long_tp,  color=#10b981, width=1, style=line.style_dashed)
+
+if strategy.position_size < 0
+    line.delete(sl_line)
+    line.delete(tp_line)
+    sl_line := line.new(bar_index - 3, short_sl, bar_index + 10, short_sl, color=#ef4444, width=1, style=line.style_dashed)
+    tp_line := line.new(bar_index - 3, short_tp, bar_index + 10, short_tp, color=#10b981, width=1, style=line.style_dashed)
+
+// Session highlight
+bgcolor(in_session ? color.new(color.blue, 97) : na, title="Active Session")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INFO TABLE
+// ══════════════════════════════════════════════════════════════════════════════
+
+var table info = table.new(position.top_right, 2, 7, bgcolor=color.new(color.black, 80),
+                            border_color=color.new(color.white, 85), border_width=1, frame_width=1)
+
+if barstate.islast
+    cell(r, l, v, c) =>
+        table.cell(info, l, r, v, text_color=c, text_size=size.small)
+
+    if barstate.islast
+        table.cell(info, 0, 0, "OpenClaw ICT v6",  text_color=color.white,  text_size=size.small, bgcolor=color.new(color.navy, 60))
+        table.cell(info, 1, 0, syminfo.ticker,      text_color=color.yellow, text_size=size.small, bgcolor=color.new(color.navy, 60))
+        table.cell(info, 0, 1, "HTF Bias",  text_color=color.gray,  text_size=size.small)
+        table.cell(info, 1, 1, htf_bull ? "BULLISH ▲" : "BEARISH ▼",
+                   text_color = htf_bull ? color.green : color.red, text_size=size.small)
+        table.cell(info, 0, 2, "Session",   text_color=color.gray,  text_size=size.small)
+        table.cell(info, 1, 2, session_label + (in_session ? " ✓" : " ✗"),
+                   text_color = in_session ? color.green : color.gray, text_size=size.small)
+        table.cell(info, 0, 3, "RSI",       text_color=color.gray,  text_size=size.small)
+        table.cell(info, 1, 3, f(rsi, 1),   text_color=color.white, text_size=size.small)
+        table.cell(info, 0, 4, "ATR",       text_color=color.gray,  text_size=size.small)
+        table.cell(info, 1, 4, f(atr, 1),   text_color=color.white, text_size=size.small)
+        table.cell(info, 0, 5, "Bull FVG",  text_color=color.gray,  text_size=size.small)
+        table.cell(info, 1, 5, bull_fvg_active ? "ACTIVE" : "—",
+                   text_color = bull_fvg_active ? color.green : color.gray, text_size=size.small)
+        table.cell(info, 0, 6, "Bear FVG",  text_color=color.gray,  text_size=size.small)
+        table.cell(info, 1, 6, bear_fvg_active ? "ACTIVE" : "—",
+                   text_color = bear_fvg_active ? color.red : color.gray, text_size=size.small)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ALERT CONDITIONS (for manual alert setup if not using strategy alerts)
+// ══════════════════════════════════════════════════════════════════════════════
+
+alertcondition(long_ok,  "OCL Long Signal",  "OpenClaw LONG — check SimWorld 📡 Live tab")
+alertcondition(short_ok, "OCL Short Signal", "OpenClaw SHORT — check SimWorld 📡 Live tab")
