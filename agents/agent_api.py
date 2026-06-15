@@ -48,6 +48,11 @@ except Exception:
 # ── In-memory sim state store (persists across requests within a deploy) ───────
 _sim_state: dict[str, Any] = {}
 
+# ── Finnhub news cache (5-minute TTL) ─────────────────────────────────────────
+import time as _time
+_news_cache: dict = {"ts": 0, "articles": []}
+_NEWS_TTL = 300
+
 # ── In-memory trade journal store ─────────────────────────────────────────────
 _journal_trades: list[dict] = []
 _journal_analysis: dict[str, Any] = {}
@@ -449,6 +454,61 @@ async def agents_chat(req: AgentChatRequest):
         "agent_emoji": persona["emoji"],
         "response": resp.content[0].text.strip(),
     }
+
+
+@app.get("/news")
+async def get_news(limit: int = 25):
+    """Fetch futures-relevant market news from Finnhub (cached 5 min)."""
+    global _news_cache
+    import urllib.request, urllib.error
+
+    api_key = os.getenv("FINNHUB_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "FINNHUB_API_KEY not configured — add it in Railway environment variables")
+
+    now = _time.time()
+    if now - _news_cache["ts"] < _NEWS_TTL and _news_cache["articles"]:
+        return {"articles": _news_cache["articles"][:limit], "cached": True, "total": len(_news_cache["articles"])}
+
+    try:
+        url = f"https://finnhub.io/api/v1/news?category=general&token={api_key}"
+        req = urllib.request.Request(url, headers={"User-Agent": "OpenClaw/3.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw: list = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        raise HTTPException(502, f"Finnhub HTTP {e.code}")
+    except Exception as e:
+        raise HTTPException(502, f"News fetch failed: {e}")
+
+    FUTURES_KW = {
+        'nasdaq', 's&p', 'sp500', 'futures', 'crude oil', 'wti', 'gold', 'treasury',
+        'bond', 'yield', 'russell', 'fed ', 'federal reserve', 'inflation', 'cpi',
+        'fomc', 'interest rate', 'equity', 'stock', 'dow', 'vix', 'volatility',
+        'nq ', ' es ', 'mnq', 'mes', 'cl ', 'gc ', 'zn ', 'rty',
+    }
+
+    def _norm(item: dict) -> dict:
+        return {
+            "id":       item.get("id", 0),
+            "headline": item.get("headline", ""),
+            "summary":  (item.get("summary") or "")[:220],
+            "source":   item.get("source", ""),
+            "url":      item.get("url", ""),
+            "image":    item.get("image", ""),
+            "category": item.get("category", "general"),
+            "datetime": item.get("datetime", 0),
+            "related":  item.get("related", ""),
+        }
+
+    filtered = [
+        _norm(it) for it in raw
+        if any(kw in (it.get("headline", "") + " " + (it.get("summary") or "")).lower() for kw in FUTURES_KW)
+    ]
+    # fallback: use first 20 unfiltered if filter is too strict
+    articles = filtered if len(filtered) >= 5 else [_norm(it) for it in raw[:20]]
+
+    _news_cache = {"ts": now, "articles": articles}
+    return {"articles": articles[:limit], "cached": False, "total": len(articles)}
 
 
 @app.get("/health")

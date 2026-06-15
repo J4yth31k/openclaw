@@ -3,6 +3,7 @@ import { useSimStore } from '../store'
 import type { Agent, EtsyProduct, TradeRecord } from '../types'
 import AgentChatModal from './AgentChatModal'
 import LiveTradesPanel from './LiveTradesPanel'
+import NewsPanel from './NewsPanel'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED PRIMITIVES
@@ -239,7 +240,7 @@ function Pill({ label, color }: { label: string; color: string }) {
 // TRADING OPERATIONS PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TRADING_TABS = ['Overview', '📡 Live', 'Signals', 'Positions', 'Journal', 'Analytics', 'Agents']
+const TRADING_TABS = ['Overview', '📡 Live', '📰 News', 'Signals', 'Positions', 'Journal', 'Analytics', 'Agents']
 
 function SignalCard({ trade, accent }: { trade: TradeRecord; accent: string }) {
   const isLong = trade.direction === 'long'
@@ -356,6 +357,10 @@ function TradingOpsPanel({ agents, accent }: { agents: Agent[]; accent: string }
 
         {tab === '📡 Live' && (
           <LiveTradesPanel accent={accent} />
+        )}
+
+        {tab === '📰 News' && (
+          <NewsPanel accent={accent} />
         )}
 
         {tab === 'Signals' && <>
