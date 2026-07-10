@@ -33,11 +33,12 @@ try:
         build_auth_url, exchange_code, get_shop_stats,
         create_listing, upload_digital_file, activate_listing,
         get_listings, get_recent_transactions, is_authenticated,
-        generate_product as _etsy_gen_product,
     )
     _ETSY_AVAILABLE = True
-except Exception:
+    _ETSY_IMPORT_ERROR = ""
+except Exception as _e:
     _ETSY_AVAILABLE = False
+    _ETSY_IMPORT_ERROR = str(_e)
 
 try:
     from pdf_generator import generate_product, generate_all, PRODUCT_MAP
@@ -891,7 +892,7 @@ async def etsy_callback(code: str, state: str):
 async def etsy_status():
     """Check if Etsy OAuth token is present."""
     if not _ETSY_AVAILABLE:
-        return {"authenticated": False, "reason": "etsy_api module not loaded"}
+        return {"authenticated": False, "reason": f"etsy_api module not loaded: {_ETSY_IMPORT_ERROR}"}
     return {
         "authenticated": is_authenticated(),
         "api_key_set":   bool(os.getenv("ETSY_API_KEY")),

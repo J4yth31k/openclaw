@@ -1,6 +1,165 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSimStore } from '../store'
+import { useSimStore, HIRE_COST } from '../store'
 import type { Agent, Building, Room } from '../types'
+
+// ── Business types for player buildings ───────────────────────────────────────
+
+const BUSINESS_TYPES = ['Shop', 'Studio', 'Trading', 'Services', 'Tech', 'Restaurant', 'Agency', 'Other']
+
+const AGENT_NAMES = [
+  'Alex', 'Bailey', 'Casey', 'Devon', 'Ellis', 'Frankie', 'Gray', 'Harper',
+  'Indie', 'Jules', 'Kai', 'Lane', 'Marlo', 'Nico', 'Oakley', 'Parker',
+  'Quincy', 'Rio', 'Sage', 'Tatum',
+]
+
+// ── Manage section (custom buildings: assign business, hire agents) ──────────
+
+// ── Decor palettes (walls & floors for player buildings) ─────────────────────
+
+const WALL_SWATCHES = ['#e8c9a0', '#a0c4e8', '#a9dfbf', '#f0b8c8', '#9aa8ba', '#c3b1e1', '#e8dcc4', '#8fb8a8']
+const FLOOR_SWATCHES = ['#f5e6c8', '#c4ddf5', '#d4f3e2', '#fadce6', '#c7d2e0', '#e2d7f2', '#d9c9a8', '#b8d8c8']
+
+export function ManageSection({ building, accent }: { building: Building; accent: string }) {
+  const assignBusiness = useSimStore(s => s.assignBusiness)
+  const hireAgent      = useSimStore(s => s.hireAgent)
+  const totalCash      = useSimStore(s => s.totalCash)
+  const agents         = useSimStore(s => s.agents)
+  const setBuildingStyle = useSimStore(s => s.setBuildingStyle)
+
+  const [name, setName] = useState(building.vacant ? '' : building.name)
+  const [bizType, setBizType] = useState(building.businessType ?? 'Shop')
+
+  const staff = agents.filter(a => a.workBuilding === building.id)
+  const canHire = !building.vacant && totalCash >= HIRE_COST && staff.length < building.rooms.length * 2
+
+  const doHire = () => {
+    const used = new Set(agents.map(a => a.name))
+    const fresh = AGENT_NAMES.filter(n => !used.has(n))
+    const agentName = fresh.length > 0
+      ? fresh[Math.floor(Math.random() * fresh.length)]
+      : `Agent ${agents.length + 1}`
+    hireAgent(building.id, agentName)
+  }
+
+  return (
+    <div style={{
+      background: building.vacant ? 'rgba(245,166,35,0.06)' : 'rgba(255,255,255,0.02)',
+      border: building.vacant ? '1px dashed rgba(245,166,35,0.45)' : '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 12, padding: 14,
+      display: 'flex', flexDirection: 'column', gap: 10,
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: building.vacant ? '#f5a623' : accent, textTransform: 'uppercase' }}>
+        {building.vacant ? '🏗️ Set Up Your Business' : '⚙️ Manage Business'}
+      </div>
+
+      {building.vacant && (
+        <div style={{ fontSize: 10, color: '#8892a4', lineHeight: 1.5 }}>
+          This building is vacant. Give it a name and pick a business type — then you can hire agents to work here.
+        </div>
+      )}
+
+      {/* Name + type */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Business name…"
+          maxLength={26}
+          style={{
+            flex: 2, minWidth: 140, background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
+            color: '#e0e6f0', fontSize: 11, padding: '7px 10px', outline: 'none',
+          }}
+        />
+        <select
+          value={bizType}
+          onChange={e => setBizType(e.target.value)}
+          style={{
+            flex: 1, minWidth: 90, background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
+            color: '#e0e6f0', fontSize: 11, padding: '7px 8px', outline: 'none',
+          }}
+        >
+          {BUSINESS_TYPES.map(t => <option key={t} value={t} style={{ background: '#0d1117' }}>{t}</option>)}
+        </select>
+        <button
+          onClick={() => name.trim() && assignBusiness(building.id, name.trim(), bizType)}
+          disabled={!name.trim()}
+          style={{
+            background: name.trim() ? 'rgba(72,220,140,0.15)' : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${name.trim() ? 'rgba(72,220,140,0.5)' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: 8, color: name.trim() ? '#48dc8c' : '#4a5568',
+            fontSize: 10, fontWeight: 700, padding: '7px 12px',
+            cursor: name.trim() ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap',
+          }}
+        >
+          {building.vacant ? '✓ Open Business' : '✓ Update'}
+        </button>
+      </div>
+
+      {/* Decor: wall + floor colors */}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.5, color: '#6a7890', marginBottom: 4 }}>
+            🧱 WALLS
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {WALL_SWATCHES.map(c => (
+              <button
+                key={c}
+                onClick={() => setBuildingStyle(building.id, { color: c })}
+                style={{
+                  width: 18, height: 18, borderRadius: 5, cursor: 'pointer', background: c,
+                  border: building.color === c ? '2px solid #00d4ff' : '2px solid rgba(255,255,255,0.12)',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.5, color: '#6a7890', marginBottom: 4 }}>
+            🪵 FLOOR
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {FLOOR_SWATCHES.map(c => (
+              <button
+                key={c}
+                onClick={() => setBuildingStyle(building.id, { accentColor: c })}
+                style={{
+                  width: 18, height: 18, borderRadius: 5, cursor: 'pointer', background: c,
+                  border: building.accentColor === c ? '2px solid #00d4ff' : '2px solid rgba(255,255,255,0.12)',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Hiring */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button
+          onClick={doHire}
+          disabled={!canHire}
+          title={building.vacant ? 'Assign a business first' : undefined}
+          style={{
+            background: canHire ? `${accent}20` : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${canHire ? `${accent}60` : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: 8, color: canHire ? accent : '#4a5568',
+            fontSize: 10, fontWeight: 700, padding: '7px 12px',
+            cursor: canHire ? 'pointer' : 'not-allowed',
+          }}
+        >
+          👋 Hire Agent (${HIRE_COST.toLocaleString()})
+        </button>
+        <span style={{ fontSize: 9, color: '#6a7890' }}>
+          {building.vacant
+            ? 'Hiring unlocks once a business is assigned'
+            : `${staff.length}/${building.rooms.length * 2} staff · agents live & work here`}
+        </span>
+      </div>
+    </div>
+  )
+}
 
 // ── Team chat messages (generated from agent activity) ─────────────────────────
 
@@ -18,36 +177,30 @@ const TEAM_MSGS: Record<string, string[][]> = {
     ['Dani', '✏️', 'Goal Workbook is done! Vision board page looks great with the grid layout.'],
   ],
   trading_office: [
-    ['Iron Man', '🦾', 'EMAs aligned bullish on NQ 1H & 4H. EMA 8/21/55 stacked — momentum confirmed.'],
-    ['Scarlet Witch', '🔮', 'Fear & Greed at 72 — greed territory. Retail sentiment skewed long. Contrarian watch.'],
-    ['Vision', '👁️', 'Order flow imbalance detected at 21,400 NQ. Large bid wall forming. VWAP computed.'],
-    ['Capt. America', '🛡️', 'Fed minutes: hawkish lean. CPI beats forecast. USD strength likely through session.'],
-    ['Thor', '⚡', 'Bifrost open — DXY diverging from gold. Cross-asset correlation flipped bearish on yields.'],
-    ['Black Widow', '🕷️', 'Trade idea confirmed: NQ long at FVG retest. Confluence 5/6. Entry zone mapped.'],
-    ['Trae', '📈', 'EUR/USD showing a bullish BOS at the 1H FVG. London session open in 40 min.'],
-    ['Dr. Strange', '🔯', 'Risk parameters clear. Kelly criterion OK. Position size 0.02 lots — drawdown within limits.'],
-    ['Remi', '🛡️', 'Daily drawdown at 0.3%. SL is 1.2× ATR below the FVG. RR looks like 2.8:1.'],
-    ['Spider-Man', '🕸️', 'Breaking: FOMC member speech in 20 min. High-impact event — scalp size reduced.'],
-    ['Hawkeye', '🏹', 'TradingView webhook fired. Pine Script alert confirmed. Signal forwarded to Discord.'],
-    ['Hulk', '💪', 'Backtesting complete — SMC pullback strategy, 89% win rate over 200 trades. SMASH!'],
-    ['Nick Fury', '🎯', 'All analysts report. Assemble — London open in 5 minutes. Protect the capital first.'],
-    ['Black Widow', '🕷️', 'Setup confirmed. Confluence: EMA + FVG + session high sweep. Entry in 3 candles.'],
-    ['Trae', '📈', 'Took profit on NQ at the 1H high. +$180 clean. Session closed green.'],
-    ['Dr. Strange', '🔯', 'Post-trade review: 2 wins, 1 loss. Win rate 66%. All within dimensional risk limits.'],
+    ['Vera', '📊', 'Profile update: POC sitting mid-range — price keeps rotating back to it.'],
+    ['Marlow', '💧', 'Equal highs stacked above the session range — buy-side pool marked on the board.'],
+    ['Nova', '📰', 'Calendar check: CPI tomorrow morning. Expect thinner books late today.'],
+    ['Sana', '🕐', 'Opening range is set. Now we watch which extreme gets tested first.'],
+    ['Cole', '🧭', 'Hourly structure intact — higher lows holding since yesterday\'s close.'],
+    ['Trae', '📈', 'Levels look clean. I\'ll mark the confluence zones on the main chart.'],
+    ['Vera', '📊', 'Thin LVN pocket just below — if we enter it, price should travel fast.'],
+    ['Marlow', '💧', 'Overnight low swept in the first hour — that liquidity is spent.'],
+    ['Remi', '🛡️', 'Reminder from the books: expenses logged, balances reconciled.'],
+    ['Nova', '📰', 'Fed speakers this afternoon — headline risk window from 1pm.'],
+    ['Sana', '🕐', 'Lunch lull — ranges compress, levels get noisy. Patience hours.'],
+    ['Cole', '🧭', 'Expansion candle broke the range — watching for acceptance, not chasing.'],
   ],
   avengers_hq: [
-    ['Iron Man', '🦾', 'EMAs aligned bullish on NQ. 1H and 4H structure both pointing up.'],
-    ['Iron Man', '🦾', 'MACD cross confirmed on the 15M. Momentum building into the session.'],
-    ['Dr. Strange', '🔮', 'Dimensional risk is elevated — NFP in 2 days. Reducing size by 25%.'],
-    ['Black Widow', '🕷️', 'Intel from dark pool: heavy call buying on SPY above 525. Bullish flow.'],
-    ['Thor', '⚡', 'Bifrost open — DXY diverging from gold. Watch the correlation flip.'],
-    ['Vision', '👁️', 'Pattern recognition complete: 5 confluence signals on EUR/USD long.'],
-    ['Nick Fury', '🎯', 'All agents report. Assemble for the London session. Full analysis in 10.'],
-    ['Hulk', '💪', 'Backtesting complete. 89% win rate on the SMC pullback strategy. SMASH!'],
-    ['Hawkeye', '🏹', 'Webhook fired. TradingView alert confirmed. Signal forwarded to Discord.'],
-    ['Spider-Man', '🕸️', 'Breaking: Fed minutes released. Hawkish tone — USD strength incoming.'],
-    ['Iron Man', '🦾', 'RSI approaching OB on the 4H. Might see a pullback before continuation.'],
-    ['Nick Fury', '🎯', 'Colony morale high. Keep the discipline. Protect the capital first.'],
+    ['Vera', '📊', 'Building the composite profile for the week — value is clearly migrating higher.'],
+    ['Marlow', '💧', 'Mapped every untested pool from the last three sessions. Board is current.'],
+    ['Nova', '📰', 'Overnight recap drafted: yields soft, risk tone constructive, calendar quiet.'],
+    ['Sana', '🕐', 'Session stats updated — the first 90 minutes keep setting the day\'s range.'],
+    ['Cole', '🧭', 'Weekly structure review done. Trend context unchanged until a daily low breaks.'],
+    ['Vera', '📊', 'HVN shelf overhead did its job again today — responsive sellers on first touch.'],
+    ['Marlow', '💧', 'Round-number confluence above lines up with equal highs — strong magnet.'],
+    ['Nova', '📰', 'No surprises in the data drop — market barely blinked.'],
+    ['Sana', '🕐', 'Closing hour: untested levels above are the draw into the bell.'],
+    ['Cole', '🧭', 'Reminder: we read the market, we don\'t call trades. Levels are on the board.'],
   ],
   home1: [
     ['Reya', '🔍', 'Getting ready for the day — reviewed overnight Etsy stats over coffee.'],
@@ -56,13 +209,13 @@ const TEAM_MSGS: Record<string, string[][]> = {
     ['Uly', '📦', 'Off-hours but monitoring listing views on mobile.'],
   ],
   home2: [
-    ['Trae', '📈', 'Markets are closed. Reviewing the session trades. Journaling wins and losses.'],
-    ['Remi', '🛡️', 'Running end-of-week risk report. Drawdown well within limits.'],
+    ['Trae', '📈', 'Markets are closed. Reviewing today\'s levels — which ones held, which broke.'],
+    ['Remi', '🛡️', 'Running the end-of-week books. Everything reconciled.'],
   ],
   hq_quarters: [
-    ['Iron Man', '🦾', 'Systems on standby. Running diagnostics before the next session.'],
-    ['Nick Fury', '🎯', 'R&R authorized. Avengers, rest up — markets open in 6 hours.'],
-    ['Thor', '⚡', 'Bifrost is idle. Charging up for the next London session.'],
+    ['Vera', '📊', 'Charts are off. Composite profile rebuilds overnight — fresh board tomorrow.'],
+    ['Nova', '📰', 'Skimming tomorrow\'s calendar over tea. Early prints worth waking up for.'],
+    ['Sana', '🕐', 'Session recap filed. Rest now — the open sets the tone tomorrow.'],
   ],
 }
 
@@ -390,6 +543,9 @@ export default function BuildingModal() {
 
           {/* Scrollable body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Manage section (player-built buildings) */}
+            {building.custom && <ManageSection key={building.id} building={building} accent={accent} />}
+
             {/* Rooms grid */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {building.rooms.map(room => (
@@ -402,8 +558,10 @@ export default function BuildingModal() {
               ))}
             </div>
 
-            {/* Team chat */}
-            <TeamChat buildingId={selectedBuildingId} accent={accent} />
+            {/* Team chat (buildings with a scripted feed) */}
+            {(TEAM_MSGS[selectedBuildingId]?.length ?? 0) > 0 && (
+              <TeamChat buildingId={selectedBuildingId} accent={accent} />
+            )}
           </div>
         </div>
       </div>

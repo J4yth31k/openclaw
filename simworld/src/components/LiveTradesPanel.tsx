@@ -41,9 +41,9 @@ function parseAnalysis(raw: string): Array<{ label: string; color: string; text:
       sections.push({ label: 'ICT Pipeline', color: pass ? '#10b981' : '#ef4444', text: part })
     } else if (part.startsWith('[Risk')) {
       const color = part.includes('APPROVED') ? '#10b981' : part.includes('REJECTED') ? '#ef4444' : '#f59e0b'
-      sections.push({ label: 'Dr. Strange — Risk', color, text: part })
+      sections.push({ label: 'Marlow — Risk Read', color, text: part })
     } else if (part.startsWith('[Bias]')) {
-      sections.push({ label: 'Nick Fury — Bias', color: '#7c3aed', text: part.replace('[Bias] ', '') })
+      sections.push({ label: 'Cole — Bias Context', color: '#7c3aed', text: part.replace('[Bias] ', '') })
     } else if (part.startsWith('[Mkt]')) {
       sections.push({ label: 'Market Context', color: '#3b82f6', text: part.replace('[Mkt] ', '') })
     } else if (part.includes('SF')) {
@@ -240,7 +240,7 @@ function SetupCard({ accent }: { accent: string }) {
       {/* Step 4 */}
       <Step n={4} title="Fire the alert → trade appears here instantly" accent={accent}>
         <div style={{ fontSize: 10, color: '#7a9ab8' }}>
-          Your full agent team (ICT pipeline, Dr. Strange risk, Nick Fury bias) analyzes it within seconds.
+          Your analysis desk (volume profile, liquidity map, bias context) reviews it within seconds.
           Expand any trade card to see the full breakdown.
         </div>
       </Step>
@@ -253,7 +253,7 @@ function SetupCard({ accent }: { accent: string }) {
       }}>
         <strong>Logging trade results:</strong> Create a second alert for your TP/SL level.
         Set the message to the same JSON but add <code style={{ fontSize: 9 }}>"action": "CLOSE"</code>.
-        Or message Hawkeye in the agent chat — he can walk you through automating it.
+        Or message Nova in the agent chat — she can walk you through automating it.
       </div>
     </div>
   )

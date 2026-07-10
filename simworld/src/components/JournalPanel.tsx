@@ -250,7 +250,7 @@ function InputBox({ onSubmitText, onPaste, loading }: InputBoxProps) {
         }}
       >
         {loading
-          ? <><span>⚙️</span> Hulk is crunching…</>
+          ? <><span>⚙️</span> Desk is crunching…</>
           : <><span>💪</span> {hasText ? 'ANALYZE NOW' : 'Paste trades above'}</>
         }
       </button>
@@ -280,28 +280,28 @@ function buildAgentReview(analysis: Analysis): AgentReviewMessage[] {
 
   return [
     {
-      emoji: '🦾', name: 'Iron Man', role: 'Tech Analyst', color: '#ef4444',
-      content: `Technical review of your trade data complete.\n\nWin rate of ${(wr * 100).toFixed(1)}% ${wr >= 0.6 ? 'is solid — above the 60% threshold I consider minimum for a positive expectancy system.' : wr >= 0.45 ? 'is acceptable but leaves room for improvement. Focus on setup quality over quantity.' : 'needs work. You are likely entering on weaker setups or getting stopped out before the move.'}`,
+      emoji: '🧭', name: 'Cole', role: 'Structure Analyst', color: '#4a6cf7',
+      content: `Structure review of your trade data complete.\n\nWin rate of ${(wr * 100).toFixed(1)}% ${wr >= 0.6 ? 'is solid — comfortably above the threshold most positive-expectancy systems need.' : wr >= 0.45 ? 'is workable but leaves room. Setup quality over quantity is the usual fix.' : 'needs attention. Entries may be early or stops sitting inside the noise.'}`,
       sentiment: wr >= 0.5 ? 'positive' : 'negative',
-      tags: ['#TechnicalReview', '#WinRate'],
+      tags: ['#StructureReview', '#WinRate'],
     },
     {
-      emoji: '🔯', name: 'Dr. Strange', role: 'Risk Manager', color: '#14b8a6',
-      content: `Risk assessment:\n\nAverage R:R achieved: ${rr.toFixed(2)}. ${rr >= 1.5 ? 'This is excellent. You are letting winners run and cutting losses appropriately.' : rr >= 1.0 ? 'Positive R:R — you are extracting value from the market. Can you push for 2:1?' : 'Your R:R needs improvement. Consider moving to break-even at 1:1 and targeting 1:2 minimum.'}\n\nTotal PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}. ${pnl >= 0 ? 'Profitable. Keep the discipline.' : 'In drawdown. Reduce position size until you recover to breakeven.'}`,
+      emoji: '💧', name: 'Marlow', role: 'Liquidity Analyst', color: '#06b6d4',
+      content: `Risk read:\n\nAverage R:R achieved: ${rr.toFixed(2)}. ${rr >= 1.5 ? 'Strong — winners are running and losses are contained.' : rr >= 1.0 ? 'Positive — value is being extracted. Worth testing whether 2:1 is reachable.' : 'This is the weak spot. Break-even at 1:1 and a 1:2 minimum target usually helps.'}\n\nTotal PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}. ${pnl >= 0 ? 'In profit — protect the process.' : 'In drawdown — smaller size until back to breakeven is the standard play.'}`,
       sentiment: rr >= 1.0 && pnl >= 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral',
-      tags: ['#RiskManagement', '#RR'],
+      tags: ['#Risk', '#RR'],
     },
     {
-      emoji: '💪', name: 'Hulk', role: 'Backtest Engine', color: '#84cc16',
-      content: `Hulk smashed ${analysis.total_trades} trades in the data.\n\n${analysis.best_session ? `Best session: ${analysis.best_session} with ${((analysis.by_session[analysis.best_session]?.win_rate ?? 0) * 100).toFixed(1)}% win rate — trade this window more.` : 'Sample size too small for session conclusions.'}\n\n${analysis.best_instrument ? `Best pair: ${analysis.best_instrument} — your edge is clearer here.` : ''}\n\n${analysis.bias_analysis.aligned_trades > 0 ? `HTF Bias: Trading WITH bias wins at ${(analysis.bias_analysis.aligned_win_rate * 100).toFixed(1)}% vs ${(analysis.bias_analysis.misaligned_win_rate * 100).toFixed(1)}% against. Respect the higher timeframe.` : ''}`,
+      emoji: '📊', name: 'Vera', role: 'Data Analyst', color: '#a855f7',
+      content: `Crunched ${analysis.total_trades} trades in the data.\n\n${analysis.best_session ? `Best session: ${analysis.best_session} with ${((analysis.by_session[analysis.best_session]?.win_rate ?? 0) * 100).toFixed(1)}% win rate — that window is where your edge lives.` : 'Sample size too small for session conclusions.'}\n\n${analysis.best_instrument ? `Best instrument: ${analysis.best_instrument} — the edge is clearer here.` : ''}\n\n${analysis.bias_analysis.aligned_trades > 0 ? `HTF bias: trading WITH bias wins at ${(analysis.bias_analysis.aligned_win_rate * 100).toFixed(1)}% vs ${(analysis.bias_analysis.misaligned_win_rate * 100).toFixed(1)}% against. The higher timeframe is paying you.` : ''}`,
       sentiment: 'neutral',
-      tags: ['#Backtesting', '#Patterns'],
+      tags: ['#Data', '#Patterns'],
     },
     {
-      emoji: '🎯', name: 'Nick Fury', role: 'Director', color: '#7c3aed',
-      content: `Final assessment:\n\n${analysis.improvement_tips.slice(0, 2).join('\n\n')}\n\n${pnl >= 0 && wr >= 0.5 ? 'Your system has positive expectancy. Focus on execution consistency.' : 'You have an edge to refine. The data is pointing at specific improvements — implement them.'}`,
+      emoji: '📰', name: 'Nova', role: 'Desk Lead', color: '#f97316',
+      content: `Desk summary:\n\n${analysis.improvement_tips.slice(0, 2).join('\n\n')}\n\n${pnl >= 0 && wr >= 0.5 ? 'The system shows positive expectancy — consistency of execution is the multiplier now.' : 'There is an edge here to refine. The data points at specific fixes — worth implementing before adding size.'}`,
       sentiment: pnl >= 0 && wr >= 0.5 ? 'positive' : 'neutral',
-      tags: ['#Director', '#Strategy'],
+      tags: ['#DeskReview', '#Process'],
     },
   ]
 }
@@ -429,7 +429,7 @@ function BacktestPanel({ result }: { result: BacktestResult }) {
         <span style={{ fontSize: 16 }}>💪</span>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: '#84cc16' }}>
-            Hulk Backtest — {result.instrument}
+            Desk Backtest — {result.instrument}
           </div>
           <div style={{ fontSize: 7, color: '#4a5870' }}>
             {result.strategy} · {result.period} · {result.total_trades} signals · {result.ticker}
@@ -483,7 +483,7 @@ function BacktestPanel({ result }: { result: BacktestResult }) {
           </div>
         </div>
 
-        {/* Coaching messages from Hulk */}
+        {/* Coaching messages from the desk */}
         {result.coaching.map((msg, i) => (
           <div key={i} style={{
             marginBottom: 6, padding: '6px 8px',
@@ -491,7 +491,7 @@ function BacktestPanel({ result }: { result: BacktestResult }) {
             borderLeft: '2px solid #84cc16',
             fontSize: 8, color: '#9faec0', lineHeight: 1.55,
           }}>
-            <span style={{ color: '#84cc16', fontWeight: 700 }}>💪 Hulk: </span>
+            <span style={{ color: '#84cc16', fontWeight: 700 }}>📊 Vera: </span>
             {msg}
           </div>
         ))}
@@ -514,11 +514,11 @@ function BacktestPanel({ result }: { result: BacktestResult }) {
 
 export default function JournalPanel() {
   const addEventLogEntry = useSimStore(s => s.addEventLogEntry)
-  const setHulkTask      = useSimStore(s => s.setHulkTask)
+  const setDeskTask      = useSimStore(s => s.setDeskTask)
 
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [loading, setLoading] = useState(false)
-  const [loadingMsg, setLoadingMsg] = useState('Hulk crunching numbers…')
+  const [loadingMsg, setLoadingMsg] = useState('Desk crunching numbers…')
   const [error, setError] = useState<string | null>(null)
   const [section, setSection] = useState<'overview' | 'breakdown' | 'tips' | 'trades'>('overview')
 
@@ -528,7 +528,7 @@ export default function JournalPanel() {
   const [btError, setBtError]     = useState<string | null>(null)
   // Restore preview from localStorage so it survives page refresh
   const [preview, setPreview] = useState<string | null>(() => {
-    try { return localStorage.getItem('hulk_preview') } catch { return null }
+    try { return localStorage.getItem('journal_preview') } catch { return null }
   })
 
   // Stable ref so global paste listener always sees latest upload fns
@@ -584,7 +584,7 @@ export default function JournalPanel() {
   async function handleFile(file: File) {
     setError(null)
     setPreview(null)
-    try { localStorage.removeItem('hulk_preview') } catch {}
+    try { localStorage.removeItem('journal_preview') } catch {}
     if (IMAGE_TYPES.includes(file.type)) {
       await uploadScreenshot(file)
     } else {
@@ -612,8 +612,8 @@ export default function JournalPanel() {
       setPreview(dataUrl)
       try {
         // Only persist to localStorage if small enough (<2 MB base64)
-        if (dataUrl.length < 2_000_000) localStorage.setItem('hulk_preview', dataUrl)
-        else localStorage.removeItem('hulk_preview')
+        if (dataUrl.length < 2_000_000) localStorage.setItem('journal_preview', dataUrl)
+        else localStorage.removeItem('journal_preview')
       } catch { /* storage quota exceeded — ignore */ }
 
       const b64 = dataUrl.split(',')[1]
@@ -640,7 +640,7 @@ export default function JournalPanel() {
 
   async function uploadText(text: string, isJSON: boolean) {
     setLoading(true)
-    setLoadingMsg('💪 Hulk crunching numbers…')
+    setLoadingMsg('📊 Desk crunching numbers…')
     try {
       let endpoint: string
       let body: string
@@ -677,7 +677,7 @@ export default function JournalPanel() {
   uploadScreenshotRef.current = uploadScreenshot
   uploadTextRef.current = uploadText
 
-  // ── Run Hulk backtest from journal analysis ──────────────────────────────
+  // ── Run desk backtest from journal analysis ──────────────────────────────
   async function runBacktest() {
     if (!analysis || !analysis.best_instrument) return
     setBtLoading(true)
@@ -685,8 +685,8 @@ export default function JournalPanel() {
     setBtResult(null)
 
     const instrument = analysis.best_instrument
-    addEventLogEntry(`💪 Hulk is smashing 2 years of ${instrument} history — backtest starting!`, 'info')
-    setHulkTask(`Backtesting ${instrument} from journal…`)
+    addEventLogEntry(`💪 Desk is crunching 2 years of ${instrument} history — backtest starting!`, 'info')
+    setDeskTask(`Backtesting ${instrument} from journal…`)
 
     try {
       const resp = await fetch(`${BASE}/journal/backtest`, {
@@ -705,7 +705,7 @@ export default function JournalPanel() {
       if (data.status !== 'success') throw new Error(data.error ?? 'Backtest failed')
       setBtResult(data)
       addEventLogEntry(
-        `💪 Hulk SMASHED ${data.total_trades} ${instrument} signals! `
+        `💪 Desk crunched ${data.total_trades} ${instrument} signals! `
         + `Backtest WR: ${Math.round(data.win_rate * 100)}% · `
         + `Return: ${data.total_return_pct >= 0 ? '+' : ''}${data.total_return_pct}%`,
         'success',
@@ -713,10 +713,10 @@ export default function JournalPanel() {
     } catch (e: any) {
       const msg = e.message ?? 'Backtest request failed'
       setBtError(msg)
-      addEventLogEntry(`💪 Hulk backtest error: ${msg}`, 'warning')
+      addEventLogEntry(`💪 Backtest error: ${msg}`, 'warning')
     } finally {
       setBtLoading(false)
-      setHulkTask(null)
+      setDeskTask(null)
     }
   }
 
@@ -742,8 +742,8 @@ export default function JournalPanel() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span style={{ fontSize: 24 }}>💪</span>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: '#e0e6f0' }}>Hulk Journal</div>
-          <div style={{ fontSize: 10, color: '#4a5870' }}>Bruce SMASHES your trades for patterns</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#e0e6f0' }}>Trade Journal</div>
+          <div style={{ fontSize: 10, color: '#4a5870' }}>The desk crunches your trades for patterns</div>
         </div>
         {analysis && (
           <button
@@ -786,7 +786,7 @@ export default function JournalPanel() {
         }}>
           <span style={{ fontSize: 28 }}>💪</span>
           <div style={{ fontWeight: 700 }}>{loadingMsg}</div>
-          <div style={{ fontSize: 9, color: '#4a5870' }}>Hulk is crunching your data…</div>
+          <div style={{ fontSize: 9, color: '#4a5870' }}>The desk is crunching your data…</div>
         </div>
       )}
 
@@ -813,7 +813,7 @@ export default function JournalPanel() {
           {/* Agent review */}
           <AgentReviewPanel analysis={analysis} />
 
-          {/* ── Hulk Backtest button ──────────────────────────────────── */}
+          {/* ── Desk Backtest button ──────────────────────────────────── */}
           {analysis.best_instrument && !btResult && (
             <div style={{ marginBottom: 10 }}>
               <button

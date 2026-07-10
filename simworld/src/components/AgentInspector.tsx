@@ -2,6 +2,12 @@ import { useSimStore } from '../store'
 import AgentChatModal from './AgentChatModal'
 
 const ROLE_LABELS: Record<string, string> = {
+  worker:             'Employee',
+  news_analyst:       'News & Macro',
+  volume_analyst:     'Volume Profile',
+  liquidity_analyst:  'Liquidity Mapping',
+  session_analyst:    'Session Timing',
+  structure_analyst:  'Market Structure',
   research_agent:     'Research Agent',
   design_agent:       'Design Agent',
   qc_agent:           'QC Agent',
@@ -46,6 +52,46 @@ function Bar({ value, max = 100, color }: { value: number; max?: number; color: 
   return (
     <div style={{ background: '#1a1c28', borderRadius: 3, height: 6, overflow: 'hidden', marginTop: 2 }}>
       <div style={{ width: `${(value / max) * 100}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
+    </div>
+  )
+}
+
+function FriendsList({ agentId }: { agentId: string }) {
+  const relationships = useSimStore(s => s.relationships)
+  const agents = useSimStore(s => s.agents)
+
+  const friends = Object.entries(relationships)
+    .filter(([key]) => key.split('|').includes(agentId))
+    .map(([key, value]) => {
+      const otherId = key.split('|').find(id => id !== agentId)!
+      return { other: agents.find(a => a.id === otherId), value }
+    })
+    .filter(f => f.other)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6)
+
+  if (friends.length === 0) return null
+
+  const tier = (v: number) => v >= 60 ? '💚 Close friend' : v >= 30 ? '🙂 Friend' : '👋 Acquaintance'
+
+  return (
+    <div style={{
+      marginBottom: 8, padding: '7px 8px', borderRadius: 6,
+      background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)',
+    }}>
+      <div style={{ fontSize: 9, color: '#9aa0b0', fontWeight: 700, letterSpacing: 0.5, marginBottom: 5 }}>
+        RELATIONSHIPS
+      </div>
+      {friends.map(({ other, value }) => (
+        <div key={other!.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: other!.color, flexShrink: 0 }} />
+          <span style={{ fontSize: 10, color: '#c8ccd8', flex: 1 }}>{other!.name}</span>
+          <span style={{ fontSize: 8, color: '#6a7080' }}>{tier(value)}</span>
+          <div style={{ width: 40 }}>
+            <Bar value={value} color="#3b82f6" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -114,7 +160,7 @@ export default function AgentInspector() {
                 <div style={{ fontWeight: 700, color: agent.color, fontSize: 13 }}>{agent.name}</div>
                 <div style={{ color: '#6a7080', fontSize: 10 }}>{ROLE_LABELS[agent.role] ?? agent.role}</div>
                 {agent.isAvenger && (
-                  <div style={{ fontSize: 8, color: '#7c3aed', fontWeight: 600, marginTop: 1 }}>AVENGERS HQ</div>
+                  <div style={{ fontSize: 8, color: '#7c3aed', fontWeight: 600, marginTop: 1 }}>ANALYSIS HQ</div>
                 )}
               </div>
             </div>
@@ -152,6 +198,53 @@ export default function AgentInspector() {
               <Bar value={agent.stress} color="#e74c3c" />
             </div>
 
+            {/* Life needs */}
+            {agent.lifeNeeds && (
+              <div style={{
+                marginBottom: 8, padding: '7px 8px', borderRadius: 6,
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                <div style={{ fontSize: 9, color: '#9aa0b0', fontWeight: 700, letterSpacing: 0.5, marginBottom: 5 }}>
+                  NEEDS
+                </div>
+                {([
+                  ['🍕 Hunger',  agent.lifeNeeds.hunger,  '#f59e0b'],
+                  ['🎉 Fun',     agent.lifeNeeds.fun,     '#a855f7'],
+                  ['💬 Social',  agent.lifeNeeds.social,  '#3b82f6'],
+                  ['🚿 Hygiene', agent.lifeNeeds.hygiene, '#06b6d4'],
+                ] as Array<[string, number, string]>).map(([label, val, color]) => (
+                  <div key={label} style={{ marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#9aa0b0' }}>
+                      <span>{label}</span><span>{Math.round(val)}%</span>
+                    </div>
+                    <Bar value={val} color={val < 25 ? '#e74c3c' : color} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Current wish */}
+            {agent.wish && (
+              <div style={{
+                marginBottom: 8, padding: '7px 8px', borderRadius: 6,
+                background: 'rgba(245,200,66,0.06)', border: '1px solid rgba(245,200,66,0.25)',
+              }}>
+                <div style={{ fontSize: 9, color: '#f5c842', fontWeight: 700, letterSpacing: 0.5, marginBottom: 4 }}>
+                  ✨ WISH · +${agent.wish.reward}
+                </div>
+                <div style={{ fontSize: 10, color: '#e0d6b0', marginBottom: 4 }}>
+                  {agent.wish.icon} {agent.wish.label}
+                </div>
+                <Bar
+                  value={Math.min(100, ((agent.wish.need === 'energy' ? agent.energy : agent.lifeNeeds?.[agent.wish.need] ?? 0) / agent.wish.threshold) * 100)}
+                  color="#f5c842"
+                />
+              </div>
+            )}
+
+            {/* Friends */}
+            <FriendsList agentId={agent.id} />
+
             {agent.speech && (
               <div style={{
                 background: 'rgba(255,255,255,0.06)',
@@ -166,7 +259,7 @@ export default function AgentInspector() {
               </div>
             )}
 
-            {/* Avengers-specific stats */}
+            {/* Analyst stats */}
             {agent.isAvenger && agent.agentSkill && (
               <div style={{ marginTop: 6, padding: '6px 8px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.18)' }}>
                 <div style={{ fontSize: 9, color: '#7c3aed', fontWeight: 600, marginBottom: 4 }}>{agent.agentSkill.name} — Lv{agent.agentSkill.level}</div>

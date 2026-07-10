@@ -2,15 +2,11 @@ import type {
   SimState, CreativeStudioStats, TradingStats,
   EventLogEntry, EtsyProduct, OwnedUpgrade, AgentConversation,
 } from '../types'
-import { TRADE_EVENTS, TRENDING_NICHES, makeProduct, makeProductId } from '../data/businessData'
+import { ANALYSIS_EVENTS, TRENDING_NICHES, makeProduct, makeProductId } from '../data/businessData'
 import { UPGRADE_DEFS, computeEffects } from '../data/upgradeData'
 import { timeLabel, simMinuteOfDay } from './TimeSystem'
 import { onTaskComplete, saveSimState } from './EtsyBridge'
 import {
-  generateTradingSetupConversation,
-  generateSMCScalpConversation,
-  generateTradeClosedConversation,
-  generateRiskReviewConversation,
   generateMarketBriefingConversation,
   generateEtsyConversation,
   generateTrendShiftConversation,
@@ -33,9 +29,9 @@ function maybePersist(state: SimState) {
 let uniqueId = 0
 function uid() { return `evt_${++uniqueId}` }
 
-// ── Trade event cycling ───────────────────────────────────────────────────────
-let tradeEventIdx = 0
-let tradeTimer    = 0
+// ── Analysis observation cycling ─────────────────────────────────────────────
+let analysisEventIdx = 0
+let analysisTimer    = 0
 
 // ── Etsy pipeline stage durations (sim-seconds of agent work needed) ──────────
 // At 1×, 1 sim-second ≈ 0.8 real-ms → stages feel quick but visible
@@ -351,106 +347,32 @@ export function updateBusinesses(state: SimState, dtSec: number): BusinessUpdate
     result.completedDelta += completedDelta + salesDelta
   }
 
-  // ── 7. Trading ────────────────────────────────────────────────────────────
-  tradeTimer -= dtSec
-  if (workHours && tradeTimer <= 0) {
-    tradeTimer = 60 + Math.random() * 90
+  // ── 7. Market analysis desk (observations only — no trades, no signals) ────
+  analysisTimer -= dtSec
+  if (workHours && analysisTimer <= 0) {
+    analysisTimer = 90 + Math.random() * 120
 
-    const ev = TRADE_EVENTS[tradeEventIdx % TRADE_EVENTS.length]
-    tradeEventIdx++
-
-    const tr = state.trading
-    const newPL      = tr.dailyPL + ev.plDelta
-    const newBalance = tr.accountBalance + ev.plDelta
-    const newOpen    = Math.max(0, tr.openTrades + ev.openDelta)
-    const newClosed  = tr.closedTrades + ev.closeDelta
-    const newWins    = ev.won === true  ? tr.wins   + 1 : tr.wins
-    const newLosses  = ev.won === false ? tr.losses + 1 : tr.losses
-    const total      = newWins + newLosses
-    const winRate    = total > 0 ? Math.round((newWins / total) * 100) : tr.winRate
-    const newDD      = ev.plDelta < 0
-      ? Math.min(25, tr.drawdown + Math.abs(ev.plDelta) / 100)
-      : Math.max(0, tr.drawdown - 0.5)
+    const ev = ANALYSIS_EVENTS[analysisEventIdx % ANALYSIS_EVENTS.length]
+    analysisEventIdx++
 
     result.trading = {
-      dailyPL: newPL, accountBalance: newBalance,
-      openTrades: newOpen, closedTrades: newClosed,
-      wins: newWins, losses: newLosses, winRate, drawdown: newDD,
       ...(ev.mood   ? { marketMood:   ev.mood   } : {}),
       ...(ev.action ? { traderAction: ev.action } : {}),
     }
-    result.completedDelta += ev.closeDelta
 
-    const tradeLogId = uid()
     result.logEntries.push({
-      id: tradeLogId,
+      id: uid(),
       simMinute: state.time.day * 1440 + minuteOfDay,
       timeLabel: timeLabel(state.time),
       message: ev.message,
-      type: ev.plDelta > 0 ? 'success' : ev.plDelta < 0 ? 'warning' : 'trade',
+      type: 'trade',
     })
 
-    // Generate rich conversation for significant trade events
-    if (simNow - _lastConvTime > 45) {
-      _lastConvTime = simNow
-      const pairMatch = ev.message.match(/([A-Z]{3}\/[A-Z]{3})/)
-      const pair = pairMatch ? pairMatch[1] : 'EUR/USD'
-      const isOpen  = ev.openDelta > 0
-      const isClose = ev.closeDelta > 0
-
-      if (isOpen) {
-        const direction = ev.message.toLowerCase().includes('short') ? 'short' : 'long'
-        const basePrice = INSTRUMENT_BASE_PRICES[pair] ?? 1.0842
-        const tradeRec = {
-          id: tradeLogId,
-          pair,
-          direction: direction as 'long' | 'short',
-          entryPrice: basePrice * (1 + (Math.random() - 0.5) * 0.001),
-          exitPrice: null,
-          pnl: null,
-          status: 'open' as const,
-          timestamp: simNow,
-        }
-        // NQ and ES use the full 4-step SMC scalp checklist conversation
-        result.conversations.push(
-          (pair === 'NQ' || pair === 'ES')
-            ? generateSMCScalpConversation(state.time, tradeRec)
-            : generateTradingSetupConversation(state.time, tradeRec)
-        )
-      } else if (isClose) {
-        const isWin = ev.won === true
-        const basePrice = INSTRUMENT_BASE_PRICES[pair] ?? 1.0842
-        const entry = basePrice * (1 + (Math.random() - 0.5) * 0.001)
-        const slDist = basePrice * 0.001
-        result.conversations.push(
-          generateTradeClosedConversation(state.time, {
-            id: tradeLogId,
-            pair,
-            direction: ev.message.toLowerCase().includes('short') ? 'short' : 'long',
-            entryPrice: entry,
-            exitPrice: entry + (isWin ? slDist * 2.5 : -slDist),
-            pnl: ev.plDelta,
-            status: isWin ? 'won' : 'lost',
-            timestamp: simNow,
-          })
-        )
-      } else if (ev.mood) {
-        // Market mood change → briefing
-        result.conversations.push(
-          generateMarketBriefingConversation(state.time, ev.mood)
-        )
-      }
-    }
-
-    // Risk review when drawdown exceeds threshold
-    if (newDD > 5 && Math.random() < 0.3 && simNow - _lastConvTime > 90) {
+    // Occasional richer desk briefing conversation
+    if (ev.mood && simNow - _lastConvTime > 90) {
       _lastConvTime = simNow
       result.conversations.push(
-        generateRiskReviewConversation(state.time, {
-          drawdown: newDD,
-          winRate: winRate / 100,
-          openTrades: newOpen,
-        })
+        generateMarketBriefingConversation(state.time, ev.mood)
       )
     }
   }

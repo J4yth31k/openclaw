@@ -14,6 +14,9 @@ import N8nPlanPanel from './components/N8nPlanPanel'
 import BuildingOperationPanel from './components/BuildingOperationPanel'
 import JournalPanel from './components/JournalPanel'
 import ConversationViewer from './components/ConversationViewer'
+import BuildPanel from './components/BuildPanel'
+import OnboardingModal from './components/OnboardingModal'
+import { soundEnabled, setSoundEnabled } from './engine/Sound'
 
 // ── Mobile detection ──────────────────────────────────────────────────────────
 
@@ -31,9 +34,16 @@ function useIsMobile() {
 
 const TZ_ABBR = getTzAbbr()
 
+const SPEEDS = [
+  { label: '1×', ms: 800 },
+  { label: '2×', ms: 300 },
+  { label: '3×', ms: 100 },
+]
+
 function Toolbar({ isMobile }: { isMobile: boolean }) {
   const time        = useSimStore(s => s.time)
   const togglePause = useSimStore(s => s.togglePause)
+  const setSpeed    = useSimStore(s => s.setSpeed)
   const save        = useSimStore(s => s.save)
   const load        = useSimStore(s => s.load)
   const reset       = useSimStore(s => s.reset)
@@ -90,6 +100,24 @@ function Toolbar({ isMobile }: { isMobile: boolean }) {
         {!isMobile && (time.paused ? ' Resume' : ' Pause')}
       </button>
 
+      {/* Speed controls */}
+      <div style={{ display: 'flex', gap: 2 }}>
+        {SPEEDS.map(s => (
+          <button
+            key={s.label}
+            style={{
+              ...btn(!time.paused && time.speed === s.ms),
+              padding: isMobile ? '3px 5px' : '3px 7px',
+              fontFamily: 'monospace',
+            }}
+            onClick={() => setSpeed(s.ms)}
+            title={`Sim speed ${s.label}`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
       {/* Live badge */}
       <div style={{
         padding: '2px 6px', borderRadius: 4, fontSize: 8, fontWeight: 700,
@@ -126,6 +154,7 @@ function Toolbar({ isMobile }: { isMobile: boolean }) {
       )}
 
       <div style={{ flex: 1 }} />
+      <SoundToggle btn={btn} />
       {!isMobile && <button style={btn()} onClick={save}>💾 Save</button>}
       {!isMobile && <button style={btn()} onClick={load}>📂 Load</button>}
       <button
@@ -138,16 +167,36 @@ function Toolbar({ isMobile }: { isMobile: boolean }) {
   )
 }
 
+// ── Sound toggle ──────────────────────────────────────────────────────────────
+
+function SoundToggle({ btn }: { btn: (active?: boolean) => React.CSSProperties }) {
+  const [on, setOn] = useState(() => soundEnabled())
+  return (
+    <button
+      style={btn(on)}
+      title={on ? 'Mute ambience' : 'Enable ambience (wind, birds, rain)'}
+      onClick={() => {
+        const next = !on
+        setSoundEnabled(next)   // must run inside the click gesture
+        setOn(next)
+      }}
+    >
+      {on ? '🔊' : '🔇'}
+    </button>
+  )
+}
+
 // ── Sidebar tabs ──────────────────────────────────────────────────────────────
 
-type Tab = 'agents' | 'profit' | 'upgrades' | 'trading' | 'hq' | 'command' | 'launch' | 'journal' | 'ops'
+type Tab = 'build' | 'agents' | 'profit' | 'upgrades' | 'trading' | 'hq' | 'command' | 'launch' | 'journal' | 'ops'
 
 const TAB_LABELS: Record<Tab, string> = {
+  build:    '🏗️',
   agents:   '👥',
   profit:   '📊',
   upgrades: '🔧',
-  trading:  '📈',
-  hq:       '🛡️',
+  trading:  '📐',
+  hq:       '🧭',
   command:  '⚡',
   launch:   '🧶',
   journal:  '💪',
@@ -155,10 +204,11 @@ const TAB_LABELS: Record<Tab, string> = {
 }
 
 const TAB_TITLES: Record<Tab, string> = {
+  build:    'Build',
   agents:   'Agents',
   profit:   'Profit',
   upgrades: 'Upgrades',
-  trading:  'Trading',
+  trading:  'Levels',
   hq:       'HQ',
   command:  'Command',
   launch:   'Launch',
@@ -167,6 +217,7 @@ const TAB_TITLES: Record<Tab, string> = {
 }
 
 const TAB_ACCENT: Record<Tab, string> = {
+  build:    '#48dc8c',
   agents:   '#5060ff',
   profit:   '#5060ff',
   upgrades: '#f5c842',
@@ -215,6 +266,7 @@ function LaunchSubTabs() {
 
 function TabContent({ tab }: { tab: Tab }) {
   switch (tab) {
+    case 'build':    return <BuildPanel />
     case 'agents':   return <AgentInspector />
     case 'profit':   return <ProfitPanel />
     case 'upgrades': return <UpgradesPanel />
@@ -288,7 +340,7 @@ function MobileBottomNav({ tab, setTab, conversations }: {
   conversations: number
 }) {
   // On mobile only show the most important tabs
-  const mobileTabs: Tab[] = ['hq', 'ops', 'trading', 'journal', 'command']
+  const mobileTabs: Tab[] = ['build', 'hq', 'ops', 'trading', 'command']
 
   return (
     <div style={{
@@ -347,6 +399,7 @@ function useAutoSwitchToOps(setTab: (t: Tab) => void) {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('hq')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const isMobile      = useIsMobile()
   const conversations = useSimStore(s => s.conversations)
 
@@ -360,6 +413,7 @@ export default function App() {
         userSelect: 'none', overflow: 'hidden', background: '#020408',
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}>
+        <OnboardingModal />
         <Toolbar isMobile={true} />
         <BuildingOperationPanel />
 
@@ -409,6 +463,7 @@ export default function App() {
       display: 'flex', flexDirection: 'column', height: '100vh',
       userSelect: 'none', overflow: 'hidden', background: '#020408',
     }}>
+      <OnboardingModal />
       <Toolbar isMobile={false} />
       <BuildingOperationPanel />
 
@@ -421,17 +476,34 @@ export default function App() {
           <EventLog />
         </div>
 
-        {/* Right sidebar */}
-        <div style={{
-          width: 285, flexShrink: 0, display: 'flex', flexDirection: 'column',
-          borderLeft: '1px solid rgba(0,212,255,0.08)', overflow: 'hidden',
-        }}>
-          <SidebarTabStrip tab={tab} setTab={setTab} conversations={conversations.length} />
+        {/* Sidebar collapse handle */}
+        <button
+          onClick={() => setSidebarOpen(v => !v)}
+          title={sidebarOpen ? 'Hide panels — full world view' : 'Show panels'}
+          style={{
+            width: 16, flexShrink: 0, border: 'none', cursor: 'pointer',
+            background: 'rgba(10,14,28,0.9)',
+            borderLeft: '1px solid rgba(0,212,255,0.08)',
+            color: '#3a6a80', fontSize: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {sidebarOpen ? '▶' : '◀'}
+        </button>
 
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            <TabContent tab={tab} />
+        {/* Right sidebar */}
+        {sidebarOpen && (
+          <div style={{
+            width: 285, flexShrink: 0, display: 'flex', flexDirection: 'column',
+            borderLeft: '1px solid rgba(0,212,255,0.08)', overflow: 'hidden',
+          }}>
+            <SidebarTabStrip tab={tab} setTab={setTab} conversations={conversations.length} />
+
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <TabContent tab={tab} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

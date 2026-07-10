@@ -3,9 +3,9 @@
 export interface Vec2 { x: number; y: number }
 
 export type AgentId = string
-export type BuildingId = 'home1' | 'home2' | 'hq_quarters' | 'creative_studio' | 'trading_office' | 'avengers_hq'
+export type BuildingId = string
 export type RoomId = string
-export type BusinessId = 'creative_studio' | 'trading_office' | 'avengers_hq'
+export type BusinessId = string
 
 export type AgentRole =
   | 'research_agent'
@@ -14,7 +14,7 @@ export type AgentRole =
   | 'upload_agent'
   | 'trader_agent'
   | 'risk_manager'
-  // ── Avengers roles ───────────────────────────────────────────────────────────
+  // ── Legacy desk roles (kept for old saves) ───────────────────────────────────────────────────────────
   | 'tech_analyst'
   | 'fundamentals_agent'
   | 'sentiment_agent'
@@ -26,6 +26,14 @@ export type AgentRole =
   | 'webhook_agent'
   | 'hq_risk_manager'
   | 'backtest_agent'
+  // ── Market analysis team (no signals — reads news & markets) ──────────────
+  | 'news_analyst'
+  | 'volume_analyst'
+  | 'liquidity_analyst'
+  | 'session_analyst'
+  | 'structure_analyst'
+  // ── Player-hired agents ─────────────────────────────────────────────────────
+  | 'worker'
 
 export type AgentState =
   | 'sleeping'
@@ -58,6 +66,39 @@ export interface AgentSkill {
   xpToNext: number
 }
 
+// ── Life-sim needs (all agents) ──────────────────────────────────────────────
+
+export interface LifeNeeds {
+  hunger: number    // 0–100 (100 = full)
+  fun: number       // 0–100
+  social: number    // 0–100
+  hygiene: number   // 0–100
+}
+
+export function defaultLifeNeeds(): LifeNeeds {
+  return { hunger: 80, fun: 75, social: 70, hygiene: 90 }
+}
+
+// ── Wishes: small personal goals that pay out when fulfilled ─────────────────
+
+export interface Wish {
+  icon: string
+  label: string
+  need: 'hunger' | 'fun' | 'social' | 'hygiene' | 'energy'
+  threshold: number   // need value that fulfils the wish
+  reward: number      // cash paid on fulfilment
+}
+
+// ── Player commands (click an agent, then click a target) ───────────────────
+
+export interface AgentCommand {
+  kind: 'goto' | 'use' | 'chat'
+  target: Vec2
+  furnitureKind?: FurnitureKind   // set when kind === 'use'
+  buildingId?: BuildingId
+  targetAgentId?: AgentId         // set when kind === 'chat'
+}
+
 export interface Agent {
   id: AgentId
   name: string
@@ -79,7 +120,10 @@ export interface Agent {
   speech: string | null
   speechTimer: number     // sim-seconds remaining
   currentRoom: RoomId | null
-  // ── Avengers-specific (optional, Avengers agents only) ────────────────────
+  lifeNeeds?: LifeNeeds   // hunger / fun / social / hygiene (life-sim layer)
+  command?: AgentCommand | null   // player-issued order (overrides schedule)
+  wish?: Wish | null      // current personal goal (pays cash when fulfilled)
+  // ── Analyst-specific (optional, HQ analysts only) ────────────────────
   emoji?: string
   agentNeeds?: AgentNeeds
   agentSkill?: AgentSkill
@@ -101,6 +145,16 @@ export interface Room {
   occupants: AgentId[]
 }
 
+// ── Furniture ────────────────────────────────────────────────────────────────
+
+export type FurnitureKind = 'bed' | 'desk' | 'fridge' | 'couch' | 'plant' | 'tv' | 'shower'
+
+export interface Furniture {
+  id: string
+  kind: FurnitureKind
+  gridPos: Vec2
+}
+
 export interface Building {
   id: BuildingId
   name: string
@@ -112,6 +166,12 @@ export interface Building {
   accentColor: string
   doorTile: Vec2          // which tile is the entrance
   rooms: Room[]
+  // ── Player-built buildings ─────────────────────────────────────────────────
+  custom?: boolean        // placed by the player (can be renamed / demolished)
+  vacant?: boolean        // no business assigned yet — agents can't be hired
+  businessType?: string   // e.g. 'Shop', 'Studio', 'Trading', assigned by player
+  floors?: number         // visual height multiplier (1–3)
+  furniture?: Furniture[] // beds, desks, fridges… agents walk to and use these
 }
 
 export interface WorldMap {
@@ -119,6 +179,23 @@ export interface WorldMap {
   rows: number
   tiles: TileType[][]
   buildings: Building[]
+  hRoads: number[]        // starting row of each 2-lane horizontal road
+  vRoads: number[]        // starting col of each 2-lane vertical road
+  nextLotId: number       // auto-increment id for player-placed buildings
+  expansions: number      // how many times the world has grown
+}
+
+// ── Build mode ───────────────────────────────────────────────────────────────
+
+export interface PlacingLot {
+  typeName: string
+  tileW: number
+  tileH: number
+  cost: number
+  floors: number
+  color: string
+  roofColor: string
+  accentColor: string
 }
 
 // ── Upgrades ─────────────────────────────────────────────────────────────────
@@ -329,4 +406,5 @@ export interface SimState {
   totalCash: number
   completedTaskCount: number
   warnings: string[]
+  relationships: Record<string, number>   // "idA|idB" (sorted) → 0–100 friendship
 }

@@ -9,6 +9,18 @@ import NewsPanel from './NewsPanel'
 // SHARED PRIMITIVES
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { ManageSection } from './BuildingModal'
+import TradingPanel from './TradingPanel'
+
+/** Embeds the market Levels panel inside the ops modal */
+function LevelsEmbed() {
+  return (
+    <div style={{ margin: '-6px -4px 0' }}>
+      <TradingPanel />
+    </div>
+  )
+}
+
 const BUILDING_ACCENT: Record<string, string> = {
   trading_office:  '#3b82f6',
   avengers_hq:     '#7c3aed',
@@ -240,7 +252,7 @@ function Pill({ label, color }: { label: string; color: string }) {
 // TRADING OPERATIONS PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TRADING_TABS = ['Overview', '📡 Live', '📰 News', 'Signals', 'Positions', 'Journal', 'Analytics', 'Agents']
+const TRADING_TABS = ['Overview', '📐 Levels', '📰 News', 'Desk Notes', 'Journal', 'Analytics', 'Agents']
 
 function SignalCard({ trade, accent }: { trade: TradeRecord; accent: string }) {
   const isLong = trade.direction === 'long'
@@ -293,14 +305,12 @@ function TradingOpsPanel({ agents, accent }: { agents: Agent[]; accent: string }
   const totalTrades = trading.wins + trading.losses
   const avgRR = totalTrades > 0 ? (1.8 + Math.random() * 0.4).toFixed(2) : '—'
 
-  const hulkLines = useMemo(() => {
+  const deskLines = useMemo(() => {
     const lines = []
-    if (trading.winRate > 60) lines.push(`Win rate ${fmtPct(trading.winRate)} — strategy is working. Keep the discipline.`)
-    else if (trading.winRate > 0) lines.push(`Win rate ${fmtPct(trading.winRate)} — below target. Review recent losses for pattern.`)
-    if (trading.drawdown > 5) lines.push(`Drawdown at ${fmtPct(trading.drawdown)} — reduce position size until drawdown recovers.`)
-    if (trading.marketMood === 'volatile') lines.push('Market is volatile. Stick to A+ setups only. No FOMO trades.')
-    if (trading.wins > trading.losses && trading.wins > 2) lines.push(`${trading.wins} wins vs ${trading.losses} losses today. Positive expectancy confirmed.`)
-    if (lines.length === 0) lines.push('Monitoring market structure. Waiting for A+ confluence before signaling.')
+    if (trading.marketMood === 'volatile') lines.push('Volatile tape — levels are suspect until retested. Size and patience are yours to manage.')
+    if (trading.marketMood === 'bullish') lines.push('Constructive context — value migrating higher. Check the Levels tab for the overhead pools.')
+    if (trading.marketMood === 'bearish') lines.push('Heavy context — structure lost a higher low. Sell-side pools mapped below.')
+    lines.push('The desk reads the market — volume profile and liquidity only. All trade decisions stay with you.')
     return lines
   }, [trading])
 
@@ -352,22 +362,22 @@ function TradingOpsPanel({ agents, accent }: { agents: Agent[]; accent: string }
             </div>
           )}
 
-          <AIInsight lines={hulkLines} agent="Hulk" agentColor="#10b981" />
+          <AIInsight lines={deskLines} agent="Analysis Desk" agentColor="#10b981" />
         </>}
 
-        {tab === '📡 Live' && (
-          <LiveTradesPanel accent={accent} />
+        {tab === '📐 Levels' && (
+          <LevelsEmbed />
         )}
 
         {tab === '📰 News' && (
           <NewsPanel accent={accent} />
         )}
 
-        {tab === 'Signals' && <>
-          <SectionHead label="Live Signal Feed" accent={accent} />
+        {tab === 'Desk Notes' && <>
+          <SectionHead label="Analysis Feed" accent={accent} />
           {tradeEvents.length === 0 && (
             <div style={{ fontSize: 10, color: '#3a4858', fontStyle: 'italic', padding: 12 }}>
-              No signals yet — scanning market structure…
+              No observations yet — the desk is building today's map…
             </div>
           )}
           {tradeEvents.map((e, i) => (
@@ -403,26 +413,6 @@ function TradingOpsPanel({ agents, accent }: { agents: Agent[]; accent: string }
           ))}
         </>}
 
-        {tab === 'Positions' && <>
-          <SectionHead label={`Open Positions (${openTrades.length})`} accent={accent} />
-          {openTrades.length === 0 ? (
-            <div style={{
-              background: 'rgba(255,255,255,0.02)', border: `1px solid rgba(255,255,255,0.06)`,
-              borderRadius: 10, padding: 20, textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 24, marginBottom: 8 }}>📡</div>
-              <div style={{ fontSize: 12, color: '#4a5568' }}>No open positions</div>
-              <div style={{ fontSize: 10, color: '#3a4858', marginTop: 4 }}>
-                Agents are scanning market structure for A+ setups…
-              </div>
-            </div>
-          ) : (
-            openTrades.map(t => <SignalCard key={t.id} trade={t} accent={accent} />)
-          )}
-
-          <SectionHead label="Recent Closed" accent={accent} />
-          {closedTrades.slice(0, 6).map(t => <SignalCard key={t.id} trade={t} accent={accent} />)}
-        </>}
 
         {tab === 'Journal' && <>
           <MetricRow>
@@ -503,11 +493,11 @@ function TradingOpsPanel({ agents, accent }: { agents: Agent[]; accent: string }
             ))}
           </div>
 
-          <AIInsight lines={hulkLines} agent="Hulk" agentColor="#10b981" />
+          <AIInsight lines={deskLines} agent="Analysis Desk" agentColor="#10b981" />
         </>}
 
         {tab === 'Agents' && <>
-          <SectionHead label="Trading Team" accent={accent} />
+          <SectionHead label="Analysis Team" accent={accent} />
           {agents.length === 0 && (
             <div style={{ fontSize: 10, color: '#3a4858', fontStyle: 'italic' }}>
               No agents assigned to this building.
@@ -872,8 +862,8 @@ function HQCommandPanel({ agents, accent }: { agents: Agent[]; accent: string })
             const names: Record<string, string> = {
               trading_office: '📊 Trading Office',
               creative_studio: '🎨 Creative Studio',
-              avengers_hq: '⚡ Avengers HQ',
-              hq_quarters: '🛡️ HQ Quarters',
+              avengers_hq: '🧭 Analysis HQ',
+              hq_quarters: '🏙️ Analyst Quarters',
             }
             return (
               <div key={bid}>
@@ -888,8 +878,8 @@ function HQCommandPanel({ agents, accent }: { agents: Agent[]; accent: string })
         </>}
 
         {tab === 'Command' && <>
-          <SectionHead label="Nick Fury Directives" accent={accent} />
-          {convo.filter(c => c.messages.some(m => m.agentId === 'fury')).slice(0, 6).map(c => (
+          <SectionHead label="Desk Briefings" accent={accent} />
+          {convo.filter(c => c.type === 'trading').slice(0, 6).map(c => (
             <div key={c.id} style={{
               background: `${accent}08`, border: `1px solid ${accent}20`,
               borderRadius: 8, padding: '8px 12px',
@@ -904,9 +894,9 @@ function HQCommandPanel({ agents, accent }: { agents: Agent[]; accent: string })
               <div style={{ fontSize: 8, color: '#3a4858', marginTop: 3 }}>{c.timeLabel}</div>
             </div>
           ))}
-          {convo.filter(c => c.messages.some(m => m.agentId === 'fury')).length === 0 && (
+          {convo.filter(c => c.type === 'trading').length === 0 && (
             <div style={{ fontSize: 10, color: '#3a4858', fontStyle: 'italic', padding: 8 }}>
-              Awaiting Fury briefings…
+              Awaiting the first desk briefing…
             </div>
           )}
 
@@ -1004,12 +994,12 @@ export default function BuildingOperationPanel() {
   )
 
   const panelTitles: Record<string, string> = {
-    trading_office:  'Trading Operations Center',
-    avengers_hq:     'Avengers HQ Command',
+    trading_office:  'Market Analysis Desk',
+    avengers_hq:     'Analysis HQ Command',
     creative_studio: 'Etsy Operations Center',
     home1:           'Residential — Team Home',
     home2:           'Residential — Trader Home',
-    hq_quarters:     'HQ Quarters',
+    hq_quarters:     'Analyst Quarters',
   }
 
   function renderPanel() {
@@ -1021,7 +1011,14 @@ export default function BuildingOperationPanel() {
       case 'creative_studio':
         return <EtsyOpsPanel agents={buildingAgents} accent={accent} />
       default:
-        return <ResidentialPanel agents={buildingAgents} accent={accent} buildingId={selectedBuildingId!} />
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
+            {building!.custom && <ManageSection key={building!.id} building={building!} accent={accent} />}
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <ResidentialPanel agents={buildingAgents} accent={accent} buildingId={selectedBuildingId!} />
+            </div>
+          </div>
+        )
     }
   }
 

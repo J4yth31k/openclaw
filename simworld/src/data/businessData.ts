@@ -166,89 +166,49 @@ export function makeInitialTrading(): TradingStats {
     riskLevel:      'medium',
     drawdown:       0,
     marketMood:     'neutral',
-    traderAction:   'Waiting for session open…',
+    traderAction:   'Desk preparing the session map…',
     recentTrades:   [],
   }
 }
 
-// ── Trade events (unchanged) ──────────────────────────────────────────────────
+// ── Analysis observations (no trades, no signals — market readings only) ─────
 
-export const TRADE_EVENTS: Array<{
-  message: string; plDelta: number; openDelta: number; closeDelta: number
-  won?: boolean; pair?: string; mood?: TradingStats['marketMood']; action?: string
-}> = [
-  // ── MNQ (Micro NQ) ────────────────────────────────────────────────────────
-  { message: 'Trae: MNQ sell-side swept pre-market — bias flipped bullish 👀',   plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'MNQ pre-market sweep read' },
-  { message: 'Remi reviewed MNQ size — 2 contracts approved ✅',                  plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Risk approved' },
-  { message: 'Trade opened: MNQ long at 18,240 — FVG fill 📈',                   plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'MNQ', action: 'MNQ long entry' },
-  { message: 'MNQ TP hit — +$140 WIN 🎉',                                         plDelta: 140,  openDelta: -1, closeDelta: 1, won: true,  pair: 'MNQ', action: 'MNQ profit booked' },
-  { message: 'Trae: MNQ VWAP rejection — bearish short setup forming 📉',         plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'MNQ VWAP rejection read' },
-  { message: 'Remi: max daily loss 60% used — scaling back to 1 contract ⚠️',    plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'Risk scaling', mood: 'volatile' },
-  { message: 'Trade opened: MNQ short at 18,510 — OB retest 📉',                  plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'MNQ', action: 'MNQ short entry' },
-  { message: 'MNQ hit SL — -$60 LOSS 😬 — news spike (review rule)',              plDelta: -60,  openDelta: -1, closeDelta: 1, won: false, pair: 'MNQ', action: 'MNQ loss review' },
-  { message: 'RTH open — NQ printing higher — bias remains bullish 🐂',           plDelta: 0,    openDelta: 0,  closeDelta: 0, mood: 'bullish', action: 'RTH open read' },
-  { message: 'Trade opened: MES long at 5,420 — NY AM Kill Zone 📈',              plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'MES', action: 'MES long entry' },
-  { message: 'MES closed +$175 WIN 🎉 — 2.1R clean',                              plDelta: 175,  openDelta: -1, closeDelta: 1, won: true,  pair: 'MES', action: 'MES profit locked' },
-  { message: 'GC (Gold) long signal — safe haven bid building 🥇',                plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'GC', action: 'GC long entry' },
-  { message: 'GC TP hit — +$310 WIN 🎉',                                           plDelta: 310,  openDelta: -1, closeDelta: 1, won: true,  pair: 'GC', action: 'Gold gains locked' },
-  { message: 'CL short confirmed — EIA inventory bearish 📉',                     plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'CL', action: 'CL short entry' },
-  { message: 'CL SL hit — -$90 LOSS 😬 — tight chop pre-EIA',                    plDelta: -90,  openDelta: -1, closeDelta: 1, won: false, pair: 'CL', action: 'CL loss post-mortem' },
+export interface AnalysisEvent {
+  message: string
+  mood?: TradingStats['marketMood']
+  action?: string
+}
 
-  // ── NQ (NASDAQ-100 Futures) — SMC 4-Step Checklist ────────────────────────
-  { message: 'Iron Man: NQ 1H bias BULLISH — HH/HL structure, price in discount 🦾',           plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ 1H bias analysis' },
-  { message: 'Scarlet Witch: NQ 15M — SSL swept, CHoCH confirmed, FVG created 🔮',             plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ 15M narrative' },
-  { message: 'Black Widow: NQ 5M BOS to upside, retracing into FVG — setup valid 🕷️',         plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ 5M setup confirmed' },
-  { message: 'Vision: NQ 1M — liquidity taken, displacement printed, BOS confirmed 👁️',        plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ 1M execution check' },
-  { message: 'Dr. Strange: All 4 SMC steps cleared — NQ long authorized ✅ NY AM Kill Zone',   plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ SMC checklist passed' },
-  { message: 'Trade opened: NQ long at 18,240 — FVG retest, SL below sweep 📈',                plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'NQ', action: 'NQ long entry: FVG retest' },
-  { message: 'NQ TP1 hit at 18,260 (+2R) — partial closed, runners to 18,295 🎉',             plDelta: 400,  openDelta: 0,  closeDelta: 0, won: true,  pair: 'NQ', action: 'NQ TP1 reached, holding runners' },
-  { message: 'NQ TP2 hit — full position closed +$640 WIN 🎉',                                  plDelta: 640,  openDelta: -1, closeDelta: 1, won: true,  pair: 'NQ', action: 'NQ trade fully closed' },
-  { message: 'Iron Man: NQ 1H bias BEARISH — LH/LL, price in premium, BSL above 🦾',          plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ bearish 1H bias', mood: 'bearish' },
-  { message: 'Scarlet Witch: NQ 15M — BSL swept, CHoCH bearish, FVG to downside 🔮',          plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'NQ bearish 15M narrative' },
-  { message: 'Trade opened: NQ short at 18,510 — OB retest, SL above sweep 📉',                plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'NQ', action: 'NQ short entry: OB retest' },
-  { message: 'NQ short closed +$480 WIN 🎉 — 2.4R — equal lows target reached',               plDelta: 480,  openDelta: -1, closeDelta: 1, won: true,  pair: 'NQ', action: 'NQ short winner' },
-  { message: 'NQ SL hit — -$200 LOSS 😬 — no sweep before entry (rule violation)',             plDelta: -200, openDelta: -1, closeDelta: 1, won: false, pair: 'NQ', action: 'NQ stopped — checklist miss' },
-
-  // ── ES (S&P 500 Futures) — SMC 4-Step Checklist ───────────────────────────
-  { message: 'Iron Man: ES 1H bias BULLISH — HH/HL, price at HTF OB in discount 🦾',         plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'ES 1H bias analysis' },
-  { message: 'Scarlet Witch: ES 15M — sell-side swept, CHoCH confirmed, displacement 🔮',     plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'ES 15M narrative' },
-  { message: 'Black Widow: ES 5M BOS confirmed, retracing into FVG — clean structure 🕷️',     plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'ES 5M setup' },
-  { message: 'Vision: ES 1M — sweep taken, displacement, BOS → FVG retest entry 👁️',          plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'ES 1M execution' },
-  { message: 'Trade opened: ES long at 5,418 — SL 3 pts below sweep, 2R+ available 📈',       plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'ES', action: 'ES long entry: SMC checklist passed' },
-  { message: 'ES TP1 hit +$250 WIN 🎉 — 2R, partial closed — holding to equal highs',         plDelta: 250,  openDelta: 0,  closeDelta: 0, won: true,  pair: 'ES', action: 'ES TP1 reached' },
-  { message: 'ES trade fully closed +$375 WIN 🎉 — 3R achieved',                               plDelta: 375,  openDelta: -1, closeDelta: 1, won: true,  pair: 'ES', action: 'ES full close' },
-  { message: 'Iron Man: ES 1H bias BEARISH — LH/LL at premium, BSL above equal highs 🦾',    plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'ES bearish 1H bias', mood: 'bearish' },
-  { message: 'Trade opened: ES short at 5,490 — bearish FVG retest, SL above sweep 📉',       plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'ES', action: 'ES short entry' },
-  { message: 'ES short closed +$500 WIN 🎉 — 2.5R — equal lows swept as target',              plDelta: 500,  openDelta: -1, closeDelta: 1, won: true,  pair: 'ES', action: 'ES short winner' },
-  { message: 'ES SL hit — -$150 LOSS 😬 — no confirmation candle present (rule: NO CONF = NO TRADE)', plDelta: -150, openDelta: -1, closeDelta: 1, won: false, pair: 'ES', action: 'ES stopped — no confirmation' },
-
-  // ── CL (Crude Oil Futures) ────────────────────────────────────────────────
-  { message: 'Thor reading CL — inverse correlation with DXY confirmed ⚡', plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'CL-DXY correlation check' },
-  { message: 'Trade opened: CL long at 81.40 🛢️',                          plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'CL', action: 'Trade open: CL long' },
-  { message: 'CL TP hit at 82.80 — +$280 WIN 🎉',                          plDelta: 280, openDelta: -1, closeDelta: 1, won: true,  pair: 'CL', action: 'CL target reached' },
-  { message: 'CL inventory report bearish — short opportunity 📉',          plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'CL inventory reaction', mood: 'bearish' },
-  { message: 'Trade opened: CL short at 80.15 📉',                          plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'CL', action: 'Trade open: CL short' },
-  { message: 'CL closed +$420 WIN 🎉 — supply zone held perfectly',         plDelta: 420, openDelta: -1, closeDelta: 1, won: true,  pair: 'CL', action: 'CL supply zone trade won' },
-  { message: 'CL SL hit — -$140 LOSS 😬 — news spike',                      plDelta: -140,openDelta: -1, closeDelta: 1, won: false, pair: 'CL', action: 'CL news stop-out' },
-
-  // ── ZN (10-Year Treasury Futures) ────────────────────────────────────────
-  { message: 'Capt. America tracking ZN — yields inverted, bonds bullish 🛡️', plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'ZN yield curve analysis' },
-  { message: 'Trade opened: ZN long at 111.12 📈',                            plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'ZN', action: 'Trade open: ZN long' },
-  { message: 'ZN TP hit — +$187 WIN 🎉 — Fed pivot trade paid off',           plDelta: 187, openDelta: -1, closeDelta: 1, won: true,  pair: 'ZN', action: 'ZN pivot trade won' },
-  { message: 'ZN SL hit — -$94 LOSS 😬 — strong jobs data pressured bonds',   plDelta: -94, openDelta: -1, closeDelta: 1, won: false, pair: 'ZN', action: 'ZN stopped out on jobs' },
-
-  // ── GC (Gold Futures) ────────────────────────────────────────────────────
-  { message: 'Vision sees GC order block at 2,340 — institutional buy 👁️', plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'GC order block analysis' },
-  { message: 'Trade opened: GC long at 2,344.50 🥇',                       plDelta: 0,    openDelta: 1,  closeDelta: 0, pair: 'GC', action: 'Trade open: GC long' },
-  { message: 'GC TP hit at 2,362 — +$350 WIN 🎉',                          plDelta: 350,  openDelta: -1, closeDelta: 1, won: true,  pair: 'GC', action: 'GC profits locked' },
-  { message: 'GC rejected at 2,400 resistance — short setup forming 📉',   plDelta: 0,    openDelta: 0,  closeDelta: 0, action: 'GC resistance rejection', mood: 'volatile' },
-
-  // ── RTY (Russell 2000 Futures) ───────────────────────────────────────────
-  { message: 'Spider-Man: small-cap rotation news confirms RTY long setup 🕸️', plDelta: 0,   openDelta: 0,  closeDelta: 0, action: 'RTY news catalyst confirmed' },
-  { message: 'Trade opened: RTY long at 2,080 📈',                              plDelta: 0,   openDelta: 1,  closeDelta: 0, pair: 'RTY', action: 'Trade open: RTY long' },
-  { message: 'RTY closed +$310 WIN 🎉 — risk-on session delivered',             plDelta: 310, openDelta: -1, closeDelta: 1, won: true,  pair: 'RTY', action: 'RTY risk-on trade won' },
-  { message: 'RTY SL hit — -$155 LOSS 😬 — large-cap rotation headwind',        plDelta: -155,openDelta: -1, closeDelta: 1, won: false, pair: 'RTY', action: 'RTY stopped out' },
+export const ANALYSIS_EVENTS: AnalysisEvent[] = [
+  // Volume profile readings — Vera 📊
+  { message: 'Vera 📊: NQ building acceptance above yesterday\'s POC — value migrating higher', mood: 'bullish', action: 'Volume profile update' },
+  { message: 'Vera 📊: ES value area narrow today — balanced profile, rotation likely', mood: 'neutral', action: 'Value area mapped' },
+  { message: 'Vera 📊: thin LVN pocket sits just under current NQ price — fast moves through there', action: 'LVN flagged' },
+  { message: 'Vera 📊: HVN overhead acting as resistance — heavy volume traded there last week', action: 'HVN flagged' },
+  { message: 'Vera 📊: POC untested from the morning session — still a magnet below', action: 'POC note' },
+  // Liquidity readings — Marlow 💧
+  { message: 'Marlow 💧: equal highs stacked above session range — buy-side pool marked', action: 'Liquidity map updated' },
+  { message: 'Marlow 💧: sell-side liquidity resting under three equal lows on ES', action: 'Liquidity map updated' },
+  { message: 'Marlow 💧: overnight low swept in the first hour — that pool is spent', action: 'Sweep noted' },
+  { message: 'Marlow 💧: round number just above price lining up with equal highs — confluence pool', action: 'Confluence noted' },
+  // Session timing — Sana 🕐
+  { message: 'Sana 🕐: NY open in 30 min — expect the overnight range to get tested', action: 'Session prep' },
+  { message: 'Sana 🕐: opening range set — high and low marked on the board', action: 'Opening range marked' },
+  { message: 'Sana 🕐: lunch hours — volume drying up, ranges compressing', mood: 'neutral', action: 'Midday lull' },
+  { message: 'Sana 🕐: final hour — watch for a push toward untested levels', action: 'Closing hour watch' },
+  // Structure context — Cole 🧭
+  { message: 'Cole 🧭: NQ printing higher highs and higher lows on the hourly — trend context intact', mood: 'bullish', action: 'Structure update' },
+  { message: 'Cole 🧭: ES lost its last hourly higher low — structure now questionable', mood: 'bearish', action: 'Structure update' },
+  { message: 'Cole 🧭: both indices ranging inside yesterday\'s value — no directional conviction', mood: 'neutral', action: 'Range day noted' },
+  { message: 'Cole 🧭: expansion candle broke the range — watching whether price accepts outside value', mood: 'volatile', action: 'Range break noted' },
+  // News & macro — Nova 📰
+  { message: 'Nova 📰: CPI print tomorrow morning — expect positioning to thin out late today', mood: 'volatile', action: 'Macro calendar' },
+  { message: 'Nova 📰: no high-impact releases today — technicals should lead', action: 'Calendar clear' },
+  { message: 'Nova 📰: Fed speakers this afternoon — headlines can move the indices', mood: 'volatile', action: 'Headline risk flagged' },
+  { message: 'Nova 📰: yields easing overnight — mild tailwind for tech-heavy NQ', mood: 'bullish', action: 'Macro context' },
+  { message: 'Nova 📰: risk-off tone in overnight markets — defensive rotation in early flows', mood: 'bearish', action: 'Macro context' },
 ]
+
 
 // ── Agent speeches ────────────────────────────────────────────────────────────
 
@@ -257,18 +217,12 @@ export const AGENT_SPEECHES: Record<string, string[]> = {
   design_agent:      ['Almost done! ✏️', 'Colors look perfect!', 'Creative block... 😓', 'Draft complete!'],
   qc_agent:          ['Approved! ✅', 'Needs more work.', 'Quality check done.', 'Sending back to Dani.'],
   upload_agent:      ['Listing live! 🚀', 'SEO tags added!', 'Tags optimized!', 'Thumbnail uploaded!'],
-  trader_agent:      ['Watching the charts 👀', 'ICT setup forming!', 'Entry confirmed!', 'Risk looks good!'],
-  risk_manager:      ['Risk approved ✅', 'Too much drawdown ⚠️', 'Checking SL levels...', 'Position size OK.'],
-  // ── Avengers ────────────────────────────────────────────────────────────────
-  tech_analyst:      ['NQ 1H bias: BULLISH HH/HL 🦾', 'ES price in discount ✅', 'HTF order block holding!', 'Last BOS to the upside!', 'Equal highs above — target set!', 'CL at supply zone!', '1H structure confirmed!'],
-  fundamentals_agent:['Fed holds rates! 🛡️', 'NFP beats — risk on!', 'ES bias aligns with macro!', 'ZN yield inversion!', 'ECB hawkish — NQ headwind!', 'GDP beat — discount zone!'],
-  sentiment_agent:   ['NQ 15M — SSL swept! 🔮', 'CHoCH confirmed!', 'Strong displacement candle!', 'FVG created on 15M!', 'Bias aligned 1H→15M!', 'Equal lows taken — flip incoming!'],
-  orderflow_agent:   ['NQ 1M — liquidity taken 👁️', 'Displacement confirmed!', 'BOS after displacement!', 'FVG retest live — entry zone!', 'Stop below sweep low!', '2R+ available!'],
-  correlation_agent: ['NQ-ES correlated move ⚡', 'VIX dropping — NQ long bias!', 'DXY diverging from ES!', 'Kill zone active!', 'NY AM window open!', 'SPX breadth supporting!'],
-  director_agent:    ['All 4 steps cleared! 🎯', 'TRADE ONLY WHEN ALL BOXES CHECKED!', 'No sweep = no trade!', 'NY AM Kill Zone active!', 'Checklist pass — execute!', 'Risk small. Manage well.'],
-  tradeideas_agent:  ['NQ 5M BOS confirmed! 🕷️', 'ES retracing into FVG!', 'OB retest — clean structure!', 'Price in discount ✅', 'SL within 10 NQ pts!', 'SL within 3 ES pts!'],
-  news_agent:        ['No high-impact news — clean window 🕸️', 'FOMC minutes in 2h — sized down!', 'NFP in 30min — no trade!', 'Low volatility window — kill zone active!', 'News: clear for NY AM!'],
-  webhook_agent:     ['NQ SMC alert fired! 🏹', 'ES checklist complete — signal sent!', 'Webhook: all 4 steps cleared!', 'Pine script triggered — FVG retest!', 'Alert: BOS after displacement!'],
-  hq_risk_manager:   ['NQ SL: 8 pts ✅ (max 10) 🔯', 'ES SL: 2.5 pts ✅ (max 3)', '1R risk approved!', 'Drawdown within limits ✅', '2R+ confirmed before entry!', 'Risk small. Manage well. Stay consistent.'],
-  backtest_agent:    ['SMASH! NQ SMC: 73% WR! 💪', 'ES FVG retest: 68% hit rate!', 'SSL sweep → CHoCH: 71% WR!', 'Kill zone entries outperform!', 'NY AM best session confirmed!', 'Walk-forward: SMC edge holds!'],
+  trader_agent:      ['Watching the charts 👀', 'Marking key levels...', 'Session map ready!', 'Levels updated!'],
+  risk_manager:      ['Numbers double-checked ✅', 'Reviewing exposure ⚠️', 'Checking the levels...', 'Books look clean.'],
+  // ── Market Analysis Team ─────────────────────────────────────────────────────
+  news_analyst:      ['Scanning headlines 📰', 'CPI on deck tomorrow!', 'Calendar is clear today', 'Fed speakers this afternoon', 'Yields moving overnight', 'Macro tone: risk-on'],
+  volume_analyst:    ['Profile updated 📊', 'POC holding as magnet', 'Value migrating higher', 'Thin LVN below price!', 'HVN acting as a shelf', 'Acceptance above value'],
+  liquidity_analyst: ['Liquidity map fresh 💧', 'Equal highs stacked above', 'Sell-side pool below', 'Overnight low swept', 'Round number confluence', 'Pools marked on the board'],
+  session_analyst:   ['Opening range marked 🕐', 'NY open in 30!', 'Lunch lull — ranges tight', 'Final hour — stay sharp', 'Overnight range holding', 'Session levels posted'],
+  structure_analyst: ['Structure intact 🧭', 'Higher lows holding', 'Range day so far', 'Expansion candle printed', 'Hourly trend unchanged', 'Watching for acceptance'],
 }

@@ -39,7 +39,7 @@ let sigCounter = 0
 function makeSignal(): MockSignal {
   const pair = PAIRS[Math.floor(Math.random() * PAIRS.length)]
   const action = Math.random() > 0.48 ? 'BUY' : 'SELL'
-  const agents = ['Black Widow', 'Iron Man', 'Vision', 'Dr. Strange', 'Hawkeye']
+  const agents = ['Vera', 'Marlow', 'Nova', 'Sana', 'Cole']
   return {
     id: `sig-${++sigCounter}`,
     pair,
@@ -244,17 +244,11 @@ export default function CommandPanel() {
               AGENT NETWORK
             </div>
             {[
-              { name: 'Iron Man',       emoji: '🦾', role: 'Tech Analyst',    status: 'SCANNING', color: '#ef4444', conf: '5/6' },
-              { name: 'Vision',         emoji: '👁️', role: 'Order Flow',      status: 'TRACKING', color: '#a855f7', conf: '6/6' },
-              { name: 'Black Widow',    emoji: '🕷️', role: 'Trade Ideas',     status: 'WEAVING',  color: '#10b981', conf: '4/6' },
-              { name: 'Dr. Strange',    emoji: '🔯', role: 'Risk Mgmt',       status: 'SIZING',   color: '#14b8a6', conf: '—'   },
-              { name: 'Hawkeye',        emoji: '🏹', role: 'Webhooks',        status: 'WATCHING', color: '#f59e0b', conf: '—'   },
-              { name: 'Capt. America',  emoji: '🛡️', role: 'Fundamentals',   status: 'READING',  color: '#4a6cf7', conf: '—'   },
-              { name: 'Scarlet Witch',  emoji: '🔮', role: 'Sentiment',       status: 'SENSING',  color: '#ec4899', conf: '3/6' },
-              { name: 'Thor',           emoji: '⚡', role: 'Correlations',    status: 'MAPPING',  color: '#06b6d4', conf: '—'   },
-              { name: 'Nick Fury',      emoji: '🎯', role: 'Director',        status: 'PATROL',   color: '#7c3aed', conf: '—'   },
-              { name: 'Spider-Man',     emoji: '🕸️', role: 'News Intel',      status: 'PARSING',  color: '#f97316', conf: '—'   },
-              { name: 'Hulk',           emoji: '💪', role: 'Backtesting',     status: 'SMASHING', color: '#84cc16', conf: '—'   },
+              { name: 'Vera',           emoji: '📊', role: 'Volume Profile',  status: 'MAPPING',  color: '#a855f7', conf: '—' },
+              { name: 'Marlow',         emoji: '💧', role: 'Liquidity Map',   status: 'MARKING',  color: '#06b6d4', conf: '—'   },
+              { name: 'Nova',           emoji: '📰', role: 'News & Macro',    status: 'READING',  color: '#f97316', conf: '—'   },
+              { name: 'Sana',           emoji: '🕐', role: 'Session Timing',  status: 'TIMING',   color: '#10b981', conf: '—'   },
+              { name: 'Cole',           emoji: '🧭', role: 'Structure',       status: 'CHARTING', color: '#4a6cf7', conf: '—'   },
             ].map(ag => (
               <div key={ag.name} style={{
                 display: 'flex', alignItems: 'center', gap: 6,

@@ -122,14 +122,15 @@ function AgentCard({ agent }: { agent: Agent }) {
 
 export default function HQPanel() {
   const agents = useSimStore(s => s.agents)
-  const avengers = agents.filter(a => a.isAvenger)
+  const analysts = agents.filter(a => a.isAvenger)
 
-  const totalSigs  = avengers.reduce((sum, a) => sum + (a.signalsGiven ?? 0), 0)
-  const totalHits  = avengers.reduce((sum, a) => sum + (a.signalsHit  ?? 0), 0)
-  const avgMorale  = avengers.length > 0
-    ? Math.round(avengers.reduce((sum, a) => sum + (a.agentNeeds?.morale ?? 0), 0) / avengers.length)
+  const avgFreshness = analysts.length > 0
+    ? Math.round(analysts.reduce((sum, a) => sum + (a.agentNeeds?.dataFreshness ?? 0), 0) / analysts.length)
     : 0
-  const working    = avengers.filter(a => a.state === 'working').length
+  const avgMorale  = analysts.length > 0
+    ? Math.round(analysts.reduce((sum, a) => sum + (a.agentNeeds?.morale ?? 0), 0) / analysts.length)
+    : 0
+  const working    = analysts.filter(a => a.state === 'working').length
 
   return (
     <div style={{
@@ -145,13 +146,13 @@ export default function HQPanel() {
         background: 'rgba(124,58,237,0.08)',
       }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: '#a78bfa', marginBottom: 6 }}>
-          🛡️ Avengers HQ
+          🧭 Analysis HQ
         </div>
         {/* Summary stats */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {[
-            { label: 'On Duty', value: `${working}/${avengers.length}`, color: '#10b981' },
-            { label: 'Signals', value: `${totalHits}/${totalSigs}`,     color: '#f5c842' },
+            { label: 'On Duty', value: `${working}/${analysts.length}`, color: '#10b981' },
+            { label: 'Data Fresh', value: `${avgFreshness}%`,            color: '#f5c842' },
             { label: 'Morale',  value: `${avgMorale}%`,                  color: avgMorale >= 70 ? '#10b981' : '#f59e0b' },
           ].map(s => (
             <div key={s.label} style={{ textAlign: 'center' }}>
@@ -164,12 +165,12 @@ export default function HQPanel() {
 
       {/* Agent cards */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px' }}>
-        {avengers.length === 0 ? (
+        {analysts.length === 0 ? (
           <div style={{ color: '#3a4050', fontSize: 11, textAlign: 'center', marginTop: 20 }}>
-            No Avengers found
+            No analysts found
           </div>
         ) : (
-          avengers.map(a => <AgentCard key={a.id} agent={a} />)
+          analysts.map(a => <AgentCard key={a.id} agent={a} />)
         )}
       </div>
     </div>

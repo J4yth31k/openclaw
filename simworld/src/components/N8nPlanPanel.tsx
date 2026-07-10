@@ -185,7 +185,7 @@ const WORKFLOWS: Workflow[] = [
   },
   {
     id: 'agent_orchestration',
-    name: 'Avengers Agent Health Monitor',
+    name: 'Analysis Desk Health Monitor',
     icon: '🛡️',
     trigger: 'Schedule: Every 15 min (market hours)',
     triggerIcon: '⏱️',
@@ -195,7 +195,7 @@ const WORKFLOWS: Workflow[] = [
     creds: ['Railway agent_api.py URL (internal)', 'Discord Webhook'],
     nodes: [
       { icon: '⏱️', label: 'Cron: Every 15 min, 8am–5pm EST Mon–Fri', note: 'Only during market hours — no unnecessary pings overnight' },
-      { icon: '🌐', label: 'HTTP GET → agent_api.py /health', note: 'Checks all 11 Avengers agents: state, last signal, error count' },
+      { icon: '🌐', label: 'HTTP GET → agent_api.py /health', note: 'Checks all desk analysts: state, last update, error count' },
       { icon: '🔀', label: 'Switch: Any agent unhealthy?', branch: true,
         branches: [
           { label: 'All healthy', note: 'Run signal aggregation loop', color: '#10b981' },
@@ -498,7 +498,7 @@ export default function N8nPlanPanel() {
           { day: 'Day 3', task: 'Etsy Sale Automation', color: '#f97316' },
           { day: 'Day 4', task: 'New Listing → Social Pipeline', color: '#ec4899' },
           { day: 'Day 5', task: 'Pinterest Content Calendar', color: '#e11d48' },
-          { day: 'Day 6', task: 'Avengers Agent Health Monitor', color: '#7c3aed' },
+          { day: 'Day 6', task: 'Analysis Desk Health Monitor', color: '#7c3aed' },
           { day: 'Day 7', task: 'Daily Business Report', color: '#f5c842' },
         ].map((r, i) => (
           <div key={i} style={{ display: 'flex', gap: 8, padding: '3px 0', borderBottom: i < 6 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
