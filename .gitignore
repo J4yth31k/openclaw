@@ -16,6 +16,8 @@ env/
 # Environment variables
 .env
 .env.*
+# Exception: simworld's production config only holds the public Railway URL
+!simworld/.env.production
 
 # IDE
 .vscode/
